@@ -56,7 +56,7 @@ jobs:
             build-essential cmake ninja-build \
             qt6-base-dev qt6-base-dev-tools qt6-declarative-dev \
             libqt6svg6-dev \
-            openjdk-17-jdk-headless rpm \
+            openjdk-17-jdk-headless rpm rpm-build \
             libfuse2 desktop-file-utils
           # qt6-tools-dev 不是构建必需，装不到也不影响（CMake 只用 Qt6 Core/Gui/Quick/Qml/Network/Svg/DBus）。
           sudo apt-get install -y --no-install-recommends qt6-tools-dev || true
@@ -91,10 +91,16 @@ jobs:
           set -euo pipefail
           shopt -s nullglob
           packages=(neriplayer_*.deb neriplayer_*.rpm neriplayer_*.AppImage)
-          (( ${#packages[@]} == 3 )) || {
-            echo "期望 3 个安装包，实际 ${#packages[@]} 个" >&2
+          # 至少产出 deb（本机/大多数用户需要的格式）；rpm/AppImage 为 best-effort，
+          # 缺少构建工具时 build-packages.sh 会跳过，不应让整个 Release 失败。
+          (( ${#packages[@]} >= 1 )) || {
+            echo "没有产出任何安装包" >&2
             exit 1
           }
+          has_deb=false
+          for p in "${packages[@]}"; do [[ "$p" == *.deb ]] && has_deb=true; done
+          $has_deb || { echo "缺少 .deb 安装包" >&2; exit 1; }
+          echo "产出 ${#packages[@]} 个安装包: ${packages[*]}"
           for pkg in "${packages[@]}"; do
             case "$pkg" in
               *.deb)   dpkg-deb --info "$pkg" >/dev/null ;;
