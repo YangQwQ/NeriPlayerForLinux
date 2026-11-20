@@ -1,0 +1,13 @@
+Package: @PKG_NAME@
+Version: @VERSION@
+Section: sound
+Priority: optional
+Architecture: @ARCH@
+Installed-Size: @INSTALLED_SIZE@
+Maintainer: NeriPlayer Desktop <neriplayer@localhost>
+Description: NeriPlayer 音理音理 — 多源在线 / 本地音乐播放器（Qt 原生桌面版）
+ 支持网易云 / 哔哩哔哩 / 本地媒体库、歌词、悬浮歌词、GitHub 跨设备同步、
+ 托盘常驻与 MPRIS 系统媒体控制。
+Depends: @DEB_DEPENDS@
+Recommends: @DEB_RECOMMENDS@
+Homepage: @HOMEPAGE@

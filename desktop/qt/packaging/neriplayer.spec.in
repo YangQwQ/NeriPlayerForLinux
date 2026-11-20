@@ -1,0 +1,73 @@
+# NeriPlayer 桌面版 RPM spec 模板。
+# 构建脚本会替换 @VERSION@ / @ARCH@ / @RPM_BUILDROOT@，并在 staging 目录上
+# 调用 rpmbuild --buildroot，因此这里不下载源码、不重新编译，只打包已构建的产物。
+Name:           neriplayer
+Version:        @VERSION@
+Release:        1%{?dist}
+Summary:        NeriPlayer 音理音理 — 多源在线 / 本地音乐播放器（Qt 原生桌面版）
+
+License:        GPL-3.0-only
+URL:            https://github.com/YangQwQ/NeriPlayerForLinux
+# 本包由本地构建产物组装，无 Source tarball；二进制与 QML 由 %install 阶段外的
+# staging 目录提供（见 build-packages.sh），rpmbuild 只负责生成元数据与脚本。
+BuildArch:      @ARCH@
+
+# 依赖声明与 deb 的 Depends 对齐（Qt6 / QML 模块 / GTK 托盘 / 中文字体）。
+# RPM 系发行版包名与 Debian 不同，这里使用 Fedora/openSUSE 通用的名字。
+Requires:       qt6-qtbase
+Requires:       qt6-qtdeclarative
+Requires:       qt6-qtsvg
+Requires:       qt6-qtbase-gui
+Requires:       qt6-qtwayland
+Requires:       layer-shell-qt
+Requires:       python3
+Requires:       python3-gobject
+Requires:       glib2
+Requires:       gtk3
+Requires:       google-noto-sans-cjk-fonts
+Recommends:     ffmpeg
+Recommends:     yt-dlp
+Recommends:     xdg-utils
+
+%description
+NeriPlayer 音理音理是一款多源在线 / 本地音乐播放器（Qt 原生桌面版），
+支持网易云 / 哔哩哔哩 / 本地媒体库、歌词、悬浮歌词、GitHub 跨设备同步、
+托盘常驻与 MPRIS 系统媒体控制。
+
+%global debug_package %{nil}
+
+%install
+# staging 目录已由 build-packages.sh 填好，rpmbuild 仅把它复制进 buildroot。
+rm -rf %{buildroot}
+mkdir -p %{buildroot}
+cp -a @RPM_BUILDROOT@/. %{buildroot}/
+
+%files
+%defattr(-,root,root,-)
+/usr/bin/neriplayer
+/usr/lib/neriplayer/neriplayer
+/usr/lib/neriplayer/neriplayer-core.jar
+/usr/lib/neriplayer/runtime
+/usr/share/applications/neriplayer.desktop
+/usr/share/icons/hicolor/128x128/apps/neriplayer.png
+/usr/share/icons/hicolor/256x256/apps/neriplayer.png
+/usr/share/neriplayer/qml
+%doc /usr/share/doc/neriplayer/copyright
+
+%post
+# 刷新 freedesktop 数据库；systemd/tmpfiles 与菜单缓存交给桌面环境自行发现。
+if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database -q /usr/share/applications || true
+fi
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor || true
+fi
+
+%postun
+if [ "$1" -eq 0 ] && command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database -q /usr/share/applications || true
+fi
+
+%changelog
+* Thu Nov 20 2025 NeriPlayer Desktop <neriplayer@localhost> - @VERSION@-1
+- 自动打包：Qt 前端 + jlink 精简 JRE 后端

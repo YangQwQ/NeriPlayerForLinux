@@ -1,0 +1,109 @@
+name: Desktop Linux packages
+
+# Linux 桌面版（Qt6/QML 前端 + Kotlin 后端）安装包自动构建。
+# push/PR/dispatch 时产出 deb/rpm/AppImage 三种包作为 artifacts；
+# tag v* 触发时额外创建/更新 GitHub Release 并上传三个包 + SHA256SUMS。
+# macOS/Windows 不在本 workflow 范围内。
+on:
+  push:
+    branches: [compose-desktop]
+    paths:
+      - 'desktop/**'
+      - '.github/workflows/desktop-packages.yml'
+  pull_request:
+    paths:
+      - 'desktop/**'
+      - '.github/workflows/desktop-packages.yml'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 包名中的版本号（默认 2.0.0）
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-packages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build Linux packages
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve package version
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          pkg_version="${{ inputs.version }}"
+          [[ -n "$pkg_version" ]] || pkg_version="2.0.0"
+          echo "pkg_version=${pkg_version}" >> "$GITHUB_OUTPUT"
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build \
+            qt6-base-dev qt6-base-dev-tools qt6-declarative-dev \
+            qt6-svg-dev qt6-tools-dev \
+            openjdk-17-jdk-headless rpm \
+            libfuse2 desktop-file-utils
+          # LayerShellQt 只用于 Wayland 悬浮窗；CMake 里是 QUIET 可回退，装不到也能构建。
+          sudo apt-get install -y --no-install-recommends liblayershellqtinterface-dev \
+            || echo "LayerShellQt 开发包不可用，悬浮窗将回退为普通窗口"
+          # appimagetool 官方以 AppImage 形式发布，下载后直接可执行。
+          curl -fsSL -o /usr/local/bin/appimagetool \
+            https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x /usr/local/bin/appimagetool
+
+      - name: Build deb / rpm / AppImage
+        shell: bash
+        env:
+          PKG_VERSION: ${{ steps.meta.outputs.pkg_version }}
+        run: |
+          set -euo pipefail
+          chmod +x desktop/qt/packaging/build-packages.sh
+          desktop/qt/packaging/build-packages.sh "$PKG_VERSION"
+
+      - name: Verify artifacts and write SHA256SUMS
+        shell: bash
+        working-directory: desktop/qt/build/packages/out
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          packages=(neriplayer_*.deb neriplayer_*.rpm neriplayer_*.AppImage)
+          (( ${#packages[@]} == 3 )) || {
+            echo "期望 3 个安装包，实际 ${#packages[@]} 个" >&2
+            exit 1
+          }
+          for pkg in "${packages[@]}"; do
+            case "$pkg" in
+              *.deb)   dpkg-deb --info "$pkg" >/dev/null ;;
+              *.rpm)   rpm -qip "$pkg" >/dev/null ;;
+              *.AppImage)
+                # --appimage-extract 会展开自身，用它确认 AppImage 格式有效。
+                chmod +x "$pkg"
+                ./"$pkg" --appimage-extract >/dev/null
+                rm -rf squashfs-root
+                ;;
+            esac
+          done
+          sha256sum "${packages[@]}" > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: neriplayer-linux-packages-${{ steps.meta.outputs.pkg_version }}
+          path: desktop/qt/build/packages/out/
+          if-no-files-found: error
+          retention-days: 14

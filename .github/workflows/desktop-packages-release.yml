@@ -1,0 +1,155 @@
+name: Desktop Linux packages (Release)
+
+# v* tag 推送时构建三种 Linux 安装包并发布到 GitHub Release，附带 SHA256SUMS。
+# 与 desktop-packages.yml 分开：GitHub 不允许在同一个 push 里同时用 branches 和
+# tags 过滤（两者是 AND 关系），拆开后分支构建与 tag 发布互不干扰。
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 要发布的 tag（例如 v2.0.0），必须已存在
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-packages-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build release packages
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    outputs:
+      pkg_version: ${{ steps.meta.outputs.pkg_version }}
+      release_tag: ${{ steps.meta.outputs.release_tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve release metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            tag="${{ inputs.tag }}"
+          else
+            tag="${GITHUB_REF#refs/tags/}"
+          fi
+          [[ "$tag" == v* ]] || { echo "tag 必须以 v 开头：$tag" >&2; exit 1; }
+          echo "release_tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "pkg_version=${tag#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build \
+            qt6-base-dev qt6-base-dev-tools qt6-declarative-dev \
+            qt6-svg-dev qt6-tools-dev \
+            openjdk-17-jdk-headless rpm \
+            libfuse2 desktop-file-utils
+          # LayerShellQt 只用于 Wayland 悬浮窗；CMake 里是 QUIET 可回退，装不到也能构建。
+          sudo apt-get install -y --no-install-recommends liblayershellqtinterface-dev \
+            || echo "LayerShellQt 开发包不可用，悬浮窗将回退为普通窗口"
+          curl -fsSL -o /usr/local/bin/appimagetool \
+            https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x /usr/local/bin/appimagetool
+
+      - name: Build deb / rpm / AppImage
+        shell: bash
+        env:
+          PKG_VERSION: ${{ steps.meta.outputs.pkg_version }}
+        run: |
+          set -euo pipefail
+          chmod +x desktop/qt/packaging/build-packages.sh
+          desktop/qt/packaging/build-packages.sh "$PKG_VERSION"
+
+      - name: Verify artifacts and write SHA256SUMS
+        shell: bash
+        working-directory: desktop/qt/build/packages/out
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          packages=(neriplayer_*.deb neriplayer_*.rpm neriplayer_*.AppImage)
+          (( ${#packages[@]} == 3 )) || {
+            echo "期望 3 个安装包，实际 ${#packages[@]} 个" >&2
+            exit 1
+          }
+          for pkg in "${packages[@]}"; do
+            case "$pkg" in
+              *.deb)   dpkg-deb --info "$pkg" >/dev/null ;;
+              *.rpm)   rpm -qip "$pkg" >/dev/null ;;
+              *.AppImage)
+                chmod +x "$pkg"
+                ./"$pkg" --appimage-extract >/dev/null
+                rm -rf squashfs-root
+                ;;
+            esac
+          done
+          sha256sum "${packages[@]}" > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: neriplayer-linux-packages-${{ steps.meta.outputs.pkg_version }}
+          path: desktop/qt/build/packages/out/
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: neriplayer-linux-packages-${{ needs.build.outputs.pkg_version }}
+          path: release-assets
+
+      - name: Verify asset set
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for pattern in '*.deb' '*.rpm' '*.AppImage' 'SHA256SUMS.txt'; do
+            matches=(release-assets/$pattern)
+            (( ${#matches[@]} > 0 )) || {
+              echo "缺少发布资源：$pattern" >&2
+              exit 1
+            }
+          done
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.build.outputs.release_tag }}
+          PKG_VERSION: ${{ needs.build.outputs.pkg_version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          assets=(release-assets/*)
+          notes="NeriPlayer Linux 桌面版 ${PKG_VERSION}（deb / rpm / AppImage）。"
+          notes+=$'\n\n'"安装前请校验 SHA256SUMS.txt。"
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
+            gh release edit "$RELEASE_TAG" --title "NeriPlayer ${PKG_VERSION}" --notes "$notes"
+          else
+            gh release create "$RELEASE_TAG" "${assets[@]}" \
+              --verify-tag --title "NeriPlayer ${PKG_VERSION}" --notes "$notes" --latest
+          fi
