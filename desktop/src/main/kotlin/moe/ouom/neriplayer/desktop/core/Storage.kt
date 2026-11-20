@@ -149,6 +149,9 @@ data class AppSettings(
     val onboardingAccepted: Boolean = false,
     val exploreSearchHistory: List<String> = emptyList(),
 
+    /** 界面语言：zh-CN 跟随中文原文，en 使用英文翻译。 */
+    val language: String = "zh-CN",
+
     // ---------------------------------------------------------------- 悬浮歌词
     val floatingLyricsEnabled: Boolean = false,
     /** 主窗口获得焦点时隐藏悬浮歌词，避免遮挡应用页面。 */

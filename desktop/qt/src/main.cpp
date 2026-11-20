@@ -259,7 +259,9 @@ int main(int argc, char *argv[])
     QObject *settings = createGlobal(engine, qmlDir, QStringLiteral("SettingsGlobal.qml"));
     QObject *nav = createGlobal(engine, qmlDir, QStringLiteral("NavGlobal.qml"));
     QObject *toast = createGlobal(engine, qmlDir, QStringLiteral("ToastGlobal.qml"));
-    if (!player || !theme || !settings || !nav || !toast)
+    // I18n 依赖 Settings（读取/写入 language），创建顺序放在 Settings 之后。
+    QObject *i18n = createGlobal(engine, qmlDir, QStringLiteral("I18nGlobal.qml"));
+    if (!player || !theme || !settings || !nav || !toast || !i18n)
         return 1;
 
     engine.rootContext()->setContextProperty(QStringLiteral("Player"), player);
@@ -267,6 +269,7 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("Settings"), settings);
     engine.rootContext()->setContextProperty(QStringLiteral("Nav"), nav);
     engine.rootContext()->setContextProperty(QStringLiteral("Toast"), toast);
+    engine.rootContext()->setContextProperty(QStringLiteral("I18n"), i18n);
 
     QQmlComponent mainComponent(&engine, QUrl::fromLocalFile(qmlDir + QStringLiteral("/Main.qml")));
     if (mainComponent.isError()) {
