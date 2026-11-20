@@ -14,19 +14,28 @@ Item {
 
     // ---------------------------------------------------------------- 常量表
 
+    // 宽屏左侧分类栏宽度：比 Theme.navRailWidth（232）更宽，让左侧留白更舒服。
+    // 用本页私有常量而非改 Theme，避免影响其它页面的导航栏。
+    readonly property real settingsRailWidth: 280
+
     readonly property var presetSeedColors: [
         "0061A4", "6750A4", "B3261E", "C425A8",
         "00897B", "388E3C", "FBC02D", "E65100"
     ]
 
+    readonly property var languageOptions: [
+        { value: "zh-CN", label: I18n.tr("中文（简体）") },
+        { value: "en", label: "English" }
+    ]
+
     readonly property var darkModeOptions: [
-        { value: "AUTO", label: "跟随系统" },
-        { value: "LIGHT", label: "浅色" },
-        { value: "DARK", label: "深色" }
+        { value: "AUTO", label: I18n.tr("跟随系统") },
+        { value: "LIGHT", label: I18n.tr("浅色") },
+        { value: "DARK", label: I18n.tr("深色") }
     ]
 
     readonly property var uiScaleOptions: [
-        { value: 0, label: "跟随系统" },
+        { value: 0, label: I18n.tr("跟随系统") },
         { value: 1.0, label: "100%" },
         { value: 1.25, label: "125%" },
         { value: 1.5, label: "150%" },
@@ -36,15 +45,15 @@ Item {
     ]
 
     readonly property var paletteStyles: [
-        { value: "TonalSpot", label: "柔和色点", description: "接近 Android 默认动态色，平衡耐看。" },
-        { value: "Neutral", label: "低饱和", description: "减少彩度，页面更克制。" },
-        { value: "Vibrant", label: "鲜明", description: "主色更亮更突出。" },
-        { value: "Expressive", label: "表现力", description: "色相更跳跃，适合个性化主题。" },
-        { value: "Rainbow", label: "彩虹", description: "色相分布更宽，色彩更丰富。" },
-        { value: "FruitSalad", label: "果味", description: "互补色更强，风格活泼。" },
-        { value: "Monochrome", label: "单色", description: "接近黑白灰，弱化主题色。" },
-        { value: "Fidelity", label: "忠实取色", description: "更贴近你选择的种子色。" },
-        { value: "Content", label: "内容色", description: "沿用内容本身的取色。" }
+        { value: "TonalSpot", label: I18n.tr("柔和色点"), description: I18n.tr("接近 Android 默认动态色，平衡耐看。") },
+        { value: "Neutral", label: I18n.tr("低饱和"), description: I18n.tr("减少彩度，页面更克制。") },
+        { value: "Vibrant", label: I18n.tr("鲜明"), description: I18n.tr("主色更亮更突出。") },
+        { value: "Expressive", label: I18n.tr("表现力"), description: I18n.tr("色相更跳跃，适合个性化主题。") },
+        { value: "Rainbow", label: I18n.tr("彩虹"), description: I18n.tr("色相分布更宽，色彩更丰富。") },
+        { value: "FruitSalad", label: I18n.tr("果味"), description: I18n.tr("互补色更强，风格活泼。") },
+        { value: "Monochrome", label: I18n.tr("单色"), description: I18n.tr("接近黑白灰，弱化主题色。") },
+        { value: "Fidelity", label: I18n.tr("忠实取色"), description: I18n.tr("更贴近你选择的种子色。") },
+        { value: "Content", label: I18n.tr("内容色"), description: I18n.tr("沿用内容本身的取色。") }
     ]
 
     readonly property var colorSpecOptions: [
@@ -53,56 +62,57 @@ Item {
     ]
 
     readonly property var qualityOptions: [
-        { value: "standard", label: "标准" },
-        { value: "higher", label: "较高" },
-        { value: "exhigh", label: "极高" },
-        { value: "lossless", label: "无损" },
+        { value: "standard", label: I18n.tr("标准") },
+        { value: "higher", label: I18n.tr("较高") },
+        { value: "exhigh", label: I18n.tr("极高") },
+        { value: "lossless", label: I18n.tr("无损") },
         { value: "hires", label: "Hi-Res" }
     ]
 
     readonly property var concurrencyOptions: [
-        { value: 1, label: "1 个" },
-        { value: 2, label: "2 个" },
-        { value: 3, label: "3 个" },
-        { value: 4, label: "4 个" }
+        { value: 1, label: I18n.tr("1 个") },
+        { value: 2, label: I18n.tr("2 个") },
+        { value: 3, label: I18n.tr("3 个") },
+        { value: 4, label: I18n.tr("4 个") }
     ]
 
     readonly property var renderStyleOptions: [
-        { value: "SHADOW", label: "阴影" },
-        { value: "OUTLINE", label: "描边" }
+        { value: "SHADOW", label: I18n.tr("阴影") },
+        { value: "OUTLINE", label: I18n.tr("描边") }
     ]
 
     readonly property var alignmentOptions: [
-        { value: "LEFT", label: "居左" },
-        { value: "CENTER", label: "居中" },
-        { value: "RIGHT", label: "居右" }
+        { value: "LEFT", label: I18n.tr("居左") },
+        { value: "CENTER", label: I18n.tr("居中") },
+        { value: "RIGHT", label: I18n.tr("居右") }
     ]
 
     readonly property var floatingLyricColors: [
-        { name: "WHITE", label: "白色", color: "#FFFFFF" },
-        { name: "BLACK", label: "黑色", color: "#000000" },
-        { name: "RED", label: "红色", color: "#F44336" },
-        { name: "ORANGE", label: "橙色", color: "#FF9800" },
-        { name: "YELLOW", label: "黄色", color: "#FFEB3B" },
-        { name: "GREEN", label: "绿色", color: "#4CAF50" },
-        { name: "CYAN", label: "青色", color: "#00BCD4" },
-        { name: "BLUE", label: "蓝色", color: "#2196F3" },
-        { name: "PURPLE", label: "紫色", color: "#9C27B0" },
-        { name: "PINK", label: "粉色", color: "#E91E63" }
+        { name: "WHITE", label: I18n.tr("白色"), color: "#FFFFFF" },
+        { name: "BLACK", label: I18n.tr("黑色"), color: "#000000" },
+        { name: "RED", label: I18n.tr("红色"), color: "#F44336" },
+        { name: "ORANGE", label: I18n.tr("橙色"), color: "#FF9800" },
+        { name: "YELLOW", label: I18n.tr("黄色"), color: "#FFEB3B" },
+        { name: "GREEN", label: I18n.tr("绿色"), color: "#4CAF50" },
+        { name: "CYAN", label: I18n.tr("青色"), color: "#00BCD4" },
+        { name: "BLUE", label: I18n.tr("蓝色"), color: "#2196F3" },
+        { name: "PURPLE", label: I18n.tr("紫色"), color: "#9C27B0" },
+        { name: "PINK", label: I18n.tr("粉色"), color: "#E91E63" }
     ]
 
     // ---------------------------------------------------------------- 分类导航与搜索
 
     // 每个分类绑定一组既有设置卡片（只做前端归组，不改动任何后端协议）。
     readonly property var categoryDefs: [
-        { id: "accountSync", title: "账号与同步", description: "一起听 · GitHub 同步", icon: "account_circle", sectionIds: ["listenTogether", "sync"] },
-        { id: "appearance", title: "外观与主题", description: "深浅色 · 播放页外观", icon: "palette", sectionIds: ["theme", "playerDesign"] },
-        { id: "playback", title: "播放与音频", description: "倍速 · 音效 · 音质", icon: "graphic_eq", sectionIds: ["playback", "quality"] },
-        { id: "lyrics", title: "歌词", description: "桌面悬浮歌词样式", icon: "lyrics", sectionIds: ["floatingLyrics"] },
-        { id: "downloadStorage", title: "下载与存储", description: "媒体库 · 下载 · 缓存清理", icon: "download", sectionIds: ["library", "downloads", "dataCache"] },
-        { id: "sources", title: "音乐源", description: "网易云 · B站 · YouTube", icon: "cloud", sectionIds: ["sources"] },
-        { id: "general", title: "常规与快捷键", description: "首页栏目 · 后台 · 快捷键", icon: "tune", sectionIds: ["homeCards", "background", "shortcuts"] },
-        { id: "about", title: "关于", description: "版本与开源信息", icon: "info", sectionIds: ["about"] }
+        { id: "accountSync", title: I18n.tr("账号与同步"), description: I18n.tr("一起听 · GitHub 同步"), icon: "account_circle", sectionIds: ["listenTogether", "sync"] },
+        { id: "appearance", title: I18n.tr("外观与主题"), description: I18n.tr("深浅色 · 播放页外观"), icon: "palette", sectionIds: ["theme", "playerDesign"] },
+        { id: "playback", title: I18n.tr("播放与音频"), description: I18n.tr("倍速 · 音效 · 音质"), icon: "graphic_eq", sectionIds: ["playback", "equalizer", "quality"] },
+        { id: "lyrics", title: I18n.tr("歌词"), description: I18n.tr("桌面悬浮歌词样式"), icon: "lyrics", sectionIds: ["floatingLyrics"] },
+        { id: "downloadStorage", title: I18n.tr("下载与存储"), description: I18n.tr("媒体库 · 下载 · 缓存清理"), icon: "download", sectionIds: ["library", "downloads", "dataCache"] },
+        { id: "sources", title: I18n.tr("音乐源"), description: I18n.tr("网易云 · B站 · YouTube"), icon: "cloud", sectionIds: ["sources"] },
+        { id: "general", title: I18n.tr("常规与快捷键"), description: I18n.tr("首页栏目 · 后台 · 快捷键"), icon: "tune", sectionIds: ["homeCards", "background", "shortcuts"] },
+        { id: "language", title: I18n.tr("语言"), description: I18n.tr("界面语言 · Language"), icon: "language", sectionIds: ["language"] },
+        { id: "about", title: I18n.tr("关于"), description: I18n.tr("版本与开源信息"), icon: "info", sectionIds: ["about"] }
     ]
 
     property string currentCategory: "playback"
@@ -111,18 +121,19 @@ Item {
     readonly property var sectionIndex: ({
         "listenTogether": secListenTogether, "sync": secSync,
         "theme": secTheme, "playerDesign": secPlayerDesign,
-        "playback": secPlayback, "quality": secQuality,
+        "playback": secPlayback, "equalizer": secEqualizer, "quality": secQuality,
         "floatingLyrics": secFloatingLyrics,
         "library": secLibrary, "downloads": secDownloads, "dataCache": secDataCache,
         "sources": musicSourceSection,
         "homeCards": secHomeCards, "background": secBackground,
-        "shortcuts": shortcutSection, "about": secAbout
+        "shortcuts": shortcutSection, "language": secLanguage, "about": secAbout
     })
 
     readonly property var _searchIndex: [
         { title: "主题设置", keywords: "深浅色 主题色 动态取色 调色 缩放", category: "appearance", section: "theme" },
         { title: "媒体库", keywords: "音乐文件夹 扫描 封面", category: "downloadStorage", section: "library" },
-        { title: "播放", keywords: "倍速 变调 响度 均衡器 音效", category: "playback", section: "playback" },
+        { title: "播放", keywords: "倍速 变调 响度 音效", category: "playback", section: "playback" },
+        { title: "均衡器", keywords: "均衡器 EQ 频段 十段 预设 响度 音效 equalizer preset", category: "playback", section: "equalizer" },
         { title: "播放页", keywords: "封面 控制条 歌词对齐 背景", category: "appearance", section: "playerDesign" },
         { title: "在线播放音质", keywords: "音质 码率 hires 无损 quality", category: "playback", section: "quality" },
         { title: "下载设置", keywords: "下载目录 并发 通知", category: "downloadStorage", section: "downloads" },
@@ -134,6 +145,7 @@ Item {
         { title: "同步", keywords: "GitHub Token 仓库 自动同步", category: "accountSync", section: "sync" },
         { title: "数据与缓存", keywords: "清理 缓存 历史 统计 下载记录", category: "downloadStorage", section: "dataCache" },
         { title: "快捷键", keywords: "键盘 全局快捷键 录制", category: "general", section: "shortcuts" },
+        { title: "语言", keywords: "语言 Language 中文 英文 简体 切换 国际化 i18n", category: "language", section: "language" },
         { title: "关于", keywords: "版本 开源 许可证", category: "about", section: "about" }
     ]
 
@@ -151,7 +163,7 @@ Item {
         for (let i = 0; i < page._searchIndex.length; i++) {
             const item = page._searchIndex[i]
             if ((item.title + " " + item.keywords).toLowerCase().indexOf(query) >= 0)
-                matches.push({ title: item.title, description: "跳转到该设置卡片", icon: "tune",
+                matches.push({ title: item.title, description: I18n.tr("跳转到该设置卡片"), icon: "tune",
                                category: item.category, section: item.section })
         }
         return matches.slice(0, 20)
@@ -162,7 +174,7 @@ Item {
             if (page.categoryDefs[i].id === page.currentCategory)
                 return page.categoryDefs[i].title
         }
-        return "设置"
+        return I18n.tr("设置")
     }
 
     readonly property string currentCategoryDescription: {
@@ -304,14 +316,14 @@ Item {
     function effectiveScaleText() {
         const value = Number(page.sv("uiScale", 0))
         if (!(value > 0))
-            return Math.round((screen ? screen.devicePixelRatio : 1) * 100) + "% · 跟随系统"
-        return Math.round(value * 100) + "% · 设置中手动指定"
+            return Math.round((screen ? screen.devicePixelRatio : 1) * 100) + I18n.tr("% · 跟随系统")
+        return Math.round(value * 100) + I18n.tr("% · 设置中手动指定")
     }
 
     function screenText() {
         if (!screen)
-            return "未知"
-        return Math.round(screen.width) + "×" + Math.round(screen.height) + " 像素"
+            return I18n.tr("未知")
+        return Math.round(screen.width) + "×" + Math.round(screen.height) + I18n.tr(" 像素")
     }
 
     function patchSettings(changes) {
@@ -377,7 +389,7 @@ Item {
 
     function selectPresetSeed(hex) {
         if (page.sb("followSystemTheme", true)) {
-            Toast.show("「跟随系统主题色」已开启，请先关闭后再选择主题色", "info")
+            Toast.show(I18n.tr("「跟随系统主题色」已开启，请先关闭后再选择主题色"), "info")
             return
         }
         page.patchSettings({ themeSeedColor: hex, followSystemTheme: false, dynamicColor: false })
@@ -385,17 +397,17 @@ Item {
 
     function applyCustomSeed() {
         if (page.sb("followSystemTheme", true)) {
-            Toast.show("「跟随系统主题色」已开启，请先关闭后再应用自定义主题色", "info")
+            Toast.show(I18n.tr("「跟随系统主题色」已开启，请先关闭后再应用自定义主题色"), "info")
             return
         }
         const sanitized = page.sanitizeHex(seedField.text)
         if (sanitized === "") {
-            Toast.show("请输入 6 位十六进制色值，例如 0061A4", "error")
+            Toast.show(I18n.tr("请输入 6 位十六进制色值，例如 0061A4"), "error")
             return
         }
         page.patchSettings({ themeSeedColor: sanitized, followSystemTheme: false, dynamicColor: false })
         seedField.text = sanitized
-        Toast.show("主题色已更新为 #" + sanitized, "info")
+        Toast.show(I18n.tr("主题色已更新为 #") + sanitized, "info")
     }
 
     // ---------------------------------------------------------------- 媒体库
@@ -412,18 +424,18 @@ Item {
 
     readonly property string libraryStatusText: {
         if (page.scanning)
-            return "正在扫描 " + page.scanProcessed + " / " + page.scanTotal
-                    + "，已找到 " + page.scanFound + " 首"
+            return I18n.tr("正在扫描 ") + page.scanProcessed + " / " + page.scanTotal
+                    + I18n.tr("，已找到 ") + page.scanFound + I18n.tr(" 首")
         if (page.scanError !== "")
-            return "上次扫描出错：" + page.scanError
-        return "媒体库共 " + page.songCount + " 首歌曲"
+            return I18n.tr("上次扫描出错：") + page.scanError
+        return I18n.tr("媒体库共 ") + page.songCount + I18n.tr(" 首歌曲")
     }
 
     function chooseMusicFolder() {
         try {
             musicFolderDialog.open()
         } catch (error) {
-            Toast.show("无法打开文件夹选择器：" + error, "error")
+            Toast.show(I18n.tr("无法打开文件夹选择器：") + error, "error")
         }
     }
 
@@ -433,9 +445,9 @@ Item {
         Api.call("library.addFolder", { path: path }).then(function(result) {
             if (result && result.settings)
                 Settings.values = result.settings
-            Toast.show("已添加文件夹：" + path, "info")
+            Toast.show(I18n.tr("已添加文件夹：") + path, "info")
         }).catch(function(error) {
-            Toast.show("添加文件夹失败：" + (error && error.message ? error.message : "未知错误"), "error")
+            Toast.show(I18n.tr("添加文件夹失败：") + (error && error.message ? error.message : I18n.tr("未知错误")), "error")
         })
     }
 
@@ -443,9 +455,9 @@ Item {
         Api.call("library.removeFolder", { path: path }).then(function(result) {
             if (result && result.settings)
                 Settings.values = result.settings
-            Toast.show("已移除文件夹", "info")
+            Toast.show(I18n.tr("已移除文件夹"), "info")
         }).catch(function(error) {
-            Toast.show("移除文件夹失败：" + (error && error.message ? error.message : "未知错误"), "error")
+            Toast.show(I18n.tr("移除文件夹失败：") + (error && error.message ? error.message : I18n.tr("未知错误")), "error")
         })
     }
 
@@ -456,10 +468,10 @@ Item {
             page.scanning = false
             if (result && result.count !== undefined)
                 page.songCount = result.count
-            Toast.show("扫描完成，共 " + (result && result.count !== undefined ? result.count : 0) + " 首歌曲", "info")
+            Toast.show(I18n.tr("扫描完成，共 ") + (result && result.count !== undefined ? result.count : 0) + I18n.tr(" 首歌曲"), "info")
         }).catch(function(error) {
             page.scanning = false
-            Toast.show("扫描失败：" + (error && error.message ? error.message : "未知错误"), "error")
+            Toast.show(I18n.tr("扫描失败：") + (error && error.message ? error.message : I18n.tr("未知错误")), "error")
         })
     }
 
@@ -469,10 +481,10 @@ Item {
         Api.call("artwork.clearCache").then(function(result) {
             page.clearingCache = false
             const removed = result && result.removed !== undefined ? Number(result.removed) : 0
-            Toast.show("已清除 " + removed + " 个封面缓存文件", "info")
+            Toast.show(I18n.tr("已清除 ") + removed + I18n.tr(" 个封面缓存文件"), "info")
         }).catch(function(error) {
             page.clearingCache = false
-            Toast.show("清除缓存失败：" + (error && error.message ? error.message : "未知错误"), "error")
+            Toast.show(I18n.tr("清除缓存失败：") + (error && error.message ? error.message : I18n.tr("未知错误")), "error")
         })
     }
 
@@ -482,20 +494,20 @@ Item {
             Toast.show(successMessage, "info")
             page.loadSnapshot()
         }).catch(function(error) {
-            Toast.show("清理失败：" + (error && error.message ? error.message : "未知错误"), "error")
+            Toast.show(I18n.tr("清理失败：") + (error && error.message ? error.message : I18n.tr("未知错误")), "error")
         })
     }
 
     function clearFinishedDownloads() {
-        page.runCleanup("download.clearFinished", "已清理已完成的下载记录")
+        page.runCleanup("download.clearFinished", I18n.tr("已清理已完成的下载记录"))
     }
 
     function clearHistory() {
-        page.runCleanup("history.clear", "已清除播放历史")
+        page.runCleanup("history.clear", I18n.tr("已清除播放历史"))
     }
 
     function clearStats() {
-        page.runCleanup("stats.clear", "已清除播放统计")
+        page.runCleanup("stats.clear", I18n.tr("已清除播放统计"))
     }
 
     // ---------------------------------------------------------------- 下载
@@ -504,7 +516,7 @@ Item {
         try {
             downloadFolderDialog.open()
         } catch (error) {
-            Toast.show("无法打开文件夹选择器：" + error, "error")
+            Toast.show(I18n.tr("无法打开文件夹选择器：") + error, "error")
         }
     }
 
@@ -531,20 +543,20 @@ Item {
 
     function accountName(account) {
         if (!account)
-            return "未登录"
+            return I18n.tr("未登录")
         if (account.nickname)
             return account.nickname
         if (account.userId)
             return "UID " + account.userId
-        return "已登录"
+        return I18n.tr("已登录")
     }
 
     function accountDetail(account, fallback) {
         if (!account)
             return fallback
-        let text = account.userId ? ("UID " + account.userId) : "已登录"
+        let text = account.userId ? ("UID " + account.userId) : I18n.tr("已登录")
         if (account.vip)
-            text += " · 会员"
+            text += I18n.tr(" · 会员")
         return text
     }
 
@@ -558,10 +570,10 @@ Item {
 
     function logoutAccount(source) {
         Api.call("login.logout", { source: source }).then(function() {
-            Toast.show("已退出登录", "info")
+            Toast.show(I18n.tr("已退出登录"), "info")
             page.loadAccounts()
         }).catch(function(error) {
-            Toast.show("退出登录失败：" + (error && error.message ? error.message : "未知错误"), "error")
+            Toast.show(I18n.tr("退出登录失败：") + (error && error.message ? error.message : I18n.tr("未知错误")), "error")
         })
     }
 
@@ -583,25 +595,25 @@ Item {
             return
         }
         Api.call("ytmusic.logout").then(function() {
-            Toast.show("已退出 YouTube Music", "info")
+            Toast.show(I18n.tr("已退出 YouTube Music"), "info")
             page.loadAccounts()
         }).catch(function(error) {
-            Toast.show("退出失败：" + (error && error.message ? error.message : "未知错误"), "error")
+            Toast.show(I18n.tr("退出失败：") + (error && error.message ? error.message : I18n.tr("未知错误")), "error")
         })
     }
 
     // ---------------------------------------------------------------- 同步
 
     function syncErrorText(error, prefix) {
-        const message = error && error.message ? error.message : "未知错误"
+        const message = error && error.message ? error.message : I18n.tr("未知错误")
         return prefix + "：" + message
     }
 
     function handleSyncError(error, prefix) {
         if (error && error.code === "unknown_method") {
             page.syncUnsupported = true
-            page.syncStatusMessage = "后端暂不支持同步命令（sync.*）"
-            Toast.show("后端暂不支持同步命令", "error")
+            page.syncStatusMessage = I18n.tr("后端暂不支持同步命令（sync.*）")
+            Toast.show(I18n.tr("后端暂不支持同步命令"), "error")
         } else {
             page.syncStatusMessage = page.syncErrorText(error, prefix)
             Toast.show(page.syncStatusMessage, "error")
@@ -614,8 +626,8 @@ Item {
         page.syncConfig = config
         tokenField.text = ""
         tokenField.placeholderText = config.tokenSet
-                ? "已保存（留空保持不变）"
-                : "ghp_xxx（需要 repo 权限）"
+                ? I18n.tr("已保存（留空保持不变）")
+                : I18n.tr("ghp_xxx（需要 repo 权限）")
         ownerField.text = config.owner ? config.owner : ""
         repoField.text = config.repo ? config.repo : ""
     }
@@ -628,16 +640,16 @@ Item {
         }).catch(function(error) {
             if (error && error.code === "unknown_method") {
                 page.syncUnsupported = true
-                page.syncStatusMessage = "后端暂不支持同步命令（sync.*）"
+                page.syncStatusMessage = I18n.tr("后端暂不支持同步命令（sync.*）")
             } else {
-                page.syncStatusMessage = page.syncErrorText(error, "读取同步配置失败")
+                page.syncStatusMessage = page.syncErrorText(error, I18n.tr("读取同步配置失败"))
             }
         })
     }
 
     function saveSyncConfig() {
         if (page.syncUnsupported) {
-            Toast.show("后端暂不支持同步命令", "error")
+            Toast.show(I18n.tr("后端暂不支持同步命令"), "error")
             return
         }
         const payload = {
@@ -651,49 +663,49 @@ Item {
         Api.call("sync.configure", payload).then(function(config) {
             page.syncBusy = false
             page.applySyncConfig(config)
-            page.syncStatusMessage = "同步配置已保存"
-            Toast.show("同步配置已保存", "info")
+            page.syncStatusMessage = I18n.tr("同步配置已保存")
+            Toast.show(I18n.tr("同步配置已保存"), "info")
             page.loadSyncConfig()
         }).catch(function(error) {
             page.syncBusy = false
-            page.handleSyncError(error, "保存同步配置失败")
+            page.handleSyncError(error, I18n.tr("保存同步配置失败"))
         })
     }
 
     function performSync() {
         if (page.syncUnsupported) {
-            Toast.show("后端暂不支持同步命令", "error")
+            Toast.show(I18n.tr("后端暂不支持同步命令"), "error")
             return
         }
         page.syncBusy = true
-        page.syncStatusMessage = "正在同步…"
+        page.syncStatusMessage = I18n.tr("正在同步…")
         Api.call("sync.perform").then(function(result) {
             page.syncBusy = false
-            const message = result && result.message ? result.message : "同步完成"
+            const message = result && result.message ? result.message : I18n.tr("同步完成")
             page.syncStatusMessage = message
             Toast.show(message, result && result.success ? "info" : "error")
             page.loadSyncConfig()
         }).catch(function(error) {
             page.syncBusy = false
-            page.handleSyncError(error, "同步失败")
+            page.handleSyncError(error, I18n.tr("同步失败"))
         })
     }
 
     /** 断开同步：清掉本地保存的仓库配置与 Token。 */
     function disableSync() {
         if (page.syncUnsupported) {
-            Toast.show("后端暂不支持同步命令", "error")
+            Toast.show(I18n.tr("后端暂不支持同步命令"), "error")
             return
         }
         page.syncBusy = true
         Api.call("sync.disable").then(function() {
             page.syncBusy = false
             page.syncStatusMessage = ""
-            Toast.show("已断开同步", "info")
+            Toast.show(I18n.tr("已断开同步"), "info")
             page.loadSyncConfig()
         }).catch(function(error) {
             page.syncBusy = false
-            page.handleSyncError(error, "断开同步失败")
+            page.handleSyncError(error, I18n.tr("断开同步失败"))
         })
     }
 
@@ -707,7 +719,7 @@ Item {
 
     function updateSyncFlag(key, value) {
         if (page.syncUnsupported) {
-            Toast.show("后端暂不支持同步命令", "error")
+            Toast.show(I18n.tr("后端暂不支持同步命令"), "error")
             return
         }
         const payload = {}
@@ -716,10 +728,10 @@ Item {
         Api.call("sync.configure", payload).then(function(config) {
             page.syncBusy = false
             page.applySyncConfig(config)
-            Toast.show(value ? "已开启" : "已关闭", "info")
+            Toast.show(value ? I18n.tr("已开启") : I18n.tr("已关闭"), "info")
         }).catch(function(error) {
             page.syncBusy = false
-            page.handleSyncError(error, "更新同步选项失败")
+            page.handleSyncError(error, I18n.tr("更新同步选项失败"))
         })
     }
 
@@ -727,15 +739,15 @@ Item {
 
     readonly property string syncStatusText: {
         if (page.syncUnsupported)
-            return "后端暂不支持同步命令（sync.*）"
+            return I18n.tr("后端暂不支持同步命令（sync.*）")
         if (page.syncBusy || (page.syncState && page.syncState.running))
-            return "正在同步…"
+            return I18n.tr("正在同步…")
         if (page.syncStatusMessage !== "")
             return page.syncStatusMessage
         const last = page.syncConfig && page.syncConfig.lastSyncAt
                 ? page.formatTime(page.syncConfig.lastSyncAt)
                 : (page.syncState && page.syncState.lastSyncAt ? page.formatTime(page.syncState.lastSyncAt) : "")
-        let text = last !== "" ? ("上次同步：" + last) : "尚未同步"
+        let text = last !== "" ? (I18n.tr("上次同步：") + last) : I18n.tr("尚未同步")
         if (page.syncState && page.syncState.message)
             text += " · " + page.syncState.message
         return text
@@ -846,19 +858,19 @@ Item {
 
     FolderDialog {
         id: musicFolderDialog
-        title: "选择音乐文件夹"
+        title: I18n.tr("选择音乐文件夹")
         onAccepted: page.addMusicFolder(page.pathFromUrl(selectedFolder))
     }
 
     FolderDialog {
         id: downloadFolderDialog
-        title: "选择下载目录"
+        title: I18n.tr("选择下载目录")
         onAccepted: {
             const path = page.pathFromUrl(selectedFolder)
             if (!path)
                 return
             page.setSetting("downloadDirectory", path)
-            Toast.show("下载目录已设为：" + path, "info")
+            Toast.show(I18n.tr("下载目录已设为：") + path, "info")
         }
     }
 
@@ -868,7 +880,7 @@ Item {
         id: sidebar
         anchors.top: parent.top
         anchors.left: parent.left
-        width: page.wide ? Theme.navRailWidth : page.width
+        width: page.wide ? page.settingsRailWidth : page.width
         height: page.wide ? parent.height : 76
         categories: page.categoryDefs
         results: page.searchResults
@@ -940,23 +952,23 @@ Item {
                 id: secListenTogether
                 width: parent.width - 24
                 x: 12
-                title: "一起听"
-                description: "与手机端实时同步播放的自建房间"
+                title: I18n.tr("一起听")
+                description: I18n.tr("与手机端实时同步播放的自建房间")
                 icon: "group"
 
                 SettingsRow {
                     width: parent.width
-                    title: "一起听房间"
-                    description: "需要先配置自己的 NeriPlayer-LTW 服务端地址；面板里可创建或加入房间"
+                    title: I18n.tr("一起听房间")
+                    description: I18n.tr("需要先配置自己的 NeriPlayer-LTW 服务端地址；面板里可创建或加入房间")
                     SettingsButton {
-                        text: "打开一起听"
+                        text: I18n.tr("打开一起听")
                         onClicked: Nav.openListenTogetherPanel()
                     }
                 }
 
                 SettingsNote {
                     width: parent.width
-                    text: "桌面端与 Android 端共用同一套一起听协议，可在同一个房间里同步播放。"
+                    text: I18n.tr("桌面端与 Android 端共用同一套一起听协议，可在同一个房间里同步播放。")
                 }
             }
 
@@ -965,30 +977,30 @@ Item {
                 id: secSync
                 width: parent.width - 24
                 x: 12
-                title: "同步"
-                description: "通过自己的 GitHub 仓库跨设备同步歌单、收藏、最近播放与统计"
+                title: I18n.tr("同步")
+                description: I18n.tr("通过自己的 GitHub 仓库跨设备同步歌单、收藏、最近播放与统计")
                 icon: "sync"
 
                 SettingsRow {
                     width: parent.width
                     title: page.syncUnsupported
-                           ? "后端暂不支持"
+                           ? I18n.tr("后端暂不支持")
                            : (page.syncConfigured
-                              ? "已配置：" + (page.syncConfig.repoFullName
+                              ? I18n.tr("已配置：") + (page.syncConfig.repoFullName
                                              ? page.syncConfig.repoFullName
                                              : ((page.syncConfig.owner || "") + "/" + (page.syncConfig.repo || "")))
-                              : "未配置")
+                              : I18n.tr("未配置"))
                     description: page.syncStatusText
                     descriptionColor: page.syncStatusColor
 
                     SettingsButton {
-                        text: page.syncBusy ? "处理中…" : "立即同步"
+                        text: page.syncBusy ? I18n.tr("处理中…") : I18n.tr("立即同步")
                         enabled: !page.syncBusy && !page.syncUnsupported
                         onClicked: page.performSync()
                     }
 
                     SettingsButton {
-                        text: "断开同步"
+                        text: I18n.tr("断开同步")
                         enabled: !page.syncBusy && page.syncConfigured
                         onClicked: page.disableSync()
                     }
@@ -1010,14 +1022,14 @@ Item {
                     id: tokenField
                     width: parent.width
                     visible: !page.syncUnsupported
-                    placeholderText: "ghp_xxx（需要 repo 权限）"
+                    placeholderText: I18n.tr("ghp_xxx（需要 repo 权限）")
                     echoMode: TextInput.Password
                 }
 
                 SettingsNote {
                     width: parent.width
                     visible: !page.syncUnsupported
-                    text: "在 GitHub → Settings → Developer settings → Personal access tokens 生成 Token，建议 fine-grained 且只授权同步仓库。Token 只保存在本机，回显时打码。"
+                    text: I18n.tr("在 GitHub → Settings → Developer settings → Personal access tokens 生成 Token，建议 fine-grained 且只授权同步仓库。Token 只保存在本机，回显时打码。")
                 }
 
                 Item {
@@ -1028,7 +1040,7 @@ Item {
 
                 SettingsLabel {
                     width: parent.width
-                    text: "仓库账号 / 组织"
+                    text: I18n.tr("仓库账号 / 组织")
                     visible: !page.syncUnsupported
                 }
 
@@ -1036,7 +1048,7 @@ Item {
                     id: ownerField
                     width: parent.width
                     visible: !page.syncUnsupported
-                    placeholderText: "GitHub 用户名或组织"
+                    placeholderText: I18n.tr("GitHub 用户名或组织")
                 }
 
                 Item {
@@ -1047,7 +1059,7 @@ Item {
 
                 SettingsLabel {
                     width: parent.width
-                    text: "仓库名"
+                    text: I18n.tr("仓库名")
                     visible: !page.syncUnsupported
                 }
 
@@ -1067,8 +1079,8 @@ Item {
                 SettingsSwitchRow {
                     width: parent.width
                     visible: !page.syncUnsupported
-                    title: "自动同步"
-                    description: "歌单、收藏、最近播放或统计变化后自动同步"
+                    title: I18n.tr("自动同步")
+                    description: I18n.tr("歌单、收藏、最近播放或统计变化后自动同步")
                     checked: page.syncConfigValue("autoSync", true)
                     onToggled: function(checked) {
                         page.updateSyncFlag("autoSync", checked)
@@ -1078,8 +1090,8 @@ Item {
                 SettingsSwitchRow {
                     width: parent.width
                     visible: !page.syncUnsupported
-                    title: "省流模式"
-                    description: "只同步必要的结构化数据，减少流量占用"
+                    title: I18n.tr("省流模式")
+                    description: I18n.tr("只同步必要的结构化数据，减少流量占用")
                     checked: page.syncConfigValue("useDataSaver", false)
                     onToggled: function(checked) {
                         page.updateSyncFlag("useDataSaver", checked)
@@ -1097,13 +1109,13 @@ Item {
                     visible: !page.syncUnsupported
 
                     SettingsButton {
-                        text: "保存配置"
+                        text: I18n.tr("保存配置")
                         enabled: !page.syncBusy
                         onClicked: page.saveSyncConfig()
                     }
 
                     SettingsButton {
-                        text: "立即同步"
+                        text: I18n.tr("立即同步")
                         enabled: !page.syncBusy && page.syncConfigured
                         onClicked: page.performSync()
                     }
@@ -1128,13 +1140,13 @@ Item {
                 id: secTheme
                 width: parent.width - 24
                 x: 12
-                title: "主题设置"
-                description: "深浅色、动态取色与调色风格"
+                title: I18n.tr("主题设置")
+                description: I18n.tr("深浅色、动态取色与调色风格")
                 icon: "color_lens"
 
                 SettingsLabel {
                     width: parent.width
-                    text: "深浅色模式"
+                    text: I18n.tr("深浅色模式")
                 }
 
                 SegmentedOptions {
@@ -1153,7 +1165,7 @@ Item {
 
                 SettingsNote {
                     width: parent.width
-                    text: "选择「跟随系统」时，深浅色与主题强调色都会使用桌面环境（KDE / GNOME）的配置。"
+                    text: I18n.tr("选择「跟随系统」时，深浅色与主题强调色都会使用桌面环境（KDE / GNOME）的配置。")
                 }
 
                 Item {
@@ -1163,8 +1175,8 @@ Item {
 
                 SettingsSwitchRow {
                     width: parent.width
-                    title: "跟随系统主题色"
-                    description: "使用桌面环境的强调色作为主题种子色（优先于下方主题色）"
+                    title: I18n.tr("跟随系统主题色")
+                    description: I18n.tr("使用桌面环境的强调色作为主题种子色（优先于下方主题色）")
                     checked: page.sb("followSystemTheme", true)
                     onToggled: function(checked) {
                         page.setSetting("followSystemTheme", checked)
@@ -1173,8 +1185,8 @@ Item {
 
                 SettingsSwitchRow {
                     width: parent.width
-                    title: "动态取色（封面）"
-                    description: "跟随当前歌曲封面主题色，无封面时回落到下方主题色"
+                    title: I18n.tr("动态取色（封面）")
+                    description: I18n.tr("跟随当前歌曲封面主题色，无封面时回落到下方主题色")
                     checked: page.sb("dynamicColor", false)
                     onToggled: function(checked) {
                         page.setSetting("dynamicColor", checked)
@@ -1188,7 +1200,7 @@ Item {
 
                 SettingsLabel {
                     width: parent.width
-                    text: "预设主题色"
+                    text: I18n.tr("预设主题色")
                 }
 
                 Row {
@@ -1217,7 +1229,7 @@ Item {
                 SettingsNote {
                     width: parent.width
                     visible: page.sb("followSystemTheme", true)
-                    text: "「跟随系统主题色」已开启，预设与自定义主题色暂时不可选；关闭该开关后即可手动指定。"
+                    text: I18n.tr("「跟随系统主题色」已开启，预设与自定义主题色暂时不可选；关闭该开关后即可手动指定。")
                 }
 
                 Item {
@@ -1227,7 +1239,7 @@ Item {
 
                 SettingsLabel {
                     width: parent.width
-                    text: "自定义主题色（6 位 HEX）"
+                    text: I18n.tr("自定义主题色（6 位 HEX）")
                 }
 
                 Row {
@@ -1244,7 +1256,7 @@ Item {
                     }
 
                     SettingsButton {
-                        text: "应用"
+                        text: I18n.tr("应用")
                         enabled: !page.sb("followSystemTheme", true)
                         onClicked: page.applyCustomSeed()
                     }
@@ -1257,7 +1269,7 @@ Item {
 
                 SettingsLabel {
                     width: parent.width
-                    text: "调色风格"
+                    text: I18n.tr("调色风格")
                 }
 
                 SegmentedOptions {
@@ -1288,7 +1300,7 @@ Item {
 
                 SettingsLabel {
                     width: parent.width
-                    text: "色彩规范"
+                    text: I18n.tr("色彩规范")
                 }
 
                 SegmentedOptions {
@@ -1307,7 +1319,7 @@ Item {
 
                 SettingsLabel {
                     width: parent.width
-                    text: "界面缩放"
+                    text: I18n.tr("界面缩放")
                 }
 
                 SegmentedOptions {
@@ -1326,7 +1338,7 @@ Item {
 
                 SettingsNote {
                     width: parent.width
-                    text: "界面立即按比例缩放，窗口尺寸在下次启动时生效。桌面本身已开启缩放时（例如 KDE 200%），可在此手动指定。"
+                    text: I18n.tr("界面立即按比例缩放，窗口尺寸在下次启动时生效。桌面本身已开启缩放时（例如 KDE 200%），可在此手动指定。")
                 }
 
                 Item {
@@ -1337,19 +1349,19 @@ Item {
                 // 与旧 Compose 版一致：展示当前实际生效的缩放/布局/屏幕信息
                 SettingsInfoRow {
                     width: parent.width
-                    label: "当前生效"
+                    label: I18n.tr("当前生效")
                     value: page.effectiveScaleText()
                 }
 
                 SettingsInfoRow {
                     width: parent.width
-                    label: "布局"
-                    value: wide ? "横屏（宽窗口，内容铺满 + 多栏）" : "紧凑（窄窗口，单栏）"
+                    label: I18n.tr("布局")
+                    value: wide ? I18n.tr("横屏（宽窗口，内容铺满 + 多栏）") : I18n.tr("紧凑（窄窗口，单栏）")
                 }
 
                 SettingsInfoRow {
                     width: parent.width
-                    label: "屏幕"
+                    label: I18n.tr("屏幕")
                     value: page.screenText()
                 }
             }
@@ -1359,8 +1371,8 @@ Item {
                 id: secPlayerDesign
                 width: parent.width - 24
                 x: 12
-                title: "播放页"
-                description: "封面、控制条、歌曲信息与歌词的显示方式"
+                title: I18n.tr("播放页")
+                description: I18n.tr("封面、控制条、歌曲信息与歌词的显示方式")
                 icon: "fullscreen"
 
                 // 用 Loader 加载播放页外观组件；文件缺失时退化为空，避免设置页整体加载失败
@@ -1379,37 +1391,37 @@ Item {
 
                 SettingsLabel {
                     width: parent.width
-                    text: "歌曲信息与歌词"
+                    text: I18n.tr("歌曲信息与歌词")
                 }
 
                 SettingsSwitchRow {
                     width: parent.width
-                    title: "显示歌词翻译"
-                    description: "在线歌词包含翻译时同时显示"
+                    title: I18n.tr("显示歌词翻译")
+                    description: I18n.tr("在线歌词包含翻译时同时显示")
                     checked: page.sb("showLyricTranslation", true)
                     onToggled: function(checked) { page.setSetting("showLyricTranslation", checked) }
                 }
 
                 SettingsSwitchRow {
                     width: parent.width
-                    title: "封面页显示歌词"
-                    description: "在播放页封面下方显示逐行歌词"
+                    title: I18n.tr("封面页显示歌词")
+                    description: I18n.tr("在播放页封面下方显示逐行歌词")
                     checked: page.sb("coverShowsLyrics", true)
                     onToggled: function(checked) { page.setSetting("coverShowsLyrics", checked) }
                 }
 
                 SettingsSwitchRow {
                     width: parent.width
-                    title: "显示“正在播放”标题"
-                    description: "控制播放页顶部是否显示标题"
+                    title: I18n.tr("显示“正在播放”标题")
+                    description: I18n.tr("控制播放页顶部是否显示标题")
                     checked: page.sb("showNowPlayingTitle", true)
                     onToggled: function(checked) { page.setSetting("showNowPlayingTitle", checked) }
                 }
 
                 SettingsSwitchRow {
                     width: parent.width
-                    title: "滚动显示长歌曲名"
-                    description: "标题超出宽度时平滑滚动"
+                    title: I18n.tr("滚动显示长歌曲名")
+                    description: I18n.tr("标题超出宽度时平滑滚动")
                     checked: page.sb("songTitleMarquee", true)
                     onToggled: function(checked) { page.setSetting("songTitleMarquee", checked) }
                 }
@@ -1421,7 +1433,7 @@ Item {
 
                 SliderRow {
                     width: parent.width
-                    label: "歌词字号 " + Number(page.sv("lyricsFontScale", 1.0)).toFixed(2) + "x"
+                    label: I18n.tr("歌词字号 ") + Number(page.sv("lyricsFontScale", 1.0)).toFixed(2) + "x"
                     from: 0.7
                     to: 1.8
                     decimals: 2
@@ -1431,14 +1443,14 @@ Item {
 
                 SettingsLabel {
                     width: parent.width
-                    text: "歌词对齐"
+                    text: I18n.tr("歌词对齐")
                 }
                 SegmentedOptions {
                     width: parent.width
                     options: [
-                        { value: "LEFT", label: "左对齐" },
-                        { value: "CENTER", label: "居中" },
-                        { value: "RIGHT", label: "右对齐" }
+                        { value: "LEFT", label: I18n.tr("左对齐") },
+                        { value: "CENTER", label: I18n.tr("居中") },
+                        { value: "RIGHT", label: I18n.tr("右对齐") }
                     ]
                     value: page.sv("lyricsAlignment", "LEFT")
                     onSelected: function(value) { page.setSetting("lyricsAlignment", value) }
@@ -1446,13 +1458,13 @@ Item {
 
                 SettingsLabel {
                     width: parent.width
-                    text: "歌词高亮方式"
+                    text: I18n.tr("歌词高亮方式")
                 }
                 SegmentedOptions {
                     width: parent.width
                     options: [
-                        { value: "LINE", label: "整句亮起" },
-                        { value: "WORD", label: "逐字亮起" }
+                        { value: "LINE", label: I18n.tr("整句亮起") },
+                        { value: "WORD", label: I18n.tr("逐字亮起") }
                     ]
                     value: page.sv("lyricsHighlight", "LINE")
                     onSelected: function(value) { page.setSetting("lyricsHighlight", value) }
@@ -1460,7 +1472,7 @@ Item {
 
                 SliderRow {
                     width: parent.width
-                    label: "高亮动画时长 " + Math.round(page.sv("lyricsHighlightDuration", 220)) + "ms"
+                    label: I18n.tr("高亮动画时长 ") + Math.round(page.sv("lyricsHighlightDuration", 220)) + "ms"
                     from: 0
                     to: 800
                     decimals: 0
@@ -1487,13 +1499,13 @@ Item {
                 id: secPlayback
                 width: parent.width - 24
                 x: 12
-                title: "播放"
-                description: "默认倍速、变调与音效开关"
+                title: I18n.tr("播放")
+                description: I18n.tr("默认倍速与音调")
                 icon: "graphic_eq"
 
                 SliderRow {
                     width: parent.width
-                    label: "默认播放速度"
+                    label: I18n.tr("默认播放速度")
                     externalValue: page.sv("playbackSpeed", 1.0)
                     from: 0.5
                     to: 3.0
@@ -1507,47 +1519,36 @@ Item {
 
                 SliderRow {
                     width: parent.width
-                    label: "音调"
+                    label: I18n.tr("音调")
                     externalValue: page.sv("pitchSemitone", 0)
                     from: -12
                     to: 12
                     formatValue: function(value) {
                         const rounded = Number(value).toFixed(1)
-                        return (value > 0 ? "+" : "") + rounded + " 半音"
+                        return (value > 0 ? "+" : "") + rounded + I18n.tr(" 半音")
                     }
                     onCommitted: function(value) {
                         Player.setPitch(value)
                     }
                 }
 
-                SettingsSwitchRow {
-                    width: parent.width
-                    title: "响度增强"
-                    description: "使用动态归一化提升整体响度（需要 ffmpeg 音效支持）"
-                    checked: page.sb("loudnessEnhancer", false)
-                    onToggled: function(checked) {
-                        Player.setLoudness(checked)
-                    }
-                }
-
-                SettingsSwitchRow {
-                    width: parent.width
-                    title: "均衡器"
-                    description: "启用十段均衡器，可在播放页的音效面板中细调"
-                    checked: page.sb("equalizerEnabled", false)
-                    onToggled: function(checked) {
-                        Player.setEqualizerEnabled(checked)
-                    }
-                }
-
-                Item {
-                    width: 1
-                    height: 4
-                }
-
                 SettingsNote {
                     width: parent.width
-                    text: "倍速、变调与响度增强需要后端具备 ffmpeg 支持；不可用时设置仍会保存，下次具备条件时生效。"
+                    text: I18n.tr("倍速与变调需要后端具备 ffmpeg 支持；不可用时设置仍会保存，下次具备条件时生效。")
+                }
+            }
+
+            // ============================================================ 均衡器
+            SettingsSection {
+                id: secEqualizer
+                width: parent.width - 24
+                x: 12
+                title: I18n.tr("均衡器")
+                description: I18n.tr("十段增益微调、预设与响度增强")
+                icon: "equalizer"
+
+                EqualizerPanel {
+                    width: parent.width
                 }
             }
 
@@ -1556,13 +1557,13 @@ Item {
                 id: secQuality
                 width: parent.width - 24
                 x: 12
-                title: "在线播放音质"
-                description: "在线歌曲解析时使用的默认码率（与下载音质独立）"
+                title: I18n.tr("在线播放音质")
+                description: I18n.tr("在线歌曲解析时使用的默认码率（与下载音质独立）")
                 icon: "high_quality"
 
                 SettingsLabel {
                     width: parent.width
-                    text: "默认播放音质"
+                    text: I18n.tr("默认播放音质")
                 }
 
                 SegmentedOptions {
@@ -1581,7 +1582,7 @@ Item {
 
                 SettingsNote {
                     width: parent.width
-                    text: "后端按 standard / higher / exhigh / lossless / hires 映射解析码率；实际可用档位取决于音源与登录状态，无损与 Hi-Res 档位在部分接口上会回落到较高码率。"
+                    text: I18n.tr("后端按 standard / higher / exhigh / lossless / hires 映射解析码率；实际可用档位取决于音源与登录状态，无损与 Hi-Res 档位在部分接口上会回落到较高码率。")
                 }
             }
 
@@ -1603,14 +1604,14 @@ Item {
                 id: secFloatingLyrics
                 width: parent.width - 24
                 x: 12
-                title: "悬浮歌词"
-                description: "桌面悬浮歌词的样式与配色"
+                title: I18n.tr("悬浮歌词")
+                description: I18n.tr("桌面悬浮歌词的样式与配色")
                 icon: "lyrics"
 
                 SettingsSwitchRow {
                     width: parent.width
-                    title: "启用悬浮歌词"
-                    description: "在桌面上显示轻量悬浮歌词（快捷键 Ctrl+L）"
+                    title: I18n.tr("启用悬浮歌词")
+                    description: I18n.tr("在桌面上显示轻量悬浮歌词（快捷键 Ctrl+L）")
                     checked: page.sb("floatingLyricsEnabled", false)
                     onToggled: function(checked) {
                         page.setSetting("floatingLyricsEnabled", checked)
@@ -1619,8 +1620,8 @@ Item {
 
                 SettingsSwitchRow {
                     width: parent.width
-                    title: "应用内隐藏"
-                    description: "主窗口获得焦点时隐藏悬浮歌词，避免遮挡页面"
+                    title: I18n.tr("应用内隐藏")
+                    description: I18n.tr("主窗口获得焦点时隐藏悬浮歌词，避免遮挡页面")
                     checked: page.sb("floatingLyricsHideInApp", false)
                     onToggled: function(checked) {
                         page.setSetting("floatingLyricsHideInApp", checked)
@@ -1629,8 +1630,8 @@ Item {
 
                 SettingsSwitchRow {
                     width: parent.width
-                    title: "锁定位置"
-                    description: "锁定后无法拖动悬浮歌词"
+                    title: I18n.tr("锁定位置")
+                    description: I18n.tr("锁定后无法拖动悬浮歌词")
                     checked: page.sb("floatingLyricsLocked", false)
                     onToggled: function(checked) {
                         page.setSetting("floatingLyricsLocked", checked)
@@ -1639,8 +1640,8 @@ Item {
 
                 SettingsSwitchRow {
                     width: parent.width
-                    title: "显示翻译"
-                    description: "有翻译歌词时一起显示在第二行"
+                    title: I18n.tr("显示翻译")
+                    description: I18n.tr("有翻译歌词时一起显示在第二行")
                     checked: page.sb("floatingLyricsShowTranslation", true)
                     onToggled: function(checked) {
                         page.setSetting("floatingLyricsShowTranslation", checked)
@@ -1654,7 +1655,7 @@ Item {
 
                 SliderRow {
                     width: parent.width
-                    label: "字号"
+                    label: I18n.tr("字号")
                     externalValue: page.sv("floatingLyricsFontSize", 30)
                     from: 14
                     to: 72
@@ -1674,7 +1675,7 @@ Item {
 
                 SettingsLabel {
                     width: parent.width
-                    text: "渲染方式"
+                    text: I18n.tr("渲染方式")
                 }
 
                 SegmentedOptions {
@@ -1693,7 +1694,7 @@ Item {
 
                 SettingsLabel {
                     width: parent.width
-                    text: "歌词颜色"
+                    text: I18n.tr("歌词颜色")
                 }
 
                 Row {
@@ -1720,7 +1721,7 @@ Item {
 
                 SliderRow {
                     width: parent.width
-                    label: "主歌词不透明度"
+                    label: I18n.tr("主歌词不透明度")
                     externalValue: page.sv("floatingLyricsLyricAlpha", 1.0)
                     from: 0.1
                     to: 1.0
@@ -1734,7 +1735,7 @@ Item {
 
                 SliderRow {
                     width: parent.width
-                    label: "翻译不透明度"
+                    label: I18n.tr("翻译不透明度")
                     externalValue: page.sv("floatingLyricsTranslationAlpha", 0.75)
                     from: 0.1
                     to: 1.0
@@ -1753,7 +1754,7 @@ Item {
 
                 SettingsLabel {
                     width: parent.width
-                    text: "背景颜色"
+                    text: I18n.tr("背景颜色")
                 }
 
                 Row {
@@ -1780,7 +1781,7 @@ Item {
 
                 SliderRow {
                     width: parent.width
-                    label: "背景不透明度"
+                    label: I18n.tr("背景不透明度")
                     externalValue: page.sv("floatingLyricsBackgroundAlpha", 0.35)
                     from: 0
                     to: 1
@@ -1799,7 +1800,7 @@ Item {
 
                 SettingsLabel {
                     width: parent.width
-                    text: "对齐方式"
+                    text: I18n.tr("对齐方式")
                 }
 
                 SegmentedOptions {
@@ -1818,7 +1819,7 @@ Item {
 
                 SettingsNote {
                     width: parent.width
-                    text: "悬浮歌词是独立的桌面窗口；未锁定时可直接拖动，锁定时鼠标穿透（Ctrl+Alt+L 解锁）。"
+                    text: I18n.tr("悬浮歌词是独立的桌面窗口；未锁定时可直接拖动，锁定时鼠标穿透（Ctrl+Alt+L 解锁）。")
                 }
             }
 
@@ -1840,13 +1841,13 @@ Item {
                 id: secLibrary
                 width: parent.width - 24
                 x: 12
-                title: "媒体库"
-                description: "本地音乐文件夹与扫描"
+                title: I18n.tr("媒体库")
+                description: I18n.tr("本地音乐文件夹与扫描")
                 icon: "library_music"
 
                 SettingsLabel {
                     width: parent.width
-                    text: "音乐文件夹"
+                    text: I18n.tr("音乐文件夹")
                 }
 
                 FolderList {
@@ -1881,25 +1882,25 @@ Item {
                 id: secDownloads
                 width: parent.width - 24
                 x: 12
-                title: "下载设置"
-                description: "下载目录、音质与并发数"
+                title: I18n.tr("下载设置")
+                description: I18n.tr("下载目录、音质与并发数")
                 icon: "download"
 
                 SettingsRow {
                     width: parent.width
-                    title: "下载目录"
+                    title: I18n.tr("下载目录")
                     description: {
                         const directory = page.sv("downloadDirectory", "")
-                        return directory !== "" ? directory : "默认：~/Music/NeriPlayer"
+                        return directory !== "" ? directory : I18n.tr("默认：~/Music/NeriPlayer")
                     }
 
                     SettingsButton {
-                        text: "选择目录"
+                        text: I18n.tr("选择目录")
                         onClicked: page.chooseDownloadFolder()
                     }
 
                     SettingsButton {
-                        text: "恢复默认"
+                        text: I18n.tr("恢复默认")
                         onClicked: page.setSetting("downloadDirectory", "")
                     }
                 }
@@ -1911,7 +1912,7 @@ Item {
 
                 SettingsLabel {
                     width: parent.width
-                    text: "下载音质"
+                    text: I18n.tr("下载音质")
                 }
 
                 SegmentedOptions {
@@ -1930,7 +1931,7 @@ Item {
 
                 SettingsLabel {
                     width: parent.width
-                    text: "并发下载"
+                    text: I18n.tr("并发下载")
                 }
 
                 SegmentedOptions {
@@ -1949,8 +1950,8 @@ Item {
 
                 SettingsSwitchRow {
                     width: parent.width
-                    title: "下载完成时通知"
-                    description: "全部任务完成后发送系统通知"
+                    title: I18n.tr("下载完成时通知")
+                    description: I18n.tr("全部任务完成后发送系统通知")
                     checked: page.sb("downloadNotifyOnComplete", true)
                     onToggled: function(checked) {
                         page.setSetting("downloadNotifyOnComplete", checked)
@@ -1963,7 +1964,7 @@ Item {
                 }
 
                 SettingsButton {
-                    text: "打开下载管理"
+                    text: I18n.tr("打开下载管理")
                     icon: "download"
                     onClicked: Nav.openDownloadsPanel()
                 }
@@ -1974,16 +1975,16 @@ Item {
                 id: secDataCache
                 width: parent.width - 24
                 x: 12
-                title: "数据与缓存"
-                description: "清理封面缓存、下载记录与本地统计"
+                title: I18n.tr("数据与缓存")
+                description: I18n.tr("清理封面缓存、下载记录与本地统计")
                 icon: "storage"
 
                 SettingsRow {
                     width: parent.width
-                    title: "封面缓存"
-                    description: "在线歌曲封面在本机的缩略图，可安全清理"
+                    title: I18n.tr("封面缓存")
+                    description: I18n.tr("在线歌曲封面在本机的缩略图，可安全清理")
                     SettingsButton {
-                        text: page.clearingCache ? "清理中…" : "清除缓存"
+                        text: page.clearingCache ? I18n.tr("清理中…") : I18n.tr("清除缓存")
                         enabled: !page.clearingCache
                         onClicked: page.clearArtworkCache()
                     }
@@ -1991,30 +1992,30 @@ Item {
 
                 SettingsRow {
                     width: parent.width
-                    title: "已完成的下载记录"
-                    description: "只清空下载列表中的已完成任务，不删除已下载的文件"
+                    title: I18n.tr("已完成的下载记录")
+                    description: I18n.tr("只清空下载列表中的已完成任务，不删除已下载的文件")
                     SettingsButton {
-                        text: "清理记录"
+                        text: I18n.tr("清理记录")
                         onClicked: page.clearFinishedDownloads()
                     }
                 }
 
                 SettingsRow {
                     width: parent.width
-                    title: "播放历史"
-                    description: "最近播放记录与最常播放列表"
+                    title: I18n.tr("播放历史")
+                    description: I18n.tr("最近播放记录与最常播放列表")
                     SettingsButton {
-                        text: "清除历史"
+                        text: I18n.tr("清除历史")
                         onClicked: page.clearHistory()
                     }
                 }
 
                 SettingsRow {
                     width: parent.width
-                    title: "播放统计"
-                    description: "按天 / 周 / 月累计的播放次数统计"
+                    title: I18n.tr("播放统计")
+                    description: I18n.tr("按天 / 周 / 月累计的播放次数统计")
                     SettingsButton {
-                        text: "清除统计"
+                        text: I18n.tr("清除统计")
                         onClicked: page.clearStats()
                     }
                 }
@@ -2026,7 +2027,7 @@ Item {
 
                 SettingsNote {
                     width: parent.width
-                    text: "以上清理操作不可撤销；下载文件本体请在「下载管理」中删除。"
+                    text: I18n.tr("以上清理操作不可撤销；下载文件本体请在「下载管理」中删除。")
                 }
             }
 
@@ -2048,14 +2049,14 @@ Item {
                 id: musicSourceSection
                 width: parent.width - 24
                 x: 12
-                title: "音乐源"
-                description: "网易云 / 哔哩哔哩 / YouTube 的开关与账号登录"
+                title: I18n.tr("音乐源")
+                description: I18n.tr("网易云 / 哔哩哔哩 / YouTube 的开关与账号登录")
                 icon: "cloud"
 
                 SettingsSwitchRow {
                     width: parent.width
-                    title: "网易云音乐"
-                    description: "搜索、推荐、播放与歌词；未登录也可使用公开接口"
+                    title: I18n.tr("网易云音乐")
+                    description: I18n.tr("搜索、推荐、播放与歌词；未登录也可使用公开接口")
                     checked: page.sb("neteaseEnabled", true)
                     onToggled: function(checked) { page.setSetting("neteaseEnabled", checked) }
                 }
@@ -2063,13 +2064,13 @@ Item {
                 SettingsRow {
                     width: parent.width
                     title: page.findAccount("NETEASE") ? page.accountName(page.findAccount("NETEASE"))
-                                                        : "网易云：未登录"
+                                                        : I18n.tr("网易云：未登录")
                     description: page.findAccount("NETEASE")
-                                 ? "已登录 · " + page.accountDetail(page.findAccount("NETEASE"), "")
-                                 : "未登录：扫码登录后可解锁每日推荐、私人 FM 与每日推荐歌单"
+                                 ? I18n.tr("已登录 · ") + page.accountDetail(page.findAccount("NETEASE"), "")
+                                 : I18n.tr("未登录：扫码登录后可解锁每日推荐、私人 FM 与每日推荐歌单")
 
                     SettingsButton {
-                        text: page.findAccount("NETEASE") ? "退出登录" : "扫码登录"
+                        text: page.findAccount("NETEASE") ? I18n.tr("退出登录") : I18n.tr("扫码登录")
                         onClicked: page.toggleSourceAccount("NETEASE")
                     }
                 }
@@ -2081,8 +2082,8 @@ Item {
 
                 SettingsSwitchRow {
                     width: parent.width
-                    title: "哔哩哔哩"
-                    description: "视频搜索与音频轨道播放"
+                    title: I18n.tr("哔哩哔哩")
+                    description: I18n.tr("视频搜索与音频轨道播放")
                     checked: page.sb("bilibiliEnabled", true)
                     onToggled: function(checked) { page.setSetting("bilibiliEnabled", checked) }
                 }
@@ -2090,13 +2091,13 @@ Item {
                 SettingsRow {
                     width: parent.width
                     title: page.findAccount("BILIBILI") ? page.accountName(page.findAccount("BILIBILI"))
-                                                        : "哔哩哔哩：未登录"
+                                                        : I18n.tr("哔哩哔哩：未登录")
                     description: page.findAccount("BILIBILI")
-                                 ? "已登录 · " + page.accountDetail(page.findAccount("BILIBILI"), "")
-                                 : "未登录：可搜索与播放视频音频轨，收藏夹需要登录"
+                                 ? I18n.tr("已登录 · ") + page.accountDetail(page.findAccount("BILIBILI"), "")
+                                 : I18n.tr("未登录：可搜索与播放视频音频轨，收藏夹需要登录")
 
                     SettingsButton {
-                        text: page.findAccount("BILIBILI") ? "退出登录" : "扫码登录"
+                        text: page.findAccount("BILIBILI") ? I18n.tr("退出登录") : I18n.tr("扫码登录")
                         onClicked: page.toggleSourceAccount("BILIBILI")
                     }
                 }
@@ -2109,7 +2110,7 @@ Item {
                 SettingsSwitchRow {
                     width: parent.width
                     title: "YouTube Music"
-                    description: "登录后可浏览与播放；未登录时仅能搜索公开内容"
+                    description: I18n.tr("登录后可浏览与播放；未登录时仅能搜索公开内容")
                     checked: page.sb("youtubeEnabled", false)
                     onToggled: function(checked) { page.setSetting("youtubeEnabled", checked) }
                 }
@@ -2117,13 +2118,13 @@ Item {
                 SettingsRow {
                     width: parent.width
                     title: page.findAccount("YOUTUBE") ? page.accountName(page.findAccount("YOUTUBE"))
-                                                       : "YouTube：未登录"
+                                                       : I18n.tr("YouTube：未登录")
                     description: page.findAccount("YOUTUBE")
-                                 ? "已登录 · " + page.accountDetail(page.findAccount("YOUTUBE"), "")
-                                 : "未登录：只能搜索公开内容，登录需从浏览器复制 Cookie"
+                                 ? I18n.tr("已登录 · ") + page.accountDetail(page.findAccount("YOUTUBE"), "")
+                                 : I18n.tr("未登录：只能搜索公开内容，登录需从浏览器复制 Cookie")
 
                     SettingsButton {
-                        text: page.findAccount("YOUTUBE") ? "退出登录" : "登录"
+                        text: page.findAccount("YOUTUBE") ? I18n.tr("退出登录") : I18n.tr("登录")
                         onClicked: page.toggleSourceAccount("YOUTUBE")
                     }
                 }
@@ -2135,8 +2136,8 @@ Item {
 
                 SettingsSwitchRow {
                     width: parent.width
-                    title: "自动换源"
-                    description: "网易云不可播放（VIP / 版权 / 接口限制）时，自动到 B 站搜索同名歌曲播放"
+                    title: I18n.tr("自动换源")
+                    description: I18n.tr("网易云不可播放（VIP / 版权 / 接口限制）时，自动到 B 站搜索同名歌曲播放")
                     checked: page.sb("neteaseAutoSourceSwitch", true)
                     onToggled: function(checked) { page.setSetting("neteaseAutoSourceSwitch", checked) }
                 }
@@ -2148,7 +2149,7 @@ Item {
 
                 SettingsNote {
                     width: parent.width
-                    text: "登录凭据（Cookie）仅保存在本机配置目录。关闭某个音源后，它的栏目与账号歌单会在首页 / 媒体库中隐藏。"
+                    text: I18n.tr("登录凭据（Cookie）仅保存在本机配置目录。关闭某个音源后，它的栏目与账号歌单会在首页 / 媒体库中隐藏。")
                 }
             }
 
@@ -2170,78 +2171,78 @@ Item {
                 id: secHomeCards
                 width: parent.width - 24
                 x: 12
-                title: "首页栏目"
-                description: "选择首页展示哪些推荐栏目（未登录 / 音源禁用时对应栏目不会出现）"
+                title: I18n.tr("首页栏目")
+                description: I18n.tr("选择首页展示哪些推荐栏目（未登录 / 音源禁用时对应栏目不会出现）")
                 icon: "dashboard"
 
                 SettingsSwitchRow {
                     width: parent.width
-                    title: "继续播放"
-                    description: "最近播放的歌曲"
+                    title: I18n.tr("继续播放")
+                    description: I18n.tr("最近播放的歌曲")
                     checked: page.homeCardEnabled("continuePlaying", true)
                     onToggled: function(checked) { page.setHomeCard("continuePlaying", checked) }
                 }
 
                 SettingsSwitchRow {
                     width: parent.width
-                    title: "猜你喜欢"
-                    description: "根据收听口味生成的歌曲推荐"
+                    title: I18n.tr("猜你喜欢")
+                    description: I18n.tr("根据收听口味生成的歌曲推荐")
                     checked: page.homeCardEnabled("guessYouLike", true)
                     onToggled: function(checked) { page.setHomeCard("guessYouLike", checked) }
                 }
 
                 SettingsSwitchRow {
                     width: parent.width
-                    title: "每日推荐"
-                    description: "每天更新的 30 首推荐（需登录网易云）"
+                    title: I18n.tr("每日推荐")
+                    description: I18n.tr("每天更新的 30 首推荐（需登录网易云）")
                     checked: page.homeCardEnabled("dailyRecommend", true)
                     onToggled: function(checked) { page.setHomeCard("dailyRecommend", checked) }
                 }
 
                 SettingsSwitchRow {
                     width: parent.width
-                    title: "私人 FM"
-                    description: "根据口味连续推荐的歌曲（需登录网易云）"
+                    title: I18n.tr("私人 FM")
+                    description: I18n.tr("根据口味连续推荐的歌曲（需登录网易云）")
                     checked: page.homeCardEnabled("privateFm", true)
                     onToggled: function(checked) { page.setHomeCard("privateFm", checked) }
                 }
 
                 SettingsSwitchRow {
                     width: parent.width
-                    title: "B站音乐"
-                    description: "哔哩哔哩音乐榜与音乐区热门视频"
+                    title: I18n.tr("B站音乐")
+                    description: I18n.tr("哔哩哔哩音乐榜与音乐区热门视频")
                     checked: page.homeCardEnabled("biliMusic", true)
                     onToggled: function(checked) { page.setHomeCard("biliMusic", checked) }
                 }
 
                 SettingsSwitchRow {
                     width: parent.width
-                    title: "排行榜"
-                    description: "热歌榜、飙升榜与新歌榜"
+                    title: I18n.tr("排行榜")
+                    description: I18n.tr("热歌榜、飙升榜与新歌榜")
                     checked: page.homeCardEnabled("ranks", true)
                     onToggled: function(checked) { page.setHomeCard("ranks", checked) }
                 }
 
                 SettingsSwitchRow {
                     width: parent.width
-                    title: "推荐歌单"
-                    description: "个性化推荐、精品与热门歌单"
+                    title: I18n.tr("推荐歌单")
+                    description: I18n.tr("个性化推荐、精品与热门歌单")
                     checked: page.homeCardEnabled("playlists", true)
                     onToggled: function(checked) { page.setHomeCard("playlists", checked) }
                 }
 
                 SettingsSwitchRow {
                     width: parent.width
-                    title: "推荐新歌"
-                    description: "最近发布的新歌推荐"
+                    title: I18n.tr("推荐新歌")
+                    description: I18n.tr("最近发布的新歌推荐")
                     checked: page.homeCardEnabled("newSongs", true)
                     onToggled: function(checked) { page.setHomeCard("newSongs", checked) }
                 }
 
                 SettingsSwitchRow {
                     width: parent.width
-                    title: "雷达歌单"
-                    description: "时光 / 宝藏 / 新歌 / 乐迷 / 神秘雷达"
+                    title: I18n.tr("雷达歌单")
+                    description: I18n.tr("时光 / 宝藏 / 新歌 / 乐迷 / 神秘雷达")
                     checked: page.homeCardEnabled("radar", true)
                     onToggled: function(checked) { page.setHomeCard("radar", checked) }
                 }
@@ -2252,14 +2253,14 @@ Item {
                 id: secBackground
                 width: parent.width - 24
                 x: 12
-                title: "后台与系统控制"
-                description: "托盘、通知与系统媒体控制"
+                title: I18n.tr("后台与系统控制")
+                description: I18n.tr("托盘、通知与系统媒体控制")
                 icon: "desktop_windows"
 
                 SettingsSwitchRow {
                     width: parent.width
-                    title: "关闭窗口时最小化到托盘"
-                    description: "关闭窗口只是隐藏，音乐继续播放；点击托盘图标可打开控制面板"
+                    title: I18n.tr("关闭窗口时最小化到托盘")
+                    description: I18n.tr("关闭窗口只是隐藏，音乐继续播放；点击托盘图标可打开控制面板")
                     checked: page.sb("closeToTray", true)
                     onToggled: function(checked) {
                         page.setSetting("closeToTray", checked)
@@ -2268,8 +2269,8 @@ Item {
 
                 SettingsSwitchRow {
                     width: parent.width
-                    title: "最小化时隐藏到托盘"
-                    description: "把窗口最小化时收进托盘，继续后台播放"
+                    title: I18n.tr("最小化时隐藏到托盘")
+                    description: I18n.tr("把窗口最小化时收进托盘，继续后台播放")
                     checked: page.sb("minimizeToTray", true)
                     onToggled: function(checked) {
                         page.setSetting("minimizeToTray", checked)
@@ -2278,8 +2279,8 @@ Item {
 
                 SettingsSwitchRow {
                     width: parent.width
-                    title: "切歌时发送系统通知"
-                    description: "仅当窗口隐藏 / 最小化时提示，避免打扰"
+                    title: I18n.tr("切歌时发送系统通知")
+                    description: I18n.tr("仅当窗口隐藏 / 最小化时提示，避免打扰")
                     checked: page.sb("notifyOnSongChange", true)
                     onToggled: function(checked) {
                         page.setSetting("notifyOnSongChange", checked)
@@ -2288,8 +2289,8 @@ Item {
 
                 SettingsSwitchRow {
                     width: parent.width
-                    title: "启用系统媒体控制（MPRIS）"
-                    description: "注册 org.mpris.MediaPlayer2.neriplayer，可用媒体键与桌面媒体组件控制"
+                    title: I18n.tr("启用系统媒体控制（MPRIS）")
+                    description: I18n.tr("注册 org.mpris.MediaPlayer2.neriplayer，可用媒体键与桌面媒体组件控制")
                     checked: page.sb("mprisEnabled", true)
                     onToggled: function(checked) {
                         page.setSetting("mprisEnabled", checked)
@@ -2298,8 +2299,8 @@ Item {
 
                 SettingsSwitchRow {
                     width: parent.width
-                    title: "启动时恢复上次队列"
-                    description: "打开应用后继续显示上次的播放队列与进度"
+                    title: I18n.tr("启动时恢复上次队列")
+                    description: I18n.tr("打开应用后继续显示上次的播放队列与进度")
                     checked: page.sb("resumeLastQueue", true)
                     onToggled: function(checked) {
                         page.setSetting("resumeLastQueue", checked)
@@ -2313,7 +2314,7 @@ Item {
 
                 SettingsNote {
                     width: parent.width
-                    text: "托盘与 MPRIS 需要桌面环境提供系统托盘 / D-Bus 会话总线；无托盘的极简桌面下关闭窗口将直接退出。"
+                    text: I18n.tr("托盘与 MPRIS 需要桌面环境提供系统托盘 / D-Bus 会话总线；无托盘的极简桌面下关闭窗口将直接退出。")
                 }
             }
 
@@ -2322,13 +2323,59 @@ Item {
                 id: shortcutSection
                 width: parent.width - 24
                 x: 12
-                title: "快捷键"
-                description: "应用内与全局快捷键"
+                title: I18n.tr("快捷键")
+                description: I18n.tr("应用内与全局快捷键")
                 icon: "keyboard"
 
                 // 动作表、录制与保存都在 ShortcutEditor 内部完成（读取 Settings.values.shortcuts）。
                 ShortcutEditor {
                     width: parent.width
+                }
+            }
+
+                }
+            }
+            Item {
+                id: catLanguage
+                width: parent.width
+                height: visible ? innerLanguage.height + 12 : 0
+                visible: page.currentCategory === "language"
+
+                Column {
+                    id: innerLanguage
+                    width: parent.width
+                    spacing: 12
+
+            // ============================================================ 语言
+            SettingsSection {
+                id: secLanguage
+                width: parent.width - 24
+                x: 12
+                title: I18n.tr("语言")
+                description: I18n.tr("选择应用界面使用的语言，切换后立即生效")
+                icon: "language"
+                expanded: true
+
+                SettingsLabel {
+                    width: parent.width
+                    text: I18n.tr("界面语言")
+                }
+
+                SegmentedOptions {
+                    width: parent.width
+                    options: page.languageOptions
+                    value: I18n.language
+                    onSelected: function(value) { I18n.setLanguage(value) }
+                }
+
+                Item {
+                    width: 1
+                    height: 8
+                }
+
+                SettingsNote {
+                    width: parent.width
+                    text: I18n.tr("切换语言后立即刷新界面并保存到本地设置；部分翻译缺失处会回退显示中文原文。")
                 }
             }
 
@@ -2350,39 +2397,39 @@ Item {
                 id: secAbout
                 width: parent.width - 24
                 x: 12
-                title: "关于"
-                description: "版本信息与开源地址"
+                title: I18n.tr("关于")
+                description: I18n.tr("版本信息与开源地址")
                 icon: "info"
                 // 关于只有几条信息，保持展开；其余分组默认折叠
                 expanded: true
 
                 SettingsInfoRow {
                     width: parent.width
-                    label: "应用版本"
+                    label: I18n.tr("应用版本")
                     value: "NeriPlayer Desktop " + page.appVersion
                 }
 
                 SettingsInfoRow {
                     width: parent.width
-                    label: "前端框架"
-                    value: "Qt 6 / QML（Material 3 视觉复刻）"
+                    label: I18n.tr("前端框架")
+                    value: I18n.tr("Qt 6 / QML（Material 3 视觉复刻）")
                 }
 
                 SettingsInfoRow {
                     width: parent.width
-                    label: "后端"
-                    value: "Kotlin 无头后端 · Unix socket 行分隔 JSON"
+                    label: I18n.tr("后端")
+                    value: I18n.tr("Kotlin 无头后端 · Unix socket 行分隔 JSON")
                 }
 
                 SettingsInfoRow {
                     width: parent.width
-                    label: "许可证"
+                    label: I18n.tr("许可证")
                     value: "GNU General Public License v3.0"
                 }
 
                 SettingsInfoRow {
                     width: parent.width
-                    label: "项目主页"
+                    label: I18n.tr("项目主页")
                     value: "https://github.com/cwuom/NeriPlayer"
                 }
 
@@ -2396,18 +2443,18 @@ Item {
                     spacing: Theme.spacingSm
 
                     SettingsButton {
-                        text: "项目主页"
+                        text: I18n.tr("项目主页")
                         icon: "open_in_new"
                         onClicked: Qt.openUrlExternally("https://github.com/cwuom/NeriPlayer")
                     }
 
                     SettingsButton {
-                        text: "Linux 版仓库"
+                        text: I18n.tr("Linux 版仓库")
                         onClicked: Qt.openUrlExternally("https://github.com/Asternent/NeriPlayerForLinux")
                     }
 
                     SettingsButton {
-                        text: "问题反馈"
+                        text: I18n.tr("问题反馈")
                         onClicked: Qt.openUrlExternally("https://github.com/Asternent/NeriPlayerForLinux/issues")
                     }
                 }
@@ -2419,7 +2466,7 @@ Item {
 
                 SettingsNote {
                     width: parent.width
-                    text: "本页面所有设置会立即写入后端 settings.json；主题相关修改会触发 material-kolor 重新计算调色板。"
+                    text: I18n.tr("本页面所有设置会立即写入后端 settings.json；主题相关修改会触发 material-kolor 重新计算调色板。")
                 }
             }
 

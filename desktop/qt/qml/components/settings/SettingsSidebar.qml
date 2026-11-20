@@ -157,6 +157,10 @@ Item {
                                 id: navRow
                                 anchors.left: parent.left
                                 anchors.right: parent.right
+                                // 分类图标与上方搜索框图标对齐（搜索框图标在 x=spacingMd）；
+                                // 窄屏横条空间紧张，保持原样不加内边距。
+                                anchors.leftMargin: root.compact ? 0 : Theme.spacingMd
+                                anchors.rightMargin: root.compact ? 0 : Theme.spacingMd
                                 anchors.verticalCenter: parent.verticalCenter
                                 spacing: Theme.spacingMd
 
