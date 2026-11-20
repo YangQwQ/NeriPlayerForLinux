@@ -56,7 +56,8 @@ Item {
         { value: "standard", label: "标准" },
         { value: "higher", label: "较高" },
         { value: "exhigh", label: "极高" },
-        { value: "lossless", label: "无损" }
+        { value: "lossless", label: "无损" },
+        { value: "hires", label: "Hi-Res" }
     ]
 
     readonly property var concurrencyOptions: [
@@ -89,6 +90,151 @@ Item {
         { name: "PURPLE", label: "紫色", color: "#9C27B0" },
         { name: "PINK", label: "粉色", color: "#E91E63" }
     ]
+
+    // ---------------------------------------------------------------- 分类导航与搜索
+
+    // 每个分类绑定一组既有设置卡片（只做前端归组，不改动任何后端协议）。
+    readonly property var categoryDefs: [
+        { id: "accountSync", title: "账号与同步", description: "一起听 · GitHub 同步", icon: "account_circle", sectionIds: ["listenTogether", "sync"] },
+        { id: "appearance", title: "外观与主题", description: "深浅色 · 播放页外观", icon: "palette", sectionIds: ["theme", "playerDesign"] },
+        { id: "playback", title: "播放与音频", description: "倍速 · 音效 · 音质", icon: "graphic_eq", sectionIds: ["playback", "quality"] },
+        { id: "lyrics", title: "歌词", description: "桌面悬浮歌词样式", icon: "lyrics", sectionIds: ["floatingLyrics"] },
+        { id: "downloadStorage", title: "下载与存储", description: "媒体库 · 下载 · 缓存清理", icon: "download", sectionIds: ["library", "downloads", "dataCache"] },
+        { id: "sources", title: "音乐源", description: "网易云 · B站 · YouTube", icon: "cloud", sectionIds: ["sources"] },
+        { id: "general", title: "常规与快捷键", description: "首页栏目 · 后台 · 快捷键", icon: "tune", sectionIds: ["homeCards", "background", "shortcuts"] },
+        { id: "about", title: "关于", description: "版本与开源信息", icon: "info", sectionIds: ["about"] }
+    ]
+
+    property string currentCategory: "playback"
+    property string searchQuery: ""
+
+    readonly property var sectionIndex: ({
+        "listenTogether": secListenTogether, "sync": secSync,
+        "theme": secTheme, "playerDesign": secPlayerDesign,
+        "playback": secPlayback, "quality": secQuality,
+        "floatingLyrics": secFloatingLyrics,
+        "library": secLibrary, "downloads": secDownloads, "dataCache": secDataCache,
+        "sources": musicSourceSection,
+        "homeCards": secHomeCards, "background": secBackground,
+        "shortcuts": shortcutSection, "about": secAbout
+    })
+
+    readonly property var _searchIndex: [
+        { title: "主题设置", keywords: "深浅色 主题色 动态取色 调色 缩放", category: "appearance", section: "theme" },
+        { title: "媒体库", keywords: "音乐文件夹 扫描 封面", category: "downloadStorage", section: "library" },
+        { title: "播放", keywords: "倍速 变调 响度 均衡器 音效", category: "playback", section: "playback" },
+        { title: "播放页", keywords: "封面 控制条 歌词对齐 背景", category: "appearance", section: "playerDesign" },
+        { title: "在线播放音质", keywords: "音质 码率 hires 无损 quality", category: "playback", section: "quality" },
+        { title: "下载设置", keywords: "下载目录 并发 通知", category: "downloadStorage", section: "downloads" },
+        { title: "悬浮歌词", keywords: "桌面歌词 字体 颜色 透明度", category: "lyrics", section: "floatingLyrics" },
+        { title: "首页栏目", keywords: "推荐 排行榜 歌单 私人FM", category: "general", section: "homeCards" },
+        { title: "后台与系统控制", keywords: "托盘 MPRIS 通知 启动", category: "general", section: "background" },
+        { title: "音乐源", keywords: "网易云 B站 YouTube 登录 自动换源", category: "sources", section: "sources" },
+        { title: "一起听", keywords: "房间 同步播放", category: "accountSync", section: "listenTogether" },
+        { title: "同步", keywords: "GitHub Token 仓库 自动同步", category: "accountSync", section: "sync" },
+        { title: "数据与缓存", keywords: "清理 缓存 历史 统计 下载记录", category: "downloadStorage", section: "dataCache" },
+        { title: "快捷键", keywords: "键盘 全局快捷键 录制", category: "general", section: "shortcuts" },
+        { title: "关于", keywords: "版本 开源 许可证", category: "about", section: "about" }
+    ]
+
+    readonly property var searchResults: {
+        const query = page.searchQuery.trim().toLowerCase()
+        if (query === "")
+            return []
+        const matches = []
+        for (let i = 0; i < page.categoryDefs.length; i++) {
+            const cat = page.categoryDefs[i]
+            if ((cat.title + " " + cat.description + " " + cat.icon).toLowerCase().indexOf(query) >= 0)
+                matches.push({ title: cat.title, description: cat.description, icon: cat.icon,
+                               category: cat.id, section: null })
+        }
+        for (let i = 0; i < page._searchIndex.length; i++) {
+            const item = page._searchIndex[i]
+            if ((item.title + " " + item.keywords).toLowerCase().indexOf(query) >= 0)
+                matches.push({ title: item.title, description: "跳转到该设置卡片", icon: "tune",
+                               category: item.category, section: item.section })
+        }
+        return matches.slice(0, 20)
+    }
+
+    readonly property string currentCategoryTitle: {
+        for (let i = 0; i < page.categoryDefs.length; i++) {
+            if (page.categoryDefs[i].id === page.currentCategory)
+                return page.categoryDefs[i].title
+        }
+        return "设置"
+    }
+
+    readonly property string currentCategoryDescription: {
+        for (let i = 0; i < page.categoryDefs.length; i++) {
+            if (page.categoryDefs[i].id === page.currentCategory)
+                return page.categoryDefs[i].description
+        }
+        return ""
+    }
+
+    property var _visitedCategories: []
+
+    /** 首次进入某个分类时展开第一张卡片，避免整页只有折叠标题、信息密度过低。 */
+    function expandFirstCard(categoryId) {
+        for (let i = 0; i < page.categoryDefs.length; i++) {
+            const cat = page.categoryDefs[i]
+            if (cat.id !== categoryId)
+                continue
+            for (let j = 0; j < cat.sectionIds.length; j++) {
+                const sectionId = cat.sectionIds[j]
+                if (sectionId === "shortcuts" || sectionId === "about")
+                    continue
+                const section = page.sectionIndex[sectionId]
+                if (section) {
+                    section.expanded = true
+                    return
+                }
+            }
+        }
+    }
+
+    function selectCategory(id) {
+        if (page._visitedCategories.indexOf(id) < 0) {
+            page._visitedCategories.push(id)
+            page.expandFirstCard(id)
+        }
+        page.currentCategory = id
+        flick.contentY = 0
+    }
+
+    function revealSection(sectionId) {
+        const section = page.sectionIndex[sectionId]
+        if (!section)
+            return
+        section.expanded = true
+        sectionScrollTimer.targetSection = section
+        sectionScrollTimer.start()
+    }
+
+    function openFirstSearchResult() {
+        if (page.searchResults.length === 0)
+            return
+        const result = page.searchResults[0]
+        page.searchQuery = ""
+        page.selectCategory(result.category)
+        if (result.section)
+            page.revealSection(result.section)
+        else
+            flick.contentY = 0
+    }
+
+    function openSearchResult(index) {
+        const result = page.searchResults[index]
+        if (!result)
+            return
+        page.searchQuery = ""
+        page.selectCategory(result.category)
+        if (result.section)
+            page.revealSection(result.section)
+        else
+            flick.contentY = 0
+    }
 
     // ---------------------------------------------------------------- 页面状态
 
@@ -137,13 +283,16 @@ Item {
         return (index >= 0 && index + 1 < args.length) ? args[index + 1] : ""
     }
 
-    // 截图验证辅助：滚动到快捷键卡片（__debugScrollTo >= 0 时滚动到指定位置）。
+    // 截图验证辅助：滚动到指定位置或快捷键卡片；分类视图下先切到含快捷键的分类。
     function scrollToDebugTarget() {
-        if (!flick || !shortcutSection)
+        if (!flick)
             return
+        if (page.__debugScrollTo < 0)
+            page.selectCategory("general")
         const maxY = Math.max(0, flick.contentHeight - flick.height)
+        const shortcutY = shortcutSection.mapToItem(contentColumn, 0, 0).y
         const target = page.__debugScrollTo >= 0 ? page.__debugScrollTo
-                                                 : Math.max(0, shortcutSection.y - 8)
+                                                 : Math.max(0, shortcutY - 8)
         flick.contentY = Math.max(0, Math.min(target, maxY))
     }
 
@@ -325,6 +474,28 @@ Item {
             page.clearingCache = false
             Toast.show("清除缓存失败：" + (error && error.message ? error.message : "未知错误"), "error")
         })
+    }
+
+    /** 通用清理命令：调用成功后刷新快照并提示；失败只提示，不影响页面渲染。 */
+    function runCleanup(method, successMessage) {
+        Api.call(method).then(function() {
+            Toast.show(successMessage, "info")
+            page.loadSnapshot()
+        }).catch(function(error) {
+            Toast.show("清理失败：" + (error && error.message ? error.message : "未知错误"), "error")
+        })
+    }
+
+    function clearFinishedDownloads() {
+        page.runCleanup("download.clearFinished", "已清理已完成的下载记录")
+    }
+
+    function clearHistory() {
+        page.runCleanup("history.clear", "已清除播放历史")
+    }
+
+    function clearStats() {
+        page.runCleanup("stats.clear", "已清除播放统计")
     }
 
     // ---------------------------------------------------------------- 下载
@@ -611,6 +782,7 @@ Item {
     }
 
     Component.onCompleted: {
+        page.selectCategory("playback")
         if (Backend.connected) {
             page.loadSnapshot()
             page.loadAccounts()
@@ -692,9 +864,29 @@ Item {
 
     // ---------------------------------------------------------------- 页面骨架
 
+    SettingsSidebar {
+        id: sidebar
+        anchors.top: parent.top
+        anchors.left: parent.left
+        width: page.wide ? Theme.navRailWidth : page.width
+        height: page.wide ? parent.height : 76
+        categories: page.categoryDefs
+        results: page.searchResults
+        currentCategory: page.currentCategory
+        query: page.searchQuery
+        compact: !page.wide
+        onCategorySelected: function(id) { page.selectCategory(id) }
+        onQueryEdited: function(text) { page.searchQuery = text }
+        onSearchSubmitted: function() { page.openFirstSearchResult() }
+        onSearchResultSelected: function(index) { page.openSearchResult(index) }
+    }
+
     Flickable {
         id: flick
-        anchors.fill: parent
+        anchors.top: page.wide ? parent.top : sidebar.bottom
+        anchors.bottom: parent.bottom
+        anchors.left: page.wide ? sidebar.right : parent.left
+        anchors.right: parent.right
         contentWidth: width
         contentHeight: contentColumn.height
         clip: true
@@ -704,26 +896,236 @@ Item {
             id: contentColumn
             x: Math.max(0, (flick.width - width) / 2)
             width: Math.min(flick.width, 1180)
-            spacing: 12
+            spacing: 0
 
-            // 大标题
+            // 右栏固定头部：显示当前分类标题与说明（与左侧导航的选中项一致）。
             Item {
                 width: parent.width
-                height: 64
-
-                Text {
-                    x: 28
+                height: 84
+                Column {
+                    x: Theme.spacingLg
                     anchors.verticalCenter: parent.verticalCenter
-                    text: "设置"
-                    color: Theme.onSurfaceColor
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 28
-                    font.weight: Font.DemiBold
+                    spacing: 2
+
+                    Text {
+                        text: page.currentCategoryTitle
+                        color: Theme.onSurfaceColor
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.textStyle("headlineSmall").size
+                        font.weight: Font.DemiBold
+                    }
+
+                    Text {
+                        text: page.currentCategoryDescription
+                        color: Theme.onSurfaceVariantColor
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.textStyle("bodySmall").size
+                    }
                 }
             }
 
+            Item {
+                id: catAccountSync
+                width: parent.width
+                height: visible ? innerAccountSync.height + 12 : 0
+                visible: page.currentCategory === "accountSync"
+
+                Column {
+                    id: innerAccountSync
+                    width: parent.width
+                    spacing: 12
+
+            // ============================================================ 一起听
+            SettingsSection {
+                id: secListenTogether
+                width: parent.width - 24
+                x: 12
+                title: "一起听"
+                description: "与手机端实时同步播放的自建房间"
+                icon: "group"
+
+                SettingsRow {
+                    width: parent.width
+                    title: "一起听房间"
+                    description: "需要先配置自己的 NeriPlayer-LTW 服务端地址；面板里可创建或加入房间"
+                    SettingsButton {
+                        text: "打开一起听"
+                        onClicked: Nav.openListenTogetherPanel()
+                    }
+                }
+
+                SettingsNote {
+                    width: parent.width
+                    text: "桌面端与 Android 端共用同一套一起听协议，可在同一个房间里同步播放。"
+                }
+            }
+
+            // ============================================================ 同步
+            SettingsSection {
+                id: secSync
+                width: parent.width - 24
+                x: 12
+                title: "同步"
+                description: "通过自己的 GitHub 仓库跨设备同步歌单、收藏、最近播放与统计"
+                icon: "sync"
+
+                SettingsRow {
+                    width: parent.width
+                    title: page.syncUnsupported
+                           ? "后端暂不支持"
+                           : (page.syncConfigured
+                              ? "已配置：" + (page.syncConfig.repoFullName
+                                             ? page.syncConfig.repoFullName
+                                             : ((page.syncConfig.owner || "") + "/" + (page.syncConfig.repo || "")))
+                              : "未配置")
+                    description: page.syncStatusText
+                    descriptionColor: page.syncStatusColor
+
+                    SettingsButton {
+                        text: page.syncBusy ? "处理中…" : "立即同步"
+                        enabled: !page.syncBusy && !page.syncUnsupported
+                        onClicked: page.performSync()
+                    }
+
+                    SettingsButton {
+                        text: "断开同步"
+                        enabled: !page.syncBusy && page.syncConfigured
+                        onClicked: page.disableSync()
+                    }
+                }
+
+                Item {
+                    width: 1
+                    height: 10
+                    visible: !page.syncUnsupported
+                }
+
+                SettingsLabel {
+                    width: parent.width
+                    text: "GitHub Token"
+                    visible: !page.syncUnsupported
+                }
+
+                SettingsTextField {
+                    id: tokenField
+                    width: parent.width
+                    visible: !page.syncUnsupported
+                    placeholderText: "ghp_xxx（需要 repo 权限）"
+                    echoMode: TextInput.Password
+                }
+
+                SettingsNote {
+                    width: parent.width
+                    visible: !page.syncUnsupported
+                    text: "在 GitHub → Settings → Developer settings → Personal access tokens 生成 Token，建议 fine-grained 且只授权同步仓库。Token 只保存在本机，回显时打码。"
+                }
+
+                Item {
+                    width: 1
+                    height: 10
+                    visible: !page.syncUnsupported
+                }
+
+                SettingsLabel {
+                    width: parent.width
+                    text: "仓库账号 / 组织"
+                    visible: !page.syncUnsupported
+                }
+
+                SettingsTextField {
+                    id: ownerField
+                    width: parent.width
+                    visible: !page.syncUnsupported
+                    placeholderText: "GitHub 用户名或组织"
+                }
+
+                Item {
+                    width: 1
+                    height: 8
+                    visible: !page.syncUnsupported
+                }
+
+                SettingsLabel {
+                    width: parent.width
+                    text: "仓库名"
+                    visible: !page.syncUnsupported
+                }
+
+                SettingsTextField {
+                    id: repoField
+                    width: parent.width
+                    visible: !page.syncUnsupported
+                    placeholderText: "neriplayer-sync"
+                }
+
+                Item {
+                    width: 1
+                    height: 6
+                    visible: !page.syncUnsupported
+                }
+
+                SettingsSwitchRow {
+                    width: parent.width
+                    visible: !page.syncUnsupported
+                    title: "自动同步"
+                    description: "歌单、收藏、最近播放或统计变化后自动同步"
+                    checked: page.syncConfigValue("autoSync", true)
+                    onToggled: function(checked) {
+                        page.updateSyncFlag("autoSync", checked)
+                    }
+                }
+
+                SettingsSwitchRow {
+                    width: parent.width
+                    visible: !page.syncUnsupported
+                    title: "省流模式"
+                    description: "只同步必要的结构化数据，减少流量占用"
+                    checked: page.syncConfigValue("useDataSaver", false)
+                    onToggled: function(checked) {
+                        page.updateSyncFlag("useDataSaver", checked)
+                    }
+                }
+
+                Item {
+                    width: 1
+                    height: 4
+                    visible: !page.syncUnsupported
+                }
+
+                Row {
+                    spacing: Theme.spacingSm
+                    visible: !page.syncUnsupported
+
+                    SettingsButton {
+                        text: "保存配置"
+                        enabled: !page.syncBusy
+                        onClicked: page.saveSyncConfig()
+                    }
+
+                    SettingsButton {
+                        text: "立即同步"
+                        enabled: !page.syncBusy && page.syncConfigured
+                        onClicked: page.performSync()
+                    }
+                }
+            }
+
+                }
+            }
+            Item {
+                id: catAppearance
+                width: parent.width
+                height: visible ? innerAppearance.height + 12 : 0
+                visible: page.currentCategory === "appearance"
+
+                Column {
+                    id: innerAppearance
+                    width: parent.width
+                    spacing: 12
+
             // ============================================================ 主题设置
             SettingsSection {
+                id: secTheme
                 width: parent.width - 24
                 x: 12
                 title: "主题设置"
@@ -952,132 +1354,9 @@ Item {
                 }
             }
 
-            // ============================================================ 媒体库
-            SettingsSection {
-                width: parent.width - 24
-                x: 12
-                title: "媒体库"
-                description: "本地音乐文件夹与扫描"
-                icon: "library_music"
-
-                SettingsLabel {
-                    width: parent.width
-                    text: "音乐文件夹"
-                }
-
-                FolderList {
-                    width: parent.width
-                    folders: page.sv("musicFolders", [])
-                    onAddRequested: page.chooseMusicFolder()
-                    onRemoveRequested: function(path) {
-                        page.removeMusicFolder(path)
-                    }
-                    onRescanRequested: page.rescanLibrary()
-                }
-
-                Item {
-                    width: 1
-                    height: 8
-                }
-
-                Text {
-                    width: parent.width
-                    text: page.libraryStatusText
-                    color: page.scanError !== "" ? Theme.error : Theme.onSurfaceVariantColor
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 12
-                    font.weight: Font.Medium
-                    wrapMode: Text.Wrap
-                }
-
-                Item {
-                    width: 1
-                    height: 8
-                }
-
-                SettingsRow {
-                    width: parent.width
-                    title: "封面缓存"
-                    description: "在线歌曲封面会缓存在本机，占用空间异常时可清空"
-
-                    SettingsButton {
-                        text: page.clearingCache ? "清理中…" : "清除缓存"
-                        enabled: !page.clearingCache
-                        onClicked: page.clearArtworkCache()
-                    }
-                }
-            }
-
-            // ============================================================ 播放
-            SettingsSection {
-                width: parent.width - 24
-                x: 12
-                title: "播放"
-                description: "默认倍速、变调与音效开关"
-                icon: "graphic_eq"
-
-                SliderRow {
-                    width: parent.width
-                    label: "默认播放速度"
-                    externalValue: page.sv("playbackSpeed", 1.0)
-                    from: 0.5
-                    to: 3.0
-                    formatValue: function(value) {
-                        return Number(value).toFixed(2) + "x"
-                    }
-                    onCommitted: function(value) {
-                        Player.setSpeed(value)
-                    }
-                }
-
-                SliderRow {
-                    width: parent.width
-                    label: "音调"
-                    externalValue: page.sv("pitchSemitone", 0)
-                    from: -12
-                    to: 12
-                    formatValue: function(value) {
-                        const rounded = Number(value).toFixed(1)
-                        return (value > 0 ? "+" : "") + rounded + " 半音"
-                    }
-                    onCommitted: function(value) {
-                        Player.setPitch(value)
-                    }
-                }
-
-                SettingsSwitchRow {
-                    width: parent.width
-                    title: "响度增强"
-                    description: "使用动态归一化提升整体响度（需要 ffmpeg 音效支持）"
-                    checked: page.sb("loudnessEnhancer", false)
-                    onToggled: function(checked) {
-                        Player.setLoudness(checked)
-                    }
-                }
-
-                SettingsSwitchRow {
-                    width: parent.width
-                    title: "均衡器"
-                    description: "启用十段均衡器，可在播放页的音效面板中细调"
-                    checked: page.sb("equalizerEnabled", false)
-                    onToggled: function(checked) {
-                        Player.setEqualizerEnabled(checked)
-                    }
-                }
-
-                Item {
-                    width: 1
-                    height: 4
-                }
-
-                SettingsNote {
-                    width: parent.width
-                    text: "倍速、变调与响度增强需要后端具备 ffmpeg 支持；不可用时设置仍会保存，下次具备条件时生效。"
-                }
-            }
-
             // ============================================================ 播放页
             SettingsSection {
+                id: secPlayerDesign
                 width: parent.width - 24
                 x: 12
                 title: "播放页"
@@ -1190,83 +1469,74 @@ Item {
                 }
             }
 
-            // ============================================================ 下载设置
+                }
+            }
+            Item {
+                id: catPlayback
+                width: parent.width
+                height: visible ? innerPlayback.height + 12 : 0
+                visible: page.currentCategory === "playback"
+
+                Column {
+                    id: innerPlayback
+                    width: parent.width
+                    spacing: 12
+
+            // ============================================================ 播放
             SettingsSection {
+                id: secPlayback
                 width: parent.width - 24
                 x: 12
-                title: "下载设置"
-                description: "下载目录、音质与并发数"
-                icon: "download"
+                title: "播放"
+                description: "默认倍速、变调与音效开关"
+                icon: "graphic_eq"
 
-                SettingsRow {
+                SliderRow {
                     width: parent.width
-                    title: "下载目录"
-                    description: {
-                        const directory = page.sv("downloadDirectory", "")
-                        return directory !== "" ? directory : "默认：~/Music/NeriPlayer"
+                    label: "默认播放速度"
+                    externalValue: page.sv("playbackSpeed", 1.0)
+                    from: 0.5
+                    to: 3.0
+                    formatValue: function(value) {
+                        return Number(value).toFixed(2) + "x"
                     }
-
-                    SettingsButton {
-                        text: "选择目录"
-                        onClicked: page.chooseDownloadFolder()
-                    }
-
-                    SettingsButton {
-                        text: "恢复默认"
-                        onClicked: page.setSetting("downloadDirectory", "")
+                    onCommitted: function(value) {
+                        Player.setSpeed(value)
                     }
                 }
 
-                Item {
-                    width: 1
-                    height: 10
-                }
-
-                SettingsLabel {
+                SliderRow {
                     width: parent.width
-                    text: "下载音质"
-                }
-
-                SegmentedOptions {
-                    width: parent.width
-                    options: page.qualityOptions
-                    value: page.sv("downloadQuality", "exhigh")
-                    onSelected: function(value) {
-                        page.setSetting("downloadQuality", value)
+                    label: "音调"
+                    externalValue: page.sv("pitchSemitone", 0)
+                    from: -12
+                    to: 12
+                    formatValue: function(value) {
+                        const rounded = Number(value).toFixed(1)
+                        return (value > 0 ? "+" : "") + rounded + " 半音"
                     }
-                }
-
-                Item {
-                    width: 1
-                    height: 12
-                }
-
-                SettingsLabel {
-                    width: parent.width
-                    text: "并发下载"
-                }
-
-                SegmentedOptions {
-                    width: parent.width
-                    options: page.concurrencyOptions
-                    value: page.sv("downloadConcurrency", 2)
-                    onSelected: function(value) {
-                        page.setSetting("downloadConcurrency", value)
+                    onCommitted: function(value) {
+                        Player.setPitch(value)
                     }
-                }
-
-                Item {
-                    width: 1
-                    height: 6
                 }
 
                 SettingsSwitchRow {
                     width: parent.width
-                    title: "下载完成时通知"
-                    description: "全部任务完成后发送系统通知"
-                    checked: page.sb("downloadNotifyOnComplete", true)
+                    title: "响度增强"
+                    description: "使用动态归一化提升整体响度（需要 ffmpeg 音效支持）"
+                    checked: page.sb("loudnessEnhancer", false)
                     onToggled: function(checked) {
-                        page.setSetting("downloadNotifyOnComplete", checked)
+                        Player.setLoudness(checked)
+                    }
+                }
+
+                SettingsSwitchRow {
+                    width: parent.width
+                    title: "均衡器"
+                    description: "启用十段均衡器，可在播放页的音效面板中细调"
+                    checked: page.sb("equalizerEnabled", false)
+                    onToggled: function(checked) {
+                        Player.setEqualizerEnabled(checked)
                     }
                 }
 
@@ -1275,15 +1545,62 @@ Item {
                     height: 4
                 }
 
-                SettingsButton {
-                    text: "打开下载管理"
-                    icon: "download"
-                    onClicked: Nav.openDownloadsPanel()
+                SettingsNote {
+                    width: parent.width
+                    text: "倍速、变调与响度增强需要后端具备 ffmpeg 支持；不可用时设置仍会保存，下次具备条件时生效。"
                 }
             }
 
+            // ============================================================ 在线播放音质
+            SettingsSection {
+                id: secQuality
+                width: parent.width - 24
+                x: 12
+                title: "在线播放音质"
+                description: "在线歌曲解析时使用的默认码率（与下载音质独立）"
+                icon: "high_quality"
+
+                SettingsLabel {
+                    width: parent.width
+                    text: "默认播放音质"
+                }
+
+                SegmentedOptions {
+                    width: parent.width
+                    options: page.qualityOptions
+                    value: page.sv("qualityPreference", "exhigh")
+                    onSelected: function(value) {
+                        page.setSetting("qualityPreference", value)
+                    }
+                }
+
+                Item {
+                    width: 1
+                    height: 6
+                }
+
+                SettingsNote {
+                    width: parent.width
+                    text: "后端按 standard / higher / exhigh / lossless / hires 映射解析码率；实际可用档位取决于音源与登录状态，无损与 Hi-Res 档位在部分接口上会回落到较高码率。"
+                }
+            }
+
+                }
+            }
+            Item {
+                id: catLyrics
+                width: parent.width
+                height: visible ? innerLyrics.height + 12 : 0
+                visible: page.currentCategory === "lyrics"
+
+                Column {
+                    id: innerLyrics
+                    width: parent.width
+                    spacing: 12
+
             // ============================================================ 悬浮歌词
             SettingsSection {
+                id: secFloatingLyrics
                 width: parent.width - 24
                 x: 12
                 title: "悬浮歌词"
@@ -1505,142 +1822,200 @@ Item {
                 }
             }
 
-            // ============================================================ 首页栏目
+                }
+            }
+            Item {
+                id: catDownloadStorage
+                width: parent.width
+                height: visible ? innerDownloadStorage.height + 12 : 0
+                visible: page.currentCategory === "downloadStorage"
+
+                Column {
+                    id: innerDownloadStorage
+                    width: parent.width
+                    spacing: 12
+
+            // ============================================================ 媒体库
             SettingsSection {
+                id: secLibrary
                 width: parent.width - 24
                 x: 12
-                title: "首页栏目"
-                description: "选择首页展示哪些推荐栏目（未登录 / 音源禁用时对应栏目不会出现）"
-                icon: "dashboard"
+                title: "媒体库"
+                description: "本地音乐文件夹与扫描"
+                icon: "library_music"
 
-                SettingsSwitchRow {
+                SettingsLabel {
                     width: parent.width
-                    title: "继续播放"
-                    description: "最近播放的歌曲"
-                    checked: page.homeCardEnabled("continuePlaying", true)
-                    onToggled: function(checked) { page.setHomeCard("continuePlaying", checked) }
+                    text: "音乐文件夹"
+                }
+
+                FolderList {
+                    width: parent.width
+                    folders: page.sv("musicFolders", [])
+                    onAddRequested: page.chooseMusicFolder()
+                    onRemoveRequested: function(path) {
+                        page.removeMusicFolder(path)
+                    }
+                    onRescanRequested: page.rescanLibrary()
+                }
+
+                Item {
+                    width: 1
+                    height: 8
+                }
+
+                Text {
+                    width: parent.width
+                    text: page.libraryStatusText
+                    color: page.scanError !== "" ? Theme.error : Theme.onSurfaceVariantColor
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 12
+                    font.weight: Font.Medium
+                    wrapMode: Text.Wrap
+                }
+
+            }
+
+            // ============================================================ 下载设置
+            SettingsSection {
+                id: secDownloads
+                width: parent.width - 24
+                x: 12
+                title: "下载设置"
+                description: "下载目录、音质与并发数"
+                icon: "download"
+
+                SettingsRow {
+                    width: parent.width
+                    title: "下载目录"
+                    description: {
+                        const directory = page.sv("downloadDirectory", "")
+                        return directory !== "" ? directory : "默认：~/Music/NeriPlayer"
+                    }
+
+                    SettingsButton {
+                        text: "选择目录"
+                        onClicked: page.chooseDownloadFolder()
+                    }
+
+                    SettingsButton {
+                        text: "恢复默认"
+                        onClicked: page.setSetting("downloadDirectory", "")
+                    }
+                }
+
+                Item {
+                    width: 1
+                    height: 10
+                }
+
+                SettingsLabel {
+                    width: parent.width
+                    text: "下载音质"
+                }
+
+                SegmentedOptions {
+                    width: parent.width
+                    options: page.qualityOptions
+                    value: page.sv("downloadQuality", "exhigh")
+                    onSelected: function(value) {
+                        page.setSetting("downloadQuality", value)
+                    }
+                }
+
+                Item {
+                    width: 1
+                    height: 12
+                }
+
+                SettingsLabel {
+                    width: parent.width
+                    text: "并发下载"
+                }
+
+                SegmentedOptions {
+                    width: parent.width
+                    options: page.concurrencyOptions
+                    value: page.sv("downloadConcurrency", 2)
+                    onSelected: function(value) {
+                        page.setSetting("downloadConcurrency", value)
+                    }
+                }
+
+                Item {
+                    width: 1
+                    height: 6
                 }
 
                 SettingsSwitchRow {
                     width: parent.width
-                    title: "猜你喜欢"
-                    description: "根据收听口味生成的歌曲推荐"
-                    checked: page.homeCardEnabled("guessYouLike", true)
-                    onToggled: function(checked) { page.setHomeCard("guessYouLike", checked) }
+                    title: "下载完成时通知"
+                    description: "全部任务完成后发送系统通知"
+                    checked: page.sb("downloadNotifyOnComplete", true)
+                    onToggled: function(checked) {
+                        page.setSetting("downloadNotifyOnComplete", checked)
+                    }
                 }
 
-                SettingsSwitchRow {
-                    width: parent.width
-                    title: "每日推荐"
-                    description: "每天更新的 30 首推荐（需登录网易云）"
-                    checked: page.homeCardEnabled("dailyRecommend", true)
-                    onToggled: function(checked) { page.setHomeCard("dailyRecommend", checked) }
+                Item {
+                    width: 1
+                    height: 4
                 }
 
-                SettingsSwitchRow {
-                    width: parent.width
-                    title: "私人 FM"
-                    description: "根据口味连续推荐的歌曲（需登录网易云）"
-                    checked: page.homeCardEnabled("privateFm", true)
-                    onToggled: function(checked) { page.setHomeCard("privateFm", checked) }
-                }
-
-                SettingsSwitchRow {
-                    width: parent.width
-                    title: "B站音乐"
-                    description: "哔哩哔哩音乐榜与音乐区热门视频"
-                    checked: page.homeCardEnabled("biliMusic", true)
-                    onToggled: function(checked) { page.setHomeCard("biliMusic", checked) }
-                }
-
-                SettingsSwitchRow {
-                    width: parent.width
-                    title: "排行榜"
-                    description: "热歌榜、飙升榜与新歌榜"
-                    checked: page.homeCardEnabled("ranks", true)
-                    onToggled: function(checked) { page.setHomeCard("ranks", checked) }
-                }
-
-                SettingsSwitchRow {
-                    width: parent.width
-                    title: "推荐歌单"
-                    description: "个性化推荐、精品与热门歌单"
-                    checked: page.homeCardEnabled("playlists", true)
-                    onToggled: function(checked) { page.setHomeCard("playlists", checked) }
-                }
-
-                SettingsSwitchRow {
-                    width: parent.width
-                    title: "推荐新歌"
-                    description: "最近发布的新歌推荐"
-                    checked: page.homeCardEnabled("newSongs", true)
-                    onToggled: function(checked) { page.setHomeCard("newSongs", checked) }
-                }
-
-                SettingsSwitchRow {
-                    width: parent.width
-                    title: "雷达歌单"
-                    description: "时光 / 宝藏 / 新歌 / 乐迷 / 神秘雷达"
-                    checked: page.homeCardEnabled("radar", true)
-                    onToggled: function(checked) { page.setHomeCard("radar", checked) }
+                SettingsButton {
+                    text: "打开下载管理"
+                    icon: "download"
+                    onClicked: Nav.openDownloadsPanel()
                 }
             }
 
-            // ============================================================ 后台与系统控制
+            // ============================================================ 数据与缓存
             SettingsSection {
+                id: secDataCache
                 width: parent.width - 24
                 x: 12
-                title: "后台与系统控制"
-                description: "托盘、通知与系统媒体控制"
-                icon: "desktop_windows"
+                title: "数据与缓存"
+                description: "清理封面缓存、下载记录与本地统计"
+                icon: "storage"
 
-                SettingsSwitchRow {
+                SettingsRow {
                     width: parent.width
-                    title: "关闭窗口时最小化到托盘"
-                    description: "关闭窗口只是隐藏，音乐继续播放；点击托盘图标可打开控制面板"
-                    checked: page.sb("closeToTray", true)
-                    onToggled: function(checked) {
-                        page.setSetting("closeToTray", checked)
+                    title: "封面缓存"
+                    description: "在线歌曲封面在本机的缩略图，可安全清理"
+                    SettingsButton {
+                        text: page.clearingCache ? "清理中…" : "清除缓存"
+                        enabled: !page.clearingCache
+                        onClicked: page.clearArtworkCache()
                     }
                 }
 
-                SettingsSwitchRow {
+                SettingsRow {
                     width: parent.width
-                    title: "最小化时隐藏到托盘"
-                    description: "把窗口最小化时收进托盘，继续后台播放"
-                    checked: page.sb("minimizeToTray", true)
-                    onToggled: function(checked) {
-                        page.setSetting("minimizeToTray", checked)
+                    title: "已完成的下载记录"
+                    description: "只清空下载列表中的已完成任务，不删除已下载的文件"
+                    SettingsButton {
+                        text: "清理记录"
+                        onClicked: page.clearFinishedDownloads()
                     }
                 }
 
-                SettingsSwitchRow {
+                SettingsRow {
                     width: parent.width
-                    title: "切歌时发送系统通知"
-                    description: "仅当窗口隐藏 / 最小化时提示，避免打扰"
-                    checked: page.sb("notifyOnSongChange", true)
-                    onToggled: function(checked) {
-                        page.setSetting("notifyOnSongChange", checked)
+                    title: "播放历史"
+                    description: "最近播放记录与最常播放列表"
+                    SettingsButton {
+                        text: "清除历史"
+                        onClicked: page.clearHistory()
                     }
                 }
 
-                SettingsSwitchRow {
+                SettingsRow {
                     width: parent.width
-                    title: "启用系统媒体控制（MPRIS）"
-                    description: "注册 org.mpris.MediaPlayer2.neriplayer，可用媒体键与桌面媒体组件控制"
-                    checked: page.sb("mprisEnabled", true)
-                    onToggled: function(checked) {
-                        page.setSetting("mprisEnabled", checked)
-                    }
-                }
-
-                SettingsSwitchRow {
-                    width: parent.width
-                    title: "启动时恢复上次队列"
-                    description: "打开应用后继续显示上次的播放队列与进度"
-                    checked: page.sb("resumeLastQueue", true)
-                    onToggled: function(checked) {
-                        page.setSetting("resumeLastQueue", checked)
+                    title: "播放统计"
+                    description: "按天 / 周 / 月累计的播放次数统计"
+                    SettingsButton {
+                        text: "清除统计"
+                        onClicked: page.clearStats()
                     }
                 }
 
@@ -1651,9 +2026,22 @@ Item {
 
                 SettingsNote {
                     width: parent.width
-                    text: "托盘与 MPRIS 需要桌面环境提供系统托盘 / D-Bus 会话总线；无托盘的极简桌面下关闭窗口将直接退出。"
+                    text: "以上清理操作不可撤销；下载文件本体请在「下载管理」中删除。"
                 }
             }
+
+                }
+            }
+            Item {
+                id: catSources
+                width: parent.width
+                height: visible ? innerSources.height + 12 : 0
+                visible: page.currentCategory === "sources"
+
+                Column {
+                    id: innerSources
+                    width: parent.width
+                    spacing: 12
 
             // ============================================================ 音乐源
             SettingsSection {
@@ -1764,176 +2152,168 @@ Item {
                 }
             }
 
-            // ============================================================ 一起听
+                }
+            }
+            Item {
+                id: catGeneral
+                width: parent.width
+                height: visible ? innerGeneral.height + 12 : 0
+                visible: page.currentCategory === "general"
+
+                Column {
+                    id: innerGeneral
+                    width: parent.width
+                    spacing: 12
+
+            // ============================================================ 首页栏目
             SettingsSection {
+                id: secHomeCards
                 width: parent.width - 24
                 x: 12
-                title: "一起听"
-                description: "与手机端实时同步播放的自建房间"
-                icon: "group"
+                title: "首页栏目"
+                description: "选择首页展示哪些推荐栏目（未登录 / 音源禁用时对应栏目不会出现）"
+                icon: "dashboard"
 
-                SettingsRow {
+                SettingsSwitchRow {
                     width: parent.width
-                    title: "一起听房间"
-                    description: "需要先配置自己的 NeriPlayer-LTW 服务端地址；面板里可创建或加入房间"
-                    SettingsButton {
-                        text: "打开一起听"
-                        onClicked: Nav.openListenTogetherPanel()
-                    }
+                    title: "继续播放"
+                    description: "最近播放的歌曲"
+                    checked: page.homeCardEnabled("continuePlaying", true)
+                    onToggled: function(checked) { page.setHomeCard("continuePlaying", checked) }
                 }
 
-                SettingsNote {
+                SettingsSwitchRow {
                     width: parent.width
-                    text: "桌面端与 Android 端共用同一套一起听协议，可在同一个房间里同步播放。"
+                    title: "猜你喜欢"
+                    description: "根据收听口味生成的歌曲推荐"
+                    checked: page.homeCardEnabled("guessYouLike", true)
+                    onToggled: function(checked) { page.setHomeCard("guessYouLike", checked) }
+                }
+
+                SettingsSwitchRow {
+                    width: parent.width
+                    title: "每日推荐"
+                    description: "每天更新的 30 首推荐（需登录网易云）"
+                    checked: page.homeCardEnabled("dailyRecommend", true)
+                    onToggled: function(checked) { page.setHomeCard("dailyRecommend", checked) }
+                }
+
+                SettingsSwitchRow {
+                    width: parent.width
+                    title: "私人 FM"
+                    description: "根据口味连续推荐的歌曲（需登录网易云）"
+                    checked: page.homeCardEnabled("privateFm", true)
+                    onToggled: function(checked) { page.setHomeCard("privateFm", checked) }
+                }
+
+                SettingsSwitchRow {
+                    width: parent.width
+                    title: "B站音乐"
+                    description: "哔哩哔哩音乐榜与音乐区热门视频"
+                    checked: page.homeCardEnabled("biliMusic", true)
+                    onToggled: function(checked) { page.setHomeCard("biliMusic", checked) }
+                }
+
+                SettingsSwitchRow {
+                    width: parent.width
+                    title: "排行榜"
+                    description: "热歌榜、飙升榜与新歌榜"
+                    checked: page.homeCardEnabled("ranks", true)
+                    onToggled: function(checked) { page.setHomeCard("ranks", checked) }
+                }
+
+                SettingsSwitchRow {
+                    width: parent.width
+                    title: "推荐歌单"
+                    description: "个性化推荐、精品与热门歌单"
+                    checked: page.homeCardEnabled("playlists", true)
+                    onToggled: function(checked) { page.setHomeCard("playlists", checked) }
+                }
+
+                SettingsSwitchRow {
+                    width: parent.width
+                    title: "推荐新歌"
+                    description: "最近发布的新歌推荐"
+                    checked: page.homeCardEnabled("newSongs", true)
+                    onToggled: function(checked) { page.setHomeCard("newSongs", checked) }
+                }
+
+                SettingsSwitchRow {
+                    width: parent.width
+                    title: "雷达歌单"
+                    description: "时光 / 宝藏 / 新歌 / 乐迷 / 神秘雷达"
+                    checked: page.homeCardEnabled("radar", true)
+                    onToggled: function(checked) { page.setHomeCard("radar", checked) }
                 }
             }
 
-            // ============================================================ 同步
+            // ============================================================ 后台与系统控制
             SettingsSection {
+                id: secBackground
                 width: parent.width - 24
                 x: 12
-                title: "同步"
-                description: "通过自己的 GitHub 仓库跨设备同步歌单、收藏、最近播放与统计"
-                icon: "sync"
-
-                SettingsRow {
-                    width: parent.width
-                    title: page.syncUnsupported
-                           ? "后端暂不支持"
-                           : (page.syncConfigured
-                              ? "已配置：" + (page.syncConfig.repoFullName
-                                             ? page.syncConfig.repoFullName
-                                             : ((page.syncConfig.owner || "") + "/" + (page.syncConfig.repo || "")))
-                              : "未配置")
-                    description: page.syncStatusText
-                    descriptionColor: page.syncStatusColor
-
-                    SettingsButton {
-                        text: page.syncBusy ? "处理中…" : "立即同步"
-                        enabled: !page.syncBusy && !page.syncUnsupported
-                        onClicked: page.performSync()
-                    }
-
-                    SettingsButton {
-                        text: "断开同步"
-                        enabled: !page.syncBusy && page.syncConfigured
-                        onClicked: page.disableSync()
-                    }
-                }
-
-                Item {
-                    width: 1
-                    height: 10
-                    visible: !page.syncUnsupported
-                }
-
-                SettingsLabel {
-                    width: parent.width
-                    text: "GitHub Token"
-                    visible: !page.syncUnsupported
-                }
-
-                SettingsTextField {
-                    id: tokenField
-                    width: parent.width
-                    visible: !page.syncUnsupported
-                    placeholderText: "ghp_xxx（需要 repo 权限）"
-                    echoMode: TextInput.Password
-                }
-
-                SettingsNote {
-                    width: parent.width
-                    visible: !page.syncUnsupported
-                    text: "在 GitHub → Settings → Developer settings → Personal access tokens 生成 Token，建议 fine-grained 且只授权同步仓库。Token 只保存在本机，回显时打码。"
-                }
-
-                Item {
-                    width: 1
-                    height: 10
-                    visible: !page.syncUnsupported
-                }
-
-                SettingsLabel {
-                    width: parent.width
-                    text: "仓库账号 / 组织"
-                    visible: !page.syncUnsupported
-                }
-
-                SettingsTextField {
-                    id: ownerField
-                    width: parent.width
-                    visible: !page.syncUnsupported
-                    placeholderText: "GitHub 用户名或组织"
-                }
-
-                Item {
-                    width: 1
-                    height: 8
-                    visible: !page.syncUnsupported
-                }
-
-                SettingsLabel {
-                    width: parent.width
-                    text: "仓库名"
-                    visible: !page.syncUnsupported
-                }
-
-                SettingsTextField {
-                    id: repoField
-                    width: parent.width
-                    visible: !page.syncUnsupported
-                    placeholderText: "neriplayer-sync"
-                }
-
-                Item {
-                    width: 1
-                    height: 6
-                    visible: !page.syncUnsupported
-                }
+                title: "后台与系统控制"
+                description: "托盘、通知与系统媒体控制"
+                icon: "desktop_windows"
 
                 SettingsSwitchRow {
                     width: parent.width
-                    visible: !page.syncUnsupported
-                    title: "自动同步"
-                    description: "歌单、收藏、最近播放或统计变化后自动同步"
-                    checked: page.syncConfigValue("autoSync", true)
+                    title: "关闭窗口时最小化到托盘"
+                    description: "关闭窗口只是隐藏，音乐继续播放；点击托盘图标可打开控制面板"
+                    checked: page.sb("closeToTray", true)
                     onToggled: function(checked) {
-                        page.updateSyncFlag("autoSync", checked)
+                        page.setSetting("closeToTray", checked)
                     }
                 }
 
                 SettingsSwitchRow {
                     width: parent.width
-                    visible: !page.syncUnsupported
-                    title: "省流模式"
-                    description: "只同步必要的结构化数据，减少流量占用"
-                    checked: page.syncConfigValue("useDataSaver", false)
+                    title: "最小化时隐藏到托盘"
+                    description: "把窗口最小化时收进托盘，继续后台播放"
+                    checked: page.sb("minimizeToTray", true)
                     onToggled: function(checked) {
-                        page.updateSyncFlag("useDataSaver", checked)
+                        page.setSetting("minimizeToTray", checked)
+                    }
+                }
+
+                SettingsSwitchRow {
+                    width: parent.width
+                    title: "切歌时发送系统通知"
+                    description: "仅当窗口隐藏 / 最小化时提示，避免打扰"
+                    checked: page.sb("notifyOnSongChange", true)
+                    onToggled: function(checked) {
+                        page.setSetting("notifyOnSongChange", checked)
+                    }
+                }
+
+                SettingsSwitchRow {
+                    width: parent.width
+                    title: "启用系统媒体控制（MPRIS）"
+                    description: "注册 org.mpris.MediaPlayer2.neriplayer，可用媒体键与桌面媒体组件控制"
+                    checked: page.sb("mprisEnabled", true)
+                    onToggled: function(checked) {
+                        page.setSetting("mprisEnabled", checked)
+                    }
+                }
+
+                SettingsSwitchRow {
+                    width: parent.width
+                    title: "启动时恢复上次队列"
+                    description: "打开应用后继续显示上次的播放队列与进度"
+                    checked: page.sb("resumeLastQueue", true)
+                    onToggled: function(checked) {
+                        page.setSetting("resumeLastQueue", checked)
                     }
                 }
 
                 Item {
                     width: 1
                     height: 4
-                    visible: !page.syncUnsupported
                 }
 
-                Row {
-                    spacing: Theme.spacingSm
-                    visible: !page.syncUnsupported
-
-                    SettingsButton {
-                        text: "保存配置"
-                        enabled: !page.syncBusy
-                        onClicked: page.saveSyncConfig()
-                    }
-
-                    SettingsButton {
-                        text: "立即同步"
-                        enabled: !page.syncBusy && page.syncConfigured
-                        onClicked: page.performSync()
-                    }
+                SettingsNote {
+                    width: parent.width
+                    text: "托盘与 MPRIS 需要桌面环境提供系统托盘 / D-Bus 会话总线；无托盘的极简桌面下关闭窗口将直接退出。"
                 }
             }
 
@@ -1952,8 +2332,22 @@ Item {
                 }
             }
 
+                }
+            }
+            Item {
+                id: catAbout
+                width: parent.width
+                height: visible ? innerAbout.height + 12 : 0
+                visible: page.currentCategory === "about"
+
+                Column {
+                    id: innerAbout
+                    width: parent.width
+                    spacing: 12
+
             // ============================================================ 关于
             SettingsSection {
+                id: secAbout
                 width: parent.width - 24
                 x: 12
                 title: "关于"
@@ -2029,10 +2423,26 @@ Item {
                 }
             }
 
+                }
+            }
             Item {
                 width: 1
                 height: 24
             }
+        }
+    }
+
+    // 搜索结果定位：等分类切换与卡片展开完成后再把目标卡片滚到可视区。
+    Timer {
+        id: sectionScrollTimer
+        interval: 80
+        repeat: false
+        property var targetSection: null
+        onTriggered: {
+            if (!targetSection || !flick)
+                return
+            const y = targetSection.mapToItem(contentColumn, 0, 0).y
+            flick.contentY = Math.max(0, Math.min(y - 12, flick.contentHeight - flick.height))
         }
     }
 
