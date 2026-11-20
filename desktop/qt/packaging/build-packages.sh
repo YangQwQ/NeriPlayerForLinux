@@ -82,6 +82,10 @@ JLINK_MODULES='java.base,java.logging,java.net.http,java.desktop,java.naming,jav
 JLINK="${JLINK:-${JAVA_HOME:+$JAVA_HOME/bin/}jlink}"
 RPMBUILD="${RPMBUILD:-rpmbuild}"
 APPIMAGETOOL="${APPIMAGETOOL:-appimagetool}"
+# native DSP 引擎（desktop/native）用的工具链；与 Qt 前端各自独立构建
+CMAKE="${CMAKE:-cmake}"
+# 产物只依赖 libstdc++/libm/libc，但 glibc 版本符号会绑到构建机（见下面 stage_native_dsp）。
+NATIVE_DSP_CMAKE_OPTS="${NATIVE_DSP_CMAKE_OPTS:-}"
 
 ARCH="$(dpkg --print-architecture 2>/dev/null || echo amd64)"
 case "$ARCH" in
@@ -94,6 +98,33 @@ echo "==> 版本 $VERSION / 架构 $ARCH (rpm: $RPM_ARCH) / 输出 $OUT_DIR"
 mkdir -p "$OUT_DIR"
 
 # ---------- 三种格式共用的构建阶段 ----------
+# native DSP 引擎：与 Qt 前端完全独立的一个 CMake 工程（desktop/native），
+# 由 Kotlin 后端用 System.load(绝对路径) 加载。单独编的好处是编前端不需要 JDK，
+# 而这个工程只有 JNI 依赖。
+stage_native_dsp() {
+    local native_src="$DESKTOP_DIR/native"
+    local native_build="$BUILD_DIR/native-dsp"
+    [ -f "$native_src/CMakeLists.txt" ] \
+        || { echo "错误：缺少 $native_src/CMakeLists.txt" >&2; return 1; }
+    command -v "$CMAKE" >/dev/null \
+        || { echo "错误：缺少 cmake（可用 CMAKE=... 覆盖）" >&2; return 1; }
+
+    echo "==> 构建 native DSP（lib_neri.so）"
+    # JAVA_HOME 传进去是为了找 jni.h：这里只需要 jni.h + jni_md.h，不链接 libjvm。
+    # glibc 版本符号：新版 glibc 的 log10f 绑在很新的版本符号上（Debian 13 = GLIBC_2.43），
+    # 在本机打包出来的 .so 装到旧发行版会 "GLIBC_2.43 not found" 直接加载失败。
+    # desktop/native/CMakeLists.txt 默认把 log10f 钉到 GLIBC_2.2.5（可用 -DNERI_DSP_PIN_GLIBC=OFF 关掉）；
+    # CI 在 ubuntu-22.04 上构建，本来就只会绑到 2.35 左右，两条路都安全。
+    "$CMAKE" -S "$native_src" -B "$native_build" -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DJAVA_HOME="$JAVA_HOME" \
+        $NATIVE_DSP_CMAKE_OPTS >/dev/null
+    "$CMAKE" --build "$native_build" -j"$(nproc)"
+
+    install -m 755 "$native_build/lib_neri.so" "$STAGE/usr/lib/neriplayer/lib_neri.so"
+    echo "    lib_neri.so → $STAGE/usr/lib/neriplayer/lib_neri.so"
+}
+
 stage_payload() {
     echo "==> 准备 staging 目录 $STAGE"
     rm -rf "$STAGE"
@@ -124,6 +155,10 @@ stage_payload() {
         --add-modules "$JLINK_MODULES" \
         --strip-debug --no-header-files --no-man-pages --compress=2 \
         --output "$STAGE/usr/lib/neriplayer/runtime"
+
+    # 与 jar 同放 /usr/lib/neriplayer/：后端按「jar 所在目录的兄弟文件」定位 .so，
+    # 不依赖 java.library.path（前端拉起后端时没有传这个参数）。
+    stage_native_dsp
 
     echo "==> 安装启动脚本 / desktop / 图标 / 许可证"
     cat > "$STAGE/usr/bin/neriplayer" <<'LAUNCHER'
