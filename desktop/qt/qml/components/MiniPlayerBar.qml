@@ -230,68 +230,12 @@ Item {
 
                     // 右侧功能按钮统一带 tooltip；歌单（队列）放在最右边——
                     // 它是最常用的入口，放在末尾更符合「主操作靠边」的习惯。
-                    // 音量：点击在按钮上方弹出小滑条，不必打开一个单独面板。
+                    // 音量按钮槽位占位；真实交互区提升到 bar 顶层，见文件末尾。
                     Item {
-                        width: 34
-                        height: 34
-
-                        IconButton {
-                            anchors.fill: parent
-                            icon: "volume_up"
-                            iconSize: 19
-                            size: 34
-                            tooltip: I18n.tr("音量")
-                            onClicked: volumePopup.opened ? volumePopup.close() : volumePopup.open()
-                        }
-
-                        Popup {
-                            id: volumePopup
-                            y: -80
-                            x: (parent.width - width) / 2
-                            width: 44
-                            height: 96
-                            padding: 0
-                            modal: false
-                            closePolicy: Popup.CloseOnPressOutside | Popup.CloseOnEscape
-
-                            background: Rectangle {
-                                radius: 12
-                                color: Theme.surfaceContainerHigh
-                                border.width: 1
-                                border.color: Theme.withAlpha(Theme.outlineVariant, 0.7)
-                            }
-
-                            Column {
-                                anchors.centerIn: parent
-                                spacing: 6
-
-                                NeriIcon {
-                                    anchors.horizontalCenter: parent.horizontalCenter
-                                    name: "volume_up"
-                                    iconSize: 14
-                                    color: Theme.primary
-                                }
-
-                                // 竖向滑条：用旋转的 Slider 实现
-                                Item {
-                                    width: 28
-                                    height: 56
-
-                                    Slider {
-                                        id: volumeSlider
-                                        anchors.centerIn: parent
-                                        width: 56
-                                        height: 28
-                                        rotation: -90
-                                        from: 0
-                                        to: 1
-                                        value: Player.volume
-                                        onMoved: Player.setVolume(value)
-                                    }
-                                }
-                            }
-                        }
+                        Layout.preferredWidth: 34
+                        Layout.preferredHeight: 34
                     }
+
                     IconButton {
                         icon: "graphic_eq"
                         iconSize: 19
@@ -327,4 +271,112 @@ Item {
             }
         }
     }
+    // 音量控件放在 bar 顶层而不是嵌在 34dp 槽位里：浮层向上溢出控制栏约 150dp，
+    // 若父项是 34dp 槽位/78dp 卡片，Qt Quick 的命中测试到不了浮层区域——
+    // 浮层能绘制却收不到 hover/点击（表现为移上去即消失、控件点不到）。
+    Item {
+        id: volumeZone
+        // 原来在右侧按钮行首位时的几何：x=977, y=-128（相对 bar 左上角）。
+        x: bar.width - 8 - 10 - 178 + 17 - 24
+        y: -128
+        width: 48
+        height: 184
+        property bool expanded: false
+        property bool sliderPressed: false
+        z: 1
+
+        // 展开闸门：只有鼠标先进入按钮（34dp）才弹出，避免上方空白误触发。
+        HoverHandler {
+            id: buttonHover
+            target: volumeButton
+            cursorShape: Qt.PointingHandCursor
+            onHoveredChanged: {
+                if (hovered) {
+                    volumeHideTimer.stop()
+                    volumeZone.expanded = true
+                }
+            }
+        }
+
+        // 状态保持：覆盖「按钮 + 浮层」连续区域；子项点击/拖动由各自处理器消费。
+        HoverHandler {
+            id: volumeHover
+            cursorShape: Qt.PointingHandCursor
+            onHoveredChanged: {
+                if (!hovered && !volumeZone.sliderPressed)
+                    volumeHideTimer.restart()
+            }
+        }
+
+        Timer {
+            id: volumeHideTimer
+            interval: 400
+            repeat: false
+            onTriggered: {
+                if (!volumeHover.hovered && !volumeZone.sliderPressed)
+                    volumeZone.expanded = false
+            }
+        }
+
+        IconButton {
+            id: volumeButton
+            anchors.bottom: parent.bottom
+            width: 34
+            height: 34
+            anchors.horizontalCenter: parent.horizontalCenter
+            icon: Player.muted ? "volume_off" : (Player.volume < 0.5 ? "volume_down" : "volume_up")
+            iconSize: 19
+            size: 34
+            onClicked: Player.toggleMute()
+        }
+
+        Rectangle {
+            id: volumeFlyout
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.bottom: volumeButton.top
+            width: 48
+            height: 150
+            radius: 12
+            color: Theme.surfaceContainerHigh
+            border.width: 1
+            border.color: Theme.withAlpha(Theme.outlineVariant, 0.7)
+            visible: volumeZone.expanded
+
+            Item {
+                id: muteButton
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.top: parent.top
+                anchors.topMargin: 8
+                width: 28
+                height: 24
+
+                NeriIcon {
+                    anchors.centerIn: parent
+                    name: Player.muted ? "volume_off" : "volume_up"
+                    iconSize: 14
+                    color: Theme.primary
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: Player.toggleMute()
+                }
+            }
+
+            Slider {
+                id: volumeSlider
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.top: muteButton.bottom
+                anchors.topMargin: 46
+                width: 110
+                height: 26
+                rotation: -90
+                from: 0
+                to: 1
+                value: Player.volume
+                onMoved: Player.setVolume(value)
+                onPressedChanged: volumeZone.sliderPressed = pressed
+            }
+        }
+    }
+
 }

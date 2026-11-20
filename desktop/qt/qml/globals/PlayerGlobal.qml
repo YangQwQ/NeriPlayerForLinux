@@ -128,6 +128,18 @@ QtObject {
         volume = Math.max(0, Math.min(1, value))
         _send("player.setVolume", { value: volume })
     }
+    /** 静音：记住当前音量并置 0；再点恢复。 */
+    readonly property bool muted: volume <= 0.001
+    property real previousVolume: 0.85
+    function toggleMute() {
+        if (muted) {
+            const restore = previousVolume > 0.001 ? previousVolume : 0.85
+            setVolume(restore)
+        } else {
+            previousVolume = volume
+            setVolume(0)
+        }
+    }
     function setShuffle(enabled) {
         shuffle = enabled
         _send("player.setShuffle", { enabled: enabled })

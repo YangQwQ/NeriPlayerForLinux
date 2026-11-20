@@ -231,14 +231,60 @@ Item {
                 onClicked: Nav.openEffectsPanel()
             }
 
-            IconButton {
-                icon: "volume_up"
-                iconSize: 20
-                size: 38
-                iconColor: np.foregroundDim
-                hoverColor: np.hoverFill
-                tooltip: I18n.tr("音量")
-                onClicked: Nav.openVolumePanel()
+            // 音量：图标点击切静音；hover 时展开横向滑条，移开延迟收起。
+            Item {
+                id: volumeControl
+                property bool revealed: false
+                width: volumeInline.visible ? 38 + Theme.spacingSm + 120 : 38
+                height: 38
+
+                Behavior on width { NumberAnimation { duration: Theme.motionShort; easing.type: Easing.OutCubic } }
+
+                HoverHandler {
+                    id: volumeHover
+                    onHoveredChanged: {
+                        if (hovered) {
+                            volumeHideTimer.stop()
+                            volumeControl.revealed = true
+                        } else {
+                            volumeHideTimer.start()
+                        }
+                    }
+                }
+                Timer {
+                    id: volumeHideTimer
+                    interval: 400
+                    repeat: false
+                    onTriggered: {
+                        if (!volumeHover.hovered) volumeControl.revealed = false
+                    }
+                }
+
+                Row {
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: Theme.spacingSm
+
+                    IconButton {
+                        icon: Player.muted ? "volume_off" : (Player.volume < 0.5 ? "volume_down" : "volume_up")
+                        iconSize: 20
+                        size: 38
+                        iconColor: np.foregroundDim
+                        hoverColor: np.hoverFill
+                        tooltip: Player.muted ? I18n.tr("取消静音") : I18n.tr("静音")
+                        onClicked: Player.toggleMute()
+                    }
+
+                    PlayerSlider {
+                        id: volumeInline
+                        visible: volumeControl.revealed
+                        width: 120
+                        height: 38
+                        from: 0
+                        to: 1
+                        value: Player.volume
+                        onMoved: Player.setVolume(value)
+                    }
+                }
             }
         }
 
