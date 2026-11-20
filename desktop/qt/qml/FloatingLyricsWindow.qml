@@ -1,9 +1,17 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Window
 import "components"
 
 // 悬浮歌词窗口：无边框、透明、置顶、不抢焦点，可拖动；锁定时整窗鼠标穿透。
 // 样式/位置都来自设置（Settings.values），不依赖主窗口状态。
+//
+// 两种窗口形态（设置 floatingLyricsWindowMode）：
+//  - LAYER：wlr-layer-shell overlay 层，由合成器按锚点摆放，永远压在所有窗口之上，
+//           但无法拖到别的屏幕（位置只能改 margin 模拟）。
+//  - NORMAL：普通无边框窗口 + WindowStaysOnTopHint，可跨屏拖动，层级不如 overlay 稳。
+// layer-shell 的 shell 角色一旦建立便不能在同一 QWindow 上重复设置；形态切换由
+// Main.qml 销毁旧窗口后重建，本窗口实例从创建到销毁始终只属于一种形态。
 Window {
     id: win
 
@@ -82,50 +90,104 @@ Window {
         return Math.max(64, lineHeight + translation + 28 + controlBarInset)
     }
 
-    visible: enabledSetting && Player.hasSong && !(hideInApp && appActive)
-    // 悬浮歌词常驻最顶层，不抢键盘焦点。
-    //
-    // Wayland 下普通 xdg-toplevel 窗口的位置和层级都由合成器说了算，写 x/y 无效、
-    // WindowStaysOnTopHint 也可能被忽略（这正是「关掉重开回到中间」「不置顶」的原因）。
-    // 因此优先用 wlr-layer-shell（KDE 的 LayerShellQt）：overlay 层 + 锚点 + margin，
-    // 位置与层级都由我们声明。非 Wayland 或缺失依赖时回退到普通窗口。
-    // Wayland 下唯一可靠的「置顶」手段是 wlr-layer-shell：KWin 不提供客户端置顶接口，
-    // 而 KWin 窗口规则只在合成器启动时加载、运行期新增不生效（实测 keepAbove 仍为 false）。
-    // 代价：layer-shell 窗口由合成器按锚点摆放，拖动只能通过改 margin 模拟。
-    readonly property bool useLayerShell: LayerShell.available()
+    // 形态在窗口创建时从已到达的设置中一次读定；layer-shell 角色在本实例的
+    // 生命周期内不会更改（运行期切换由 Main 销毁并重建窗口完成）。
+    readonly property string windowMode: (Settings.values["floatingLyricsWindowMode"] === "NORMAL") ? "NORMAL" : "LAYER"
+    readonly property bool useLayerShell: windowMode === "LAYER" && LayerShell.available()
+
+    // 显式尺寸：在 attach/show 之前算好，避免依赖窗口布局尚未就绪的 width/height。
+    // layer-shell 的 margin 位移也按 QScreen.availableGeometry 计算，与此保持一致。
+    readonly property int attachWidth: Math.round(windowWidth)
+    readonly property int attachHeight: Math.round(windowHeight)
+
+    readonly property int availW: Math.max(1, Screen.availableWidth > 0 ? Screen.availableWidth : (win.screen ? win.screen.width : 1920))
+    readonly property int availH: Math.max(1, Screen.availableHeight > 0 ? Screen.availableHeight : (win.screen ? win.screen.height : 1080))
+    readonly property int availX: win.screen ? win.screen.virtualX : 0
+    readonly property int availY: win.screen ? win.screen.virtualY : 0
+
+    /** attach 后才能显示：WAYLAND 下窗口 show 会创建不可更改的 xdg-toplevel shell 角色。 */
+    property bool attached: false
+    // layer-shell 的 shell 集成在窗口每次 show 时建立。若 visible 反复 true↔false，
+    // 重新 show 会再次 get() 到新的 layer 对象并报 "already has a shell integration"。
+    // 因此本实例生命周期内只 show 一次；开关关闭时销毁本窗口，重新开启时由 Main
+    // 创建一个全新的窗口，而不是在本窗口上 flip visible。
+    property bool shouldShow: enabledSetting && Player.hasSong && !(hideInApp && appActive)
+    visible: false
+    // 本实例创建时开关是否已打开。只有「从打开变成关闭」才销毁本窗口；
+    // 若窗口是在开关关闭期间预建的，就原地待命，等用户打开开关再由 showOnce 显示。
+    property bool _enabledAtCreate: Settings.get("floatingLyricsEnabled", false) === true
+    // 关闭开关后的销毁由 requestClose() 统一发起，避免在设置回执的同一个调用栈里
+    // 反复触发（Settings.values 会被多次赋新对象），也防止重复重建。
+    property bool _closing: false
+
+    function showOnce() {
+        if (win._closing || win.visible || !win.attached || !win.shouldShow)
+            return
+        win.visible = true
+        showFallback.stop()
+    }
+
+    /** 关掉开关：销毁本实例并让 Main 建一个待命的新窗口（绝不 flip visible）。 */
+    function requestClose() {
+        if (win._closing)
+            return
+        win._closing = true
+        showFallback.stop()
+        // 与 Main.qml::rebuildFloatingLyricsWindow() 同样的顺序：先交出所有权，
+        // close + destroy，再用 callLater 跨过延迟删除去创建新窗口。新窗口此时开关
+        // 仍为关闭，会保持隐藏待命；它的 Settings 连接负责在重新打开时显示。
+        // 若不在此刻交接，Main 在开关打开时看不到新窗口，开关就彻底失效。
+        const owner = win.mainWindow
+        if (owner && owner.floatingLyrics === win)
+            owner.floatingLyrics = null
+        if (typeof LayerShell !== "undefined" && LayerShell)
+            LayerShell.detach(win)
+        win.close()
+        win.destroy()
+        if (owner && typeof owner.ensureAuxWindows === "function")
+            Qt.callLater(function() { owner.ensureAuxWindows() })
+    }
+
+    // 后端 player 快照可能晚于窗口创建到达。定时兜底只在「尚未显示」
+    // 时运行；showOnce() 成功后立即停止，不会 periodic flip visible。
+    // 注意：这里不会因开关关闭而自毁——本实例可能是在开关关闭期间由 Main 预建的，
+    // 需要留在原地等待启用；只有 onValuesChanged 里的显式 true→false 才销毁。
+    property Timer showFallback: Timer {
+        interval: 120
+        repeat: true
+        running: !win.visible && !win._closing
+        onTriggered: win.showOnce()
+    }
+
     flags: Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
            | Qt.WindowDoesNotAcceptFocus
            | (locked ? Qt.WindowTransparentForInput : 0)
            | Qt.NoDropShadowWindowHint
     color: "transparent"
     title: "NeriPlayer 悬浮歌词"
-    width: windowWidth
-    height: windowHeight
+    width: attachWidth
+    height: attachHeight
 
     // layer-shell 窗口不存在「提到最前」的概念（层级由 layer 决定），
     // 仅在回退路径下需要周期性 raise。
     onVisibleChanged: {
-        if (visible) {
-            applyPlacement()
-            if (!win.useLayerShell)
-                keepOnTopTimer.restart()
-        }
+        if (visible && !win.useLayerShell)
+            keepOnTopTimer.restart()
     }
-    // 拖动跟随计时器。
-    //
-    // 不能只在 MouseArea 的 onPositionChanged 里更新位置：窗口靠改 margin 移动，
-    // 合成器应用有延迟，指针一旦跑出窗口就再也收不到移动事件，表现为「窗口卡住、
-    // 松手才跳过去」（像拉弹弓）。改成拖动期间按帧轮询全局指针位置，只要指针在动
-    // 窗口就会持续跟随。
+
     /** 拖动中把目标位置画到全屏预览层上（窗口本身不动，避免合成器重排）。 */
     function updatePreview() {
         if (!win.previewWindow || !win._dragState || !win.screen)
             return
+        // 预览层是为 layer-shell 的「改 margin 模拟移动」准备的；普通窗口直接移动窗口本身，
+        // 再叠一层全屏预览只会遮住正在被合成器拖动的窗口。
+        if (!win.useLayerShell)
+            return
         const drag = win._dragState
-        const availW = Math.max(0, win.screen.width - win.width)
-        const availH = Math.max(0, win.screen.height - win.height)
-        const px = Math.max(0, Math.min(availW, drag.pressMarginX + drag.dx))
-        const py = Math.max(0, Math.min(availH, drag.pressMarginY + drag.dy))
+        const roomW = Math.max(0, rootAvailW() - win.width)
+        const roomH = Math.max(0, rootAvailH() - win.height)
+        const px = Math.max(0, Math.min(roomW, drag.pressMarginX + drag.dx))
+        const py = Math.max(0, Math.min(roomH, drag.pressMarginY + drag.dy))
         // 预览层铺满当前屏幕，内部绘制用「屏幕内相对坐标」
         win.previewWindow.boxX = px
         win.previewWindow.boxY = py
@@ -148,39 +210,22 @@ Window {
         onTriggered: WindowDrag.keepOnTop(win)
     }
 
-    /** 目标左上角像素位置；屏幕未就绪时返回 -1（表示未知，不要写进规则）。 */
+    function rootAvailW()  { return availW }
+    function rootAvailH()  { return availH }
+
+    function availWidth()  { return Math.max(1, availW - win.width) }
+    function availHeight() { return Math.max(1, availH - win.height) }
+
     function targetPixelX() {
-        const scr = win.screen
-        if (!scr || win.width <= 0)
-            return -1
-        return Math.max(0, Math.round((scr.width - win.width) * win.normalizedX))
+        return Math.max(0, Math.round(availWidth() * win.normalizedX))
     }
     function targetPixelY() {
-        const scr = win.screen
-        if (!scr || win.height <= 0)
-            return -1
-        return Math.max(0, Math.round((scr.height - win.height) * win.normalizedY))
+        return Math.max(0, Math.round(availHeight() * win.normalizedY))
     }
 
-    /** 是否已经完成 layer-shell 附着（附着只需一次）。 */
-    property bool _layerAttached: false
-
-    /** 把当前归一化位置应用出去。 */
-    function applyPlacement() {
-        if (!win.useLayerShell)
-            return
-        if (!win._layerAttached) {
-            // 首次：完整附着（层次/锚点/尺寸/边距一次设好）
-            if (win.width <= 0 || win.height <= 0)
-                return
-            win._layerAttached = LayerShell.attach(win, win.normalizedX, win.normalizedY,
-                                                   Math.round(win.width), Math.round(win.height))
-            return
-        }
-        // 之后只改位置：重复 attach 会重设锚点/尺寸，导致合成器反复重排（画面闪烁）
-        LayerShell.setPositionRatio(win, win.normalizedX, win.normalizedY)
-    }
-
+    // layer-shell 下位置是 margin；Wayland 普通窗口的位置由合成器决定（客户端既写不了
+    // 也读不到），只有 X11/offscreen 这类普通平台才能自己摆。
+    readonly property bool selfPositionsWindow: !useLayerShell && !WindowDrag.usesSystemMove()
 
     readonly property real normalizedX: {
         const value = Settings.get("floatingLyricsPositionX", 0.5)
@@ -207,19 +252,57 @@ Window {
         }
     }
 
-    // 位置绑定只在「非 layer-shell」的回退路径下使用：
-    // layer-shell 窗口的位置由 margin 决定，写 x/y 会被合成器忽略（甚至冲突）。
+    /** 是否交给合成器拖动（NORMAL 形态 + Wayland）。layer-shell 只能靠改 margin 模拟。 */
+    readonly property bool usesSystemMoveDrag: !win.useLayerShell && WindowDrag.usesSystemMove()
+    /** 是否由我们自己写 x/y 拖动（NORMAL 形态 + X11/offscreen）。 */
+    readonly property bool manualMoveDrag: !win.useLayerShell && !WindowDrag.usesSystemMove()
+
+    // 合成器拖动期间 Qt 收不到鼠标移动/释放事件（指针被合成器抓走），
+    // 这里按帧轮询全局指针位置：既能判断拖动是否还在进行，也能算出总位移用于保存位置。
+    property Timer systemMovePoll: Timer {
+        interval: 80
+        repeat: true
+        running: win.dragging && win.usesSystemMoveDrag
+        onTriggered: {
+            const drag = win._dragState
+            if (!drag)
+                return
+            const cur = WindowDrag.globalCursorPos()
+            if (cur.x === drag.lastCursorX && cur.y === drag.lastCursorY)
+                return
+            drag.lastCursorX = cur.x
+            drag.lastCursorY = cur.y
+            drag.dx = cur.x - drag.pressCursorX
+            drag.dy = cur.y - drag.pressCursorY
+            // 指针还在动说明拖动没结束，把「停顿即结束」的兜底计时器往后推
+            dragEndGuard.restart()
+        }
+    }
+
+    // 位置绑定只在「窗口位置能由客户端自己决定」时使用：
+    // layer-shell 窗口的位置由 margin 决定，写 x/y 会被合成器忽略（甚至冲突）；
+    // Wayland 普通窗口同理（合成器说了算），只有 X11/offscreen 才有意义。
+    //
+    // 拖动结束后位置写设置是异步的（等后端回执 → normalizedX/Y 才变），期间绑定
+    // 会把窗口拽回旧位置，视觉上闪一下。这里在回执到达前短暂冻结 X11 的位置绑定。
+    property bool _freezePosition: false
+    property Timer freezePositionTimer: Timer {
+        interval: 400
+        repeat: false
+        onTriggered: win._freezePosition = false
+    }
+
     Binding {
         target: win
         property: "x"
-        when: !win.dragging && !win.useLayerShell
-        value: Math.round(win.screen ? win.screen.virtualX + (win.screen.width - win.width) * win.normalizedX : 0)
+        when: !win.dragging && !win._freezePosition && win.selfPositionsWindow
+        value: Math.round(win.screen ? availX + (availW - win.width) * win.normalizedX : 0)
     }
     Binding {
         target: win
         property: "y"
-        when: !win.dragging && !win.useLayerShell
-        value: Math.round(win.screen ? win.screen.virtualY + (win.screen.height - win.height) * win.normalizedY : 0)
+        when: !win.dragging && !win._freezePosition && win.selfPositionsWindow
+        value: Math.round(win.screen ? availY + (availH - win.height) * win.normalizedY : 0)
     }
 
     function colorOf(name) {
@@ -252,7 +335,6 @@ Window {
     // 经常读到 0 或滞后值，会把 (0,0) 误存进设置，于是下次启动窗口跑到左上角。
     // 现在只在拖动真正结束时，用「拖动前的归一化位置 + 本次位移」算出目标比例再保存。
     function savePositionAt(nx, ny) {
-        // 兜底：算出 NaN 时不要写设置（否则后端解析失败、位置被清成 0）
         if (!isFinite(nx) || !isFinite(ny))
             return
         const cx = Math.max(0, Math.min(1, nx))
@@ -261,29 +343,72 @@ Window {
             "floatingLyricsPositionX": Number(cx.toFixed(3)),
             "floatingLyricsPositionY": Number(cy.toFixed(3))
         })
-        // layer-shell 下位置靠 margin 表达，保存后要立刻把新位置下发，
-        // 否则窗口会停在被拖到的像素位置、与设置里的比例不一致。
-        if (win.useLayerShell)
-            LayerShell.setPositionRatio(win, cx, cy)
+        // 位置的实际下发统一由 Settings.onValuesChanged 完成（设置回执会再次进入该
+        // 处理函数）。这里绝不能再调用 LayerShell API：重复取 shell 集成会在同窗口上
+        // 报 "already has a shell integration"，反而让 margin 永远停在旧值。
+    }
+
+    /** 把当前设置里的比例下发到 layer-shell 的 margin（窗口已附着）。 */
+    function applyPlacement() {
+        if (win.useLayerShell && win.attached)
+            LayerShell.setPositionRatio(win, win.normalizedX, win.normalizedY)
     }
 
     // 悬浮窗默认不抢焦点（由 WindowDoesNotAcceptFocus 保证，无需再重设 flags）
     // 同时脱离父窗口：主窗口最小化到托盘时，悬浮歌词应当继续显示。
     Component.onCompleted: {
         WindowDrag.detachFromParent(win)
-        // layer-shell 的角色在窗口首次显示前附着最稳，这里先放一次
-        win.applyPlacement()
+        if (win.useLayerShell) {
+            // 本实例唯一一次 attach，且严格在窗口 show 之前：显式传入已算好的尺寸，
+            // 不依赖窗口布局的 width/height。attached 控制 showOnce()，保证不会先创建
+            // 普通 xdg-toplevel shell 角色。
+            win.attached = LayerShell.attach(win, win.normalizedX, win.normalizedY,
+                                             win.attachWidth, win.attachHeight)
+            console.log("[lyrics] attach mode=", win.windowMode, "ok=", win.attached,
+                        "size=", win.attachWidth, win.attachHeight)
+        } else {
+            // 普通窗口无需 layer-shell，直接放行显示
+            win.attached = true
+            console.log("[lyrics] window mode=", win.windowMode,
+                        "layerShell available=", LayerShell.available())
+        }
+        // 开关关闭期间创建的实例保持隐藏待命；显示条件满足（含用户打开开关）时
+        // 由 showOnce 放行。绝不在这里因开关关闭而自毁，否则 Main 只在 toggle 时
+        // 重建，窗口会一直缺席直到用户手动切两次开关。
+        win.showOnce()
     }
 
-    // 设置里的位置被外部改动（设置页滑杆、其它实例）时也要重新定位。
-    // layer-shell 下位置靠 margin，x/y 绑定已停用，不会自动跟随设置变化。
+    // 设置里的位置被外部改动（拖动保存后的回执、设置页滑杆、其它实例）时，
+    // 在这个统一入口把新比例下发到 margin。layer-shell 的 x/y 绑定已停用，
+    // 不会自动跟随设置变化。
     property Connections settingsConnection: Connections {
         target: Settings
         function onValuesChanged() {
-            if (win.dragging)
+            const enabled = Settings.get("floatingLyricsEnabled", false) === true
+            // 只有显式的「打开 → 关闭」才销毁本实例；再次打开时 Main 的
+            // ensureAuxWindows() 会创建新窗口。绝不能只改 visible —— 那会让 layer-shell
+            // 在同一 QWindow 上重复建立 shell 角色。
+            if (win._enabledAtCreate && !enabled) {
+                win._enabledAtCreate = false
+                win.requestClose()
+                return
+            }
+            win._enabledAtCreate = enabled
+            if (!enabled || win.dragging)
                 return
             win.applyPlacement()
+            win.showOnce()
         }
+    }
+
+    // 后端 player 快照可能晚于窗口创建：song 变化时补足首次显示条件。
+    property Connections playerConnection: Connections {
+        target: Player
+        function onSongChanged() { win.showOnce() }
+    }
+    property Connections mainWindowConnection: Connections {
+        target: win.mainWindow
+        function onActiveChanged() { win.showOnce() }
     }
 
     // 窗口级 hover 检测：放在 Window 根上，覆盖整个窗口区域。
@@ -379,16 +504,23 @@ Window {
             onPressed: function(mouse) {
                 // 拖动期间窗口保持静止，因此 mouse.x/y 就是「指针相对窗口」的准确坐标，
                 // 用它算总位移不会受窗口移动影响（这是本方案的关键）。
+                const cursor = WindowDrag.globalCursorPos()
                 win._dragState = {
                     pressMouseX: mouse.x,
                     pressMouseY: mouse.y,
                     pressMarginX: win.targetPixelX(),
                     pressMarginY: win.targetPixelY(),
+                    pressCursorX: cursor.x,
+                    pressCursorY: cursor.y,
+                    lastCursorX: cursor.x,
+                    lastCursorY: cursor.y,
                     dx: 0,
                     dy: 0
                 }
                 win.dragging = true
-                if (!win.useLayerShell && WindowDrag.usesSystemMove()) {
+                if (win.usesSystemMoveDrag) {
+                    // 普通窗口才交给合成器拖动：layer-shell 窗口没有 xdg-toplevel，
+                    // startSystemMove 不起作用，位置只能靠改 margin。
                     WindowDrag.startMove(win)
                     dragEndGuard.restart()
                 }
@@ -396,8 +528,28 @@ Window {
             onPositionChanged: function(mouse) {
                 if (!win.dragging)
                     return
+                // 只有「合成器接管指针」的拖动收不到 released，才需要靠停顿判定结束；
+                // 其它路径（layer-shell 改 margin / X11 手动移动）release 会正常送达，
+                // 这里不能重开兜底计时器，否则拖到一半停手会被误判成拖动结束。
+                if (win.usesSystemMoveDrag && dragEndGuard.running)
+                    dragEndGuard.restart()
                 const drag = win._dragState
-                if (!drag || !win.screen)
+                if (!drag)
+                    return
+                // 普通窗口在 X11/offscreen 下位置由客户端决定：直接跟着指针走，
+                // layer-shell 那套「全屏预览 + 改 margin」在这里既没必要也会闪。
+                if (win.manualMoveDrag) {
+                    if (!win.screen)
+                        return
+                    const roomW = Math.max(0, rootAvailW() - win.width)
+                    const roomH = Math.max(0, rootAvailH() - win.height)
+                    win.x = Math.round(win.screen.virtualX
+                                       + Math.max(0, Math.min(roomW, drag.pressMarginX + mouse.x - drag.pressMouseX)))
+                    win.y = Math.round(win.screen.virtualY
+                                       + Math.max(0, Math.min(roomH, drag.pressMarginY + mouse.y - drag.pressMouseY)))
+                    return
+                }
+                if (!win.screen)
                     return
                 drag.dx = mouse.x - drag.pressMouseX
                 drag.dy = mouse.y - drag.pressMouseY
@@ -412,27 +564,38 @@ Window {
                 if (!win.dragging)
                     return
                 win.dragging = false
-                if (!win.screen)
+                dragEndGuard.stop()
+                if (!win.screen) {
+                    hidePreview()
+                    win._dragState = null
                     return
-                const availW = Math.max(1, win.screen.width - win.width)
-                const availH = Math.max(1, win.screen.height - win.height)
+                }
+                const roomW = Math.max(1, rootAvailW() - win.width)
+                const roomH = Math.max(1, rootAvailH() - win.height)
 
-                // 位移来自「指针相对窗口」的差值（拖动期间窗口静止，因此精确）
+                // 位移通常来自「指针相对窗口」的差值（拖动期间窗口静止，因此精确）；
+                // 但两种普通窗口路径下窗口会跟着指针动：
+                //  - X11 手动拖动：指针一旦跑出窗口就收不到位移，改用拖动期间的累计位移；
+                //  - Wayland 合成器拖动：窗口跟着动，累计位移由 systemMovePoll 轮询得到。
                 const drag = win._dragState
                 const dx = drag ? (drag.dx || 0) : 0
                 const dy = drag ? (drag.dy || 0) : 0
                 const baseX = drag ? drag.pressMarginX : win.targetPixelX()
                 const baseY = drag ? drag.pressMarginY : win.targetPixelY()
-                // 按下时屏幕信息可能还没就绪（得到 -1），这时算出来的位置会
-                // 被钳到 0，把记忆位置写成「左上角」。这种情况直接放弃本次提交。
                 if (baseX < 0 || baseY < 0) {
                     hidePreview()
                     win._dragState = null
                     return
                 }
-                const px = Math.max(0, Math.min(availW, baseX + dx))
-                const py = Math.max(0, Math.min(availH, baseY + dy))
-                win.savePositionAt(px / availW, py / availH)
+                const px = Math.max(0, Math.min(roomW, baseX + dx))
+                const py = Math.max(0, Math.min(roomH, baseY + dy))
+                win.savePositionAt(px / roomW, py / roomH)
+                // X11/offscreen 下窗口刚被拖到新位置，等设置回执更新归一化坐标前
+                // 先冻结位置绑定，避免窗口闪回旧位置。
+                if (win.manualMoveDrag) {
+                    win._freezePosition = true
+                    win.freezePositionTimer.restart()
+                }
                 hidePreview()
                 win._dragState = null
             }

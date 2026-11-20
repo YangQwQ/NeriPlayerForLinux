@@ -97,6 +97,24 @@ ApplicationWindow {
             root.shellItem.releasePages()
     }
 
+    /**
+     * 显示 / 隐藏主窗口（默认全局键 Ctrl+Alt+H，可在系统快捷键设置里改）。
+     *
+     * 只有窗口「可见且处于活动状态」时才隐藏：全局快捷键在窗口不在前台时也会触发，
+     * 那种情况用户是想把它叫出来，而不是再藏一次。隐藏复用 hideMainWindow()，
+     * 与关闭按钮的「最小化到托盘」行为一致。
+     *
+     * 主窗口隐藏后仍能被这个快捷键叫回来：后端注册的全局快捷键与窗口可见性无关，
+     * 触发后经 socket 推 "shortcut" 事件，而 QML 的事件循环在窗口隐藏时照常运行。
+     */
+    function toggleMainWindow() {
+        if (root.visible && root.active) {
+            root.hideMainWindow()
+            return
+        }
+        root.showMainWindow()
+    }
+
     /** 退出应用（托盘菜单、快捷键）。 */
     function quitApp() {
         root.forceQuit = true
@@ -228,9 +246,9 @@ ApplicationWindow {
             }
         }
         function onEvent(name, data) {
-            if (name === "toast")
-                Toast.show(data.message, data.kind)
-            else if (name === "navigate")
+            // toast 事件由 ToastGlobal 统一处理（它管理提示队列），这里不能再重复弹一次，
+            // 否则每条后端提示会显示两条。
+            if (name === "navigate")
                 Nav.openByName(data.name, data.arg)
             else if (name === "tray")
                 root.handleTrayCommand(data)
@@ -245,7 +263,50 @@ ApplicationWindow {
         function onValuesChanged() {
             if (Backend.connected)
                 Api.call("app.refreshTheme").catch(function() {})
+            // 悬浮歌词形态（layer-shell 覆盖层 / 普通窗口）只能在创建时确定，
+            // 运行期切换设置必须重建窗口才能生效。
+            const mode = Settings.get("floatingLyricsWindowMode", "LAYER")
+            if (root._lastLyricsWindowMode !== undefined && mode !== root._lastLyricsWindowMode) {
+                root.rebuildFloatingLyricsWindow()
+            }
+            root._lastLyricsWindowMode = mode
         }
+    }
+
+    property string _lastLyricsWindowMode
+
+    /**
+     * 按当前设置重建悬浮歌词窗口（形态改变后 layer-shell 角色无法运行期撤销）。
+     *
+     * LayerShellQt 的 shell 集成是 QWindow 级的：同一窗口先 show 成 xdg-toplevel、
+     * 再 get() 成 layer-shell，会因已有 shell surface 报 "already has a shell
+     * integration"，且位置再也下不下去。所以形态切换必须换一个全新的 QWindow。
+     *
+     * QML 的 destroy() 是延迟删除：原生 surface 与 QObject 在当前调用栈之后的事件
+     * 循环里才真正释放。用 Qt.callLater 把重建排到删除之后，保证新窗口 attach 时
+     * 旧窗口的 shell 状态已经从合成器侧清理干净。
+     */
+    function rebuildFloatingLyricsWindow() {
+        const old = root.floatingLyrics
+        root.floatingLyrics = null
+        if (!old) {
+            root.ensureAuxWindows()
+            return
+        }
+        if (root.floatingPreview)
+            root.floatingPreview.active = false
+        old.previewWindow = null
+        // detach 是语义清理（C++ 侧 layer 角色随窗口销毁才失效），
+        // 真正的屏障是下面的 destroy() + callLater。
+        if (typeof LayerShell !== "undefined" && LayerShell)
+            LayerShell.detach(old)
+        old.close()
+        old.destroy()
+        Qt.callLater(function() {
+            console.log("[app] floating lyrics window recreated for mode=",
+                        Settings.get("floatingLyricsWindowMode", "LAYER"))
+            root.ensureAuxWindows()
+        })
     }
 
     // 系统主题变化（切换深浅色 / 改 KDE 强调色）时重新上报，让后端重算 M3 色板
@@ -272,6 +333,11 @@ ApplicationWindow {
             break
         case "toggle_downloads":
             Nav.openDownloadsPanel()
+            break
+        // 注意：不要放进 navActions —— 那个列表会无条件先 showMainWindow()，
+        // 紧接着本动作再判断「可见且活动」就会立刻又隐藏，表现为按了没反应。
+        case "toggle_main_window":
+            root.toggleMainWindow()
             break
         case "toggle_floating_lyrics":
             Settings.set("floatingLyricsEnabled", !(Settings.get("floatingLyricsEnabled", false) === true))

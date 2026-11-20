@@ -10,7 +10,14 @@ Window {
     property Window mainWindow: null
 
     readonly property real panelWidth: 340
+    // 高度固定：面板是可见状态的无边框 Qt.Tool 窗口，运行期改 height 会让内容停在
+    // 旧布局里错位（重新显示才恢复），所以新增控件一律在行内解决、不撑高窗口。
     readonly property real panelHeight: 436
+
+    /** 常驻：开启后不因失焦 / 主窗口激活自动收起（Esc、关闭按钮、点动作项仍会收起）。 */
+    readonly property bool persistent: Settings.get("trayPanelPersistent", false) === true
+    /** 悬浮歌词位置锁定状态：锁定时悬浮窗整窗鼠标穿透，面板里给一个解锁兜底入口。 */
+    readonly property bool floatingLyricsLocked: Settings.get("floatingLyricsLocked", false) === true
 
     width: panelWidth
     height: panelHeight
@@ -61,6 +68,20 @@ Window {
         return hours > 0 ? (hours + ":" + mm + ":" + ss) : (mm + ":" + ss)
     }
 
+    /**
+     * 动作列表。
+     *
+     * 高度固定、条目也固定：新增的「解锁悬浮歌词位置」不占一行，
+     * 而是挂在「悬浮歌词」这一行的右侧（见 delegate 里的 unlockButton）。
+     */
+    readonly property var actionModel: [
+        { "icon": "home", "label": I18n.tr("显示主窗口"), "action": "showWindow" },
+        { "icon": "album", "label": I18n.tr("打开播放页"), "action": "nowplaying" },
+        { "icon": "settings", "label": I18n.tr("设置"), "action": "settings" },
+        { "icon": "download", "label": I18n.tr("下载管理"), "action": "downloads" },
+        { "icon": "lyrics", "label": Settings.get("floatingLyricsEnabled", false) ? I18n.tr("关闭悬浮歌词") : I18n.tr("开启悬浮歌词"), "action": "floating" }
+    ]
+
     // 失焦自动收起。注意这里只看「本面板自身」是否还激活：
     // 主窗口隐藏到托盘时整个应用会失活（Qt.application.state 变 Inactive），
     // 若用应用级状态判断，会刚弹出就被自己收起来——这正是面板弹不出来的原因。
@@ -73,7 +94,8 @@ Window {
     }
 
     onActiveChanged: {
-        if (!active && visible && !panel._justShown)
+        // 常驻模式下失焦不收起：方便连续点多个动作（如先开悬浮歌词再解锁）
+        if (!active && visible && !panel._justShown && !panel.persistent)
             hidePanel()
     }
 
@@ -81,6 +103,9 @@ Window {
     property Connections mainWindowConnection: Connections {
         target: panel.mainWindow
         function onActiveChanged() {
+            // 常驻模式下切到主窗口也不收起
+            if (panel.persistent)
+                return
             // 面板刚弹出的瞬间主窗口可能正好被激活，这里要和失焦逻辑一样加豁免，
             // 否则从托盘菜单打开面板会被立刻收起来。
             if (panel._justShown || panel._justShownTimer.running)
@@ -114,13 +139,17 @@ Window {
         }
     }
 
-    // Wayland 下 QWindow.active / 失焦事件不总是可靠：面板打开后若长时间无操作则自动收起
+    // Wayland 下 QWindow.active / 失焦事件不总是可靠：面板打开后若长时间无操作则自动收起。
+    // 常驻模式（trayPanelPersistent）下关掉这个兜底——用户明确要求面板留在这里，
+    // 收起只能由 Esc / 关闭按钮 / 点动作项触发。
     property bool hovered: false
     property Timer autoHideTimer: Timer {
         interval: 15000
         repeat: false
-        running: panel.visible && !panel.hovered
-        onTriggered: panel.hidePanel()
+        running: panel.visible && !panel.hovered && !panel.persistent
+        // running 绑定会被 restart() 打断（start/restart 直接写 running），
+        // 这里再判断一次，确保常驻模式任何情况下都不会被这个兜底计时器收起。
+        onTriggered: if (!panel.persistent) panel.hidePanel()
     }
     onVisibleChanged: if (visible) autoHideTimer.restart()
 
@@ -356,13 +385,7 @@ Window {
                 spacing: 2
 
                 Repeater {
-                    model: [
-                        { "icon": "home", "label": "显示主窗口", "action": "showWindow" },
-                        { "icon": "album", "label": "打开播放页", "action": "nowplaying" },
-                        { "icon": "settings", "label": "设置", "action": "settings" },
-                        { "icon": "download", "label": "下载管理", "action": "downloads" },
-                        { "icon": "lyrics", "label": Settings.get("floatingLyricsEnabled", false) ? "关闭悬浮歌词" : "开启悬浮歌词", "action": "floating" }
-                    ]
+                    model: panel.actionModel
                     delegate: Rectangle {
                         required property var modelData
                         width: parent.width
@@ -398,7 +421,9 @@ Window {
                         }
 
                         MouseArea {
+                            // 右侧留出解锁按钮的位置，避免点解锁也触发整行动作
                             anchors.fill: parent
+                            anchors.rightMargin: unlockButton.visible ? unlockButton.width + 6 : 0
                             onClicked: {
                                 panel.hidePanel()
                                 switch (modelData.action) {
@@ -423,6 +448,54 @@ Window {
                                     Settings.set("floatingLyricsEnabled", !(Settings.get("floatingLyricsEnabled", false) === true))
                                     break
                                 }
+                            }
+                        }
+
+                        // 悬浮歌词锁定时，「悬浮歌词」这一行右侧多一个解锁入口。
+                        // 放行内而不是单独加一行：面板高度固定（运行期改高度会错位），
+                        // 单独加一行又会把动作列表挤到窗口外。
+                        // 必须声明在整行 MouseArea 之后，否则会被整行的点击区盖住点不到。
+                        Rectangle {
+                            id: unlockButton
+                            anchors.right: parent.right
+                            anchors.rightMargin: 6
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: modelData.action === "floating" && panel.floatingLyricsLocked
+                            width: visible ? unlockRow.width + 16 : 0
+                            height: 24
+                            radius: 12
+                            color: unlockHover.hovered ? Theme.withAlpha(Theme.primary, 0.16) : Theme.withAlpha(Theme.primary, 0.08)
+
+                            Row {
+                                id: unlockRow
+                                anchors.centerIn: parent
+                                spacing: 4
+
+                                NeriIcon {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    name: "lock_open"
+                                    iconSize: 14
+                                    color: Theme.primary
+                                }
+
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: I18n.tr("解除位置锁定")
+                                    color: Theme.primary
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 11
+                                }
+                            }
+
+                            HoverHandler {
+                                id: unlockHover
+                                cursorShape: Qt.PointingHandCursor
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                // 只处理「解锁」，不收起面板：用户可能还要继续操作
+                                onClicked: Settings.set("floatingLyricsLocked", false)
                             }
                         }
                     }
