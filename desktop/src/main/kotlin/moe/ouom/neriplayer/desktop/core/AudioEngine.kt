@@ -46,7 +46,7 @@ interface AudioEngine {
     fun play()
     fun pause()
     fun release()
-    fun seekTo(positionMs: Long)
+    fun seekTo(positionMs: Long, input: AudioInput? = null)
     fun setVolume(volume: Float)
     fun setSpeed(speed: Float)
     fun setPitch(semitones: Float)
@@ -131,6 +131,7 @@ class FfmpegAudioEngine : AudioEngine {
     private var offsetMs: Long = 0L
     private var durationMs: Long = 0L
     private var volume: Float = 0.85f
+    /** 音量由命令线程写、PCM 写入线程读，必须 volatile 保证即时可见。 */
     private var speed: Float = 1.0f
     private var pitch: Float = 0.0f
     private var loudness: Boolean = false
@@ -238,13 +239,14 @@ class FfmpegAudioEngine : AudioEngine {
         _snapshot.value = EngineSnapshot()
     }
 
-    override fun seekTo(positionMs: Long) {
+    override fun seekTo(positionMs: Long, input: AudioInput?) {
         val target = positionMs.coerceAtLeast(0L).let { if (durationMs > 0) it.coerceAtMost(durationMs) else it }
         val shouldPlay = synchronized(lock) {
             offsetMs = target
+            if (input != null) this@FfmpegAudioEngine.input = input
             playRequested
         }
-        startPipeline(startMs = target, autoPlay = shouldPlay)
+        startPipeline(startMs = target, autoPlay = shouldPlay, input = input)
     }
 
     override fun setVolume(volume: Float) {
@@ -366,7 +368,7 @@ class FfmpegAudioEngine : AudioEngine {
         val info = DataLine.Info(SourceDataLine::class.java, format)
         val newLine = runCatching {
             (AudioSystem.getLine(info) as SourceDataLine).apply {
-                open(format, SAMPLE_RATE * BYTES_PER_FRAME)
+                open(format, SAMPLE_RATE * BYTES_PER_FRAME / 25)  // ~40ms 缓冲：音量/淡入淡出即时生效
             }
         }.getOrElse { error ->
             val message = "无法打开音频输出设备：${error.message ?: error.javaClass.simpleName}"
@@ -539,7 +541,7 @@ class JavaSoundAudioEngine : AudioEngine {
     private var input: AudioInput? = null
     private var offsetMs = 0L
     private var durationMs = 0L
-    private var volume = 0.85f
+    @Volatile private var volume = 0.85f
     @Volatile private var frameBytes = 4
     @Volatile private var sampleRate = SAMPLE_RATE
     private var playRequested = false
@@ -640,9 +642,10 @@ class JavaSoundAudioEngine : AudioEngine {
         _snapshot.value = EngineSnapshot()
     }
 
-    override fun seekTo(positionMs: Long) {
+    override fun seekTo(positionMs: Long, input: AudioInput?) {
         synchronized(lock) {
             offsetMs = positionMs.coerceAtLeast(0L)
+            if (input != null) this@JavaSoundAudioEngine.input = input
             generation += 1
             closeLocked()
         }
@@ -687,7 +690,9 @@ class JavaSoundAudioEngine : AudioEngine {
         frameBytes = (format.sampleSizeInBits / 8).coerceAtLeast(1) * format.channels.coerceAtLeast(1)
         sampleRate = format.frameRate.toInt().coerceAtLeast(1)
         val info = DataLine.Info(SourceDataLine::class.java, format)
-        val newLine = runCatching { (AudioSystem.getLine(info) as SourceDataLine).apply { open(format) } }
+        val newLine = runCatching { (AudioSystem.getLine(info) as SourceDataLine).apply {
+            open(format, (sampleRate * frameBytes.toLong() / 25).toInt().coerceAtLeast(1024))  // ~40ms
+        } }
             .getOrElse { error ->
                 val message = "无法打开音频输出设备：${error.message}"
                 _snapshot.value = _snapshot.value.copy(error = message, buffering = false)
@@ -836,21 +841,23 @@ class PcmTapSlot {
 
 /** 16bit PCM 原地缩放；frameBytes 为每帧字节数（采样宽度 × 声道数）。 */
 private fun scalePcm(buffer: ByteArray, length: Int, gain: Float, frameBytes: Int) {
+    if (gain == 1f) return
+    if (gain <= 0f) { java.util.Arrays.fill(buffer, 0, length, 0.toByte()); return }
+    // 逐 16bit 采样处理：一帧可能是立体声（4 字节 = L2+R2），此前只处理帧内前 2 字节，
+    // 导致右声道不受音量/淡入淡出影响（滑到最低仍有声音）。
     var index = 0
-    val step = frameBytes.coerceAtLeast(2)
     while (index + 1 < length) {
         val sample = ((buffer[index].toInt() and 0xFF) or (buffer[index + 1].toInt() shl 8)).toShort()
         val scaled = (sample * gain).toInt().coerceIn(-32768, 32767)
         buffer[index] = (scaled and 0xFF).toByte()
         buffer[index + 1] = ((scaled shr 8) and 0xFF).toByte()
-        index += step
+        index += 2
     }
 }
 
-/** 16bit PCM 叠加：按较短的一侧混合，防止越界。 */
+/** 16bit PCM 叠加：按较短的一侧混合，防止越界。同样逐声道处理，避免右声道漏混。 */
 private fun mixPcm(target: ByteArray, targetLength: Int, source: ByteArray, sourceLength: Int, frameBytes: Int) {
-    val step = frameBytes.coerceAtLeast(2)
-    val limit = (minOf(targetLength, sourceLength) / step) * step
+    val limit = minOf(targetLength, sourceLength)
     var index = 0
     while (index + 1 < limit) {
         val a = ((target[index].toInt() and 0xFF) or (target[index + 1].toInt() shl 8)).toShort()
@@ -858,7 +865,7 @@ private fun mixPcm(target: ByteArray, targetLength: Int, source: ByteArray, sour
         val mixed = (a.toInt() + b.toInt()).coerceIn(-32768, 32767)
         target[index] = (mixed and 0xFF).toByte()
         target[index + 1] = ((mixed shr 8) and 0xFF).toByte()
-        index += step
+        index += 2
     }
 }
 

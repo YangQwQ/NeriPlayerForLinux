@@ -179,9 +179,9 @@ class HttpService {
         val host = runCatching { URI(url).host }.getOrNull().orEmpty()
         val builder = HttpRequest.newBuilder(URI(url))
             .timeout(Duration.ofSeconds(25))
-            .header("User-Agent", DESKTOP_USER_AGENT)
-        headers.forEach { (key, value) -> builder.header(key, value) }
-        cookieHeaderFor(host)?.let { builder.header("Cookie", it) }
+            .setHeader("User-Agent", DESKTOP_USER_AGENT)
+        headers.forEach { (key, value) -> builder.setHeader(key, value) }
+        cookieHeaderFor(host)?.let { builder.setHeader("Cookie", it) }
         val response = client.send(builder.GET().build(), HttpResponse.BodyHandlers.ofByteArray())
         storeCookies(host, response)
         response.body()

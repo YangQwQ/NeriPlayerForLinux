@@ -117,6 +117,45 @@ class PlayerManager(
     private var sleepTimerJob: Job? = null
     private val resolveMutex = Mutex()
     private val resolvedCache = ConcurrentHashMap<String, AudioInput>()
+
+    /**
+     * 下一首的内存音频缓存：播放稳定后后台把下一首整首下载到 /dev/shm（内存文件系统，
+     * 不落磁盘）的单个固定文件，切到下一首时直接按本地文件读，无联网等待。
+     * 只保留一首：每次预取前覆盖旧文件。/dev/shm 不可用则回退普通缓存目录。
+     */
+    private val audioCacheDir: File by lazy {
+        // /dev/shm 本身存在且可写时用它（内存文件系统），否则回退普通缓存目录
+        val shmRoot = File("/dev/shm")
+        val dir = if (shmRoot.exists() && shmRoot.canWrite()) File(shmRoot, "NeriPlayer/audio")
+                  else File(AppDirs.cacheDir, "audio")
+        dir.apply { mkdirs() }
+        // 清理旧版本遗留的按 key 命名的缓存文件（新版只用 current.audio 单文件）
+        runCatching { dir.listFiles()?.filter { it.name != "current.audio" && it.name != "current.audio.tmp" }?.forEach { it.delete() } }
+        dir
+    }
+    /** 当前预取缓存对应的歌曲 key；null 表示没有缓存。 */
+    @Volatile private var audioCachedKey: String? = null
+    private val audioCacheFile: File get() = File(audioCacheDir, "current.audio")
+
+    /** 后台下载指定歌曲到唯一的内存缓存文件；成功记录 audioCachedKey。 */
+    private suspend fun prefetchAudio(song: Song, input: AudioInput) {
+        val url = input.url ?: return
+        val bytes = withContext(Dispatchers.IO) {
+            online.httpService.download(url, input.headers)
+        }
+        if (bytes == null || bytes.isEmpty()) return
+        val ok = withContext(Dispatchers.IO) {
+            runCatching {
+                audioCachedKey = null   // 先作废旧缓存，避免切歌时读到半写文件
+                val tmp = File(audioCacheDir, "current.audio.tmp")
+                tmp.writeBytes(bytes)
+                if (audioCacheFile.exists()) audioCacheFile.delete()
+                tmp.renameTo(audioCacheFile)
+                audioCacheFile.length() > 0L
+            }.getOrDefault(false)
+        }
+        audioCachedKey = if (ok) song.key else null
+    }
     private val seedCache = ConcurrentHashMap<String, String>()
 
     /** 网易云不可播时的哔哩哔哩兜底：缓存、提示去重与引擎侧失败重试都在内部处理。 */
@@ -356,7 +395,12 @@ class PlayerManager(
 
     fun seekTo(positionMs: Long) {
         engine.fadeReset(if (_state.value == PlaybackState.PLAYING) 1f else 0f)
-        engine.seekTo(positionMs)
+        // 当前歌的内存缓存就绪时用本地文件 seek（瞬时）；否则维持 URL 直连 seek。
+        val song = _currentSong.value
+        val cached = audioCachedKey
+        val seekInput = if (song != null && cached == song.key && audioCacheFile.isFile)
+            AudioInput(path = audioCacheFile.absolutePath) else null
+        engine.seekTo(positionMs, seekInput)
     }
 
     /** 直接播放队列中指定下标（Qt 前端的队列点击用）。 */
@@ -486,7 +530,38 @@ class PlayerManager(
             history.record(song)
             stats.recordPlay(song)
             persistQueueState()
+            // 播放稳定后：后台下载当前歌到内存缓存（供 seek 瞬时切换），
+            // 并预解析下一首直链（切歌时省去网络解析）。都不阻塞当前播放。
+            scope.launch { cacheCurrentForSeek() }
         }
+    }
+
+    /**
+     * 后台缓存当前歌音频到唯一的内存文件（供 seek 使用），并预解析下一首直链。
+     * 缓存文件同时只存在一首：切歌后会被新的当前歌覆盖，不会累积占用。
+     */
+    private suspend fun cacheCurrentForSeek() {
+        val song = _currentSong.value ?: return
+        val input = resolvedCache[song.key] ?: runCatching { resolveInput(song) }.getOrNull() ?: return
+        if (input.url != null && (audioCachedKey != song.key || !audioCacheFile.isFile)) {
+            prefetchAudio(song, input)
+        }
+        // 预解析下一首直链，切歌更快（不下载音频，仅缓存地址）
+        val queue = _queue.value
+        val current = _currentIndex.value
+        val nextIndex = resolveNextIndex(userInitiated = false)?.takeIf { it != current } ?: return
+        val next = queue.getOrNull(nextIndex) ?: return
+        if (!resolvedCache.containsKey(next.key)) runCatching { resolveInput(next) }
+        trimResolvedCache(current, setOf(nextIndex))
+    }
+
+    /** 只保留当前与下一首的音源地址缓存（音频缓存始终只有一个文件）。 */
+    private fun trimResolvedCache(current: Int, neighbors: Set<Int>) {
+        val queue = _queue.value
+        val keep = HashSet<String>()
+        keep += queue.getOrNull(current)?.key ?: ""
+        neighbors.forEach { index -> queue.getOrNull(index)?.key?.let(keep::add) }
+        resolvedCache.keys.removeIf { it !in keep }
     }
 
     /**
@@ -561,10 +636,11 @@ class PlayerManager(
             neteaseAutoSource.consumeEngineFailureRetry(song.key)
         if (!engineFailureRetry) {
             resolvedCache[song.key]?.let { cached ->
-                if (song.source == MediaSource.LOCAL) {
-                    val path = cached.path
-                    if (path != null && File(path).isFile) return@withLock cached
-                } else {
+                val path = cached.path
+                if (path != null) {
+                    // 内存缓存文件被裁剪掉后要重新解析，不能返回失效路径
+                    if (File(path).isFile) return@withLock cached
+                } else if (cached.url != null) {
                     return@withLock cached
                 }
             }
@@ -577,6 +653,7 @@ class PlayerManager(
             val resolved = online.resolvePlayback(song, settings.current.qualityPreference)
             if (resolved != null) {
                 resolvedCache[song.key] = resolved
+                // 首播/切歌照常走 URL 直连，不等待缓存；本地缓存只在 seek 时使用
                 return@withLock resolved
             }
             if (song.source == MediaSource.NETEASE) {
