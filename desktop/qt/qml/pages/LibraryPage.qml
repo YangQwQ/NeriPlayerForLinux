@@ -125,7 +125,7 @@ Item {
         page.loading = true
         Api.get("library.songs", {}, function(result, error) {
             if (error) {
-                page.errorText = error.message || "加载本地歌曲失败"
+                page.errorText = error.message || I18n.tr("加载本地歌曲失败")
                 page.loading = false
                 return
             }
@@ -163,14 +163,14 @@ Item {
 
     function rescan(notify) {
         if (notify !== false)
-            Toast.show("正在扫描本地音乐…")
+            Toast.show(I18n.tr("正在扫描本地音乐…"))
         Api.call("library.scan").then(function(result) {
             page.refreshing = false
             page.reloadLibrary()
             page.reloadScanState()
         }).catch(function(error) {
             page.refreshing = false
-            Toast.show(error && error.message ? error.message : "扫描失败", "error")
+            Toast.show(error && error.message ? error.message : I18n.tr("扫描失败"), "error")
         })
     }
 
@@ -203,7 +203,7 @@ Item {
         page.scanTotal = data.total || 0
         page.scanFound = data.found || 0
         if (!data.running && data.error)
-            Toast.show("扫描失败：" + data.error, "error")
+            Toast.show(I18n.tr("扫描失败：") + data.error, "error")
     }
 
     function onCollectionsChanged() {
@@ -249,7 +249,7 @@ Item {
             anchors.left: parent.left
             anchors.leftMargin: Theme.spacingXl
             anchors.verticalCenter: parent.verticalCenter
-            text: "媒体库"
+            text: I18n.tr("媒体库")
             color: Theme.onSurfaceColor
             font.family: Theme.fontFamily
             font.pixelSize: Theme.textStyle("titleLarge").size
@@ -265,7 +265,7 @@ Item {
                 icon: "history"
                 iconSize: 22
                 size: 42
-                tooltip: "最近播放"
+                tooltip: I18n.tr("最近播放")
                 onClicked: Nav.push("recent")
             }
 
@@ -273,7 +273,7 @@ Item {
                 icon: "bar_chart"
                 iconSize: 22
                 size: 42
-                tooltip: "播放统计"
+                tooltip: I18n.tr("播放统计")
                 onClicked: Nav.push("stats")
             }
 
@@ -282,7 +282,7 @@ Item {
                 icon: "refresh"
                 iconSize: 22
                 size: 42
-                tooltip: page.refreshing ? "正在刷新媒体库…" : "刷新（重新加载并重扫媒体库）"
+                tooltip: page.refreshing ? I18n.tr("正在刷新媒体库…") : I18n.tr("刷新（重新加载并重扫媒体库）")
                 opacity: page.refreshing ? 0.5 : 1
                 enabled: !page.refreshing
                 onClicked: page.refreshAll()
@@ -323,7 +323,7 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     padding: 0
                     text: page.query
-                    placeholderText: "搜索本地歌曲 / 歌手 / 专辑"
+                    placeholderText: I18n.tr("搜索本地歌曲 / 歌手 / 专辑")
                     placeholderTextColor: Theme.onSurfaceVariantColor
                     color: Theme.onSurfaceColor
                     selectByMouse: true
@@ -356,9 +356,9 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             implicitHeight: 34
             options: [
-                { value: "local", label: "本地" },
-                { value: "favorites", label: "收藏" },
-                { value: "online", label: "在线音源" }
+                { value: "local", label: I18n.tr("本地") },
+                { value: "favorites", label: I18n.tr("收藏") },
+                { value: "online", label: I18n.tr("在线音源") }
             ]
             value: page.primaryTab
             onSelected: function(value) { page.primaryTab = value }
@@ -375,10 +375,10 @@ Item {
             visible: page.primaryTab === "local" && page.errorText === ""
             horizontalPadding: Theme.spacingLg
             options: [
-                { value: "songs", label: "歌曲" },
-                { value: "artists", label: "歌手" },
-                { value: "albums", label: "专辑" },
-                { value: "playlists", label: "歌单" }
+                { value: "songs", label: I18n.tr("歌曲") },
+                { value: "artists", label: I18n.tr("歌手") },
+                { value: "albums", label: I18n.tr("专辑") },
+                { value: "playlists", label: I18n.tr("歌单") }
             ]
             value: page.localTab
             onSelected: function(value) { page.localTab = value }
@@ -428,8 +428,8 @@ Item {
                 anchors.leftMargin: Theme.spacingLg
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.verticalCenterOffset: 4
-                text: "正在扫描本地音乐 " + page.scanProcessed + "/" + page.scanTotal
-                      + "，已找到 " + page.scanFound + " 首"
+                text: I18n.tr("正在扫描本地音乐 ") + page.scanProcessed + "/" + page.scanTotal
+                      + I18n.tr("，已找到 ") + page.scanFound + I18n.tr(" 首")
                 color: Theme.onSurfaceVariantColor
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.textStyle("labelSmall").size
@@ -442,7 +442,7 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             visible: page.loading && page.songs.length === 0 && page.primaryTab === "local"
-            text: "正在加载本地媒体库…"
+            text: I18n.tr("正在加载本地媒体库…")
         }
 
         ErrorCard {
@@ -499,14 +499,14 @@ Item {
                         spacing: Theme.spacingSm
 
                         LibraryButton {
-                            text: "播放全部"
+                            text: I18n.tr("播放全部")
                             icon: "play_arrow"
                             enabled: page.filteredSongs.length > 0
                             onClicked: page.playSongs(page.filteredSongs, 0)
                         }
 
                         LibraryButton {
-                            text: "随机"
+                            text: I18n.tr("随机")
                             icon: "shuffle"
                             enabled: page.filteredSongs.length > 0
                             onClicked: page.shuffleSongs(page.filteredSongs)
@@ -518,10 +518,10 @@ Item {
                     anchors.fill: parent
                     visible: page.filteredSongs.length === 0
                     icon: page.query.trim() !== "" ? "search_off" : "folder"
-                    title: page.query.trim() !== "" ? "没有匹配的本地歌曲" : "还没有本地音乐"
+                    title: page.query.trim() !== "" ? I18n.tr("没有匹配的本地歌曲") : I18n.tr("还没有本地音乐")
                     hint: page.query.trim() !== ""
-                          ? "换个关键词试试"
-                          : "在设置 - 媒体库中添加音乐文件夹，然后点击右上角刷新按钮扫描"
+                          ? I18n.tr("换个关键词试试")
+                          : I18n.tr("在设置 - 媒体库中添加音乐文件夹，然后点击右上角刷新按钮扫描")
                 }
 
                 ListView {
@@ -592,7 +592,7 @@ Item {
                             property var group: modelData
 
                             name: group ? group.name : ""
-                            subtitle: (group && group.songs ? group.songs.length : 0) + " 首"
+                            subtitle: (group && group.songs ? group.songs.length : 0) + I18n.tr(" 首")
                             coverPath: group && group.songs && group.songs.length > 0 && group.songs[0].artworkPath
                                        ? group.songs[0].artworkPath : ""
                             onClicked: Nav.push("localArtist", group.name)
@@ -604,8 +604,8 @@ Item {
                     anchors.fill: parent
                     visible: page.filteredArtists.length === 0
                     icon: "person"
-                    title: "暂无本地歌手"
-                    hint: "导入本地音频后，会按歌曲艺术家自动分类"
+                    title: I18n.tr("暂无本地歌手")
+                    hint: I18n.tr("导入本地音频后，会按歌曲艺术家自动分类")
                 }
             }
 
@@ -640,8 +640,8 @@ Item {
                             property var group: modelData
 
                             name: group ? group.name : ""
-                            subtitle: (group && group.artist ? group.artist : "未知艺术家") + " · "
-                                      + (group && group.songs ? group.songs.length : 0) + " 首"
+                            subtitle: (group && group.artist ? group.artist : I18n.tr("未知艺术家")) + " · "
+                                      + (group && group.songs ? group.songs.length : 0) + I18n.tr(" 首")
                             coverPath: group && group.songs && group.songs.length > 0 && group.songs[0].artworkPath
                                        ? group.songs[0].artworkPath : ""
                             onClicked: page.openLocalAlbum(group)
@@ -653,8 +653,8 @@ Item {
                     anchors.fill: parent
                     visible: page.filteredAlbums.length === 0
                     icon: "album"
-                    title: "暂无本地专辑"
-                    hint: "带有专辑标签的本地音乐会显示在这里"
+                    title: I18n.tr("暂无本地专辑")
+                    hint: I18n.tr("带有专辑标签的本地音乐会显示在这里")
                 }
             }
 
@@ -685,7 +685,7 @@ Item {
                             anchors.left: parent.left
                             anchors.leftMargin: Theme.spacingLg
                             anchors.verticalCenter: parent.verticalCenter
-                            text: "歌单"
+                            text: I18n.tr("歌单")
                             color: Theme.onSurfaceColor
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.textStyle("titleMedium").size
@@ -696,7 +696,7 @@ Item {
                             anchors.right: parent.right
                             anchors.rightMargin: Theme.spacingLg
                             anchors.verticalCenter: parent.verticalCenter
-                            text: "新建歌单"
+                            text: I18n.tr("新建歌单")
                             icon: "add"
                             onClicked: createPlaylistDialog.openFor("")
                         }
@@ -717,11 +717,11 @@ Item {
                                 property int cardIndex: index
 
                                 readonly property var playlist: cardIndex === 0
-                                                                 ? ({ id: "system:favorites", name: "我喜欢的音乐", songs: page.favorites, system: true })
+                                                                 ? ({ id: "system:favorites", name: I18n.tr("我喜欢的音乐"), songs: page.favorites, system: true })
                                                                  : page.filteredPlaylists[cardIndex - 1]
 
                                 name: playlist.name
-                                subtitle: (playlist.songs ? playlist.songs.length : 0) + " 首"
+                                subtitle: (playlist.songs ? playlist.songs.length : 0) + I18n.tr(" 首")
                                 coverPath: playlist.songs && playlist.songs.length > 0 && playlist.songs[0].artworkPath
                                            ? playlist.songs[0].artworkPath : ""
                                 placeholderIcon: "favorite"
@@ -734,8 +734,8 @@ Item {
                         width: parent.width
                         visible: page.filteredPlaylists.length === 0
                         icon: "queue_music"
-                        title: page.query.trim() !== "" ? "没有匹配的歌单" : "还没有自建歌单"
-                        hint: "点击右上角「新建歌单」，再从歌曲的更多菜单里添加歌曲"
+                        title: page.query.trim() !== "" ? I18n.tr("没有匹配的歌单") : I18n.tr("还没有自建歌单")
+                        hint: I18n.tr("点击右上角「新建歌单」，再从歌曲的更多菜单里添加歌曲")
                     }
                 }
             }
@@ -796,7 +796,7 @@ Item {
 
                                 Text {
                                     Layout.fillWidth: true
-                                    text: "我喜欢的音乐"
+                                    text: I18n.tr("我喜欢的音乐")
                                     elide: Text.ElideRight
                                     color: Theme.onSecondaryContainerColor
                                     font.family: Theme.fontFamily
@@ -805,7 +805,7 @@ Item {
                                 }
 
                                 Text {
-                                    text: page.favorites.length + " 首"
+                                    text: page.favorites.length + I18n.tr(" 首")
                                     Layout.alignment: Qt.AlignVCenter
                                     color: Theme.onSecondaryContainerColor
                                     font.family: Theme.fontFamily
@@ -817,7 +817,7 @@ Item {
                                 spacing: Theme.spacingSm
 
                                 LibraryButton {
-                                    text: "播放全部"
+                                    text: I18n.tr("播放全部")
                                     icon: "play_arrow"
                                     filled: true
                                     enabled: page.favorites.length > 0
@@ -825,7 +825,7 @@ Item {
                                 }
 
                                 LibraryButton {
-                                    text: "查看歌单"
+                                    text: I18n.tr("查看歌单")
                                     enabled: page.favorites.length > 0
                                     onClicked: page.openPlaylist("system:favorites")
                                 }
@@ -836,9 +836,9 @@ Item {
 
                 SectionHeader {
                     width: parent.width
-                    title: "喜欢的歌曲"
+                    title: I18n.tr("喜欢的歌曲")
                     icon: "favorite"
-                    trailingText: page.favorites.length + " 首"
+                    trailingText: page.favorites.length + I18n.tr(" 首")
                 }
             }
 
@@ -867,8 +867,8 @@ Item {
                 width: favoritesPane.width
                 visible: page.favorites.length === 0
                 icon: "favorite_border"
-                title: "还没有收藏的歌曲"
-                hint: "在歌曲的「更多」菜单里点击「收藏」，歌曲会出现在这里"
+                title: I18n.tr("还没有收藏的歌曲")
+                hint: I18n.tr("在歌曲的「更多」菜单里点击「收藏」，歌曲会出现在这里")
             }
         }
 
@@ -890,10 +890,10 @@ Item {
         onRemoveRequested: function(song) {
             const playlistId = songMenu.playlistId !== "" ? songMenu.playlistId : "system:favorites"
             Api.call("collections.removeSong", { id: playlistId, songKey: song.key }).then(function() {
-                Toast.show("已从列表移除")
+                Toast.show(I18n.tr("已从列表移除"))
                 page.reloadCollections()
             }).catch(function(error) {
-                Toast.show(error && error.message ? error.message : "移除失败", "error")
+                Toast.show(error && error.message ? error.message : I18n.tr("移除失败"), "error")
             })
         }
     }

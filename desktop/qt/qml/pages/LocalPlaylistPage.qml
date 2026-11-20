@@ -39,10 +39,10 @@ DetailScaffold {
     readonly property bool isSystem: page.favoritesMode || (page.playlist ? !!page.playlist.system : false)
     readonly property string currentKey: Player.hasSong && Player.song ? Player.song.key : ""
 
-    title: page.playlist ? page.playlist.name : (page.favoritesMode ? "我喜欢的音乐" : "歌单")
+    title: page.playlist ? page.playlist.name : (page.favoritesMode ? I18n.tr("我喜欢的音乐") : I18n.tr("歌单"))
     subtitle: page.playlist
-              ? page.songs.length + " 首 · " + Format.formatLongDuration(Format.totalDuration(page.songs))
-                + (page.isSystem ? " · 我喜欢的音乐" : "")
+              ? page.songs.length + I18n.tr(" 首 · ") + Format.formatLongDuration(Format.totalDuration(page.songs))
+                + (page.isSystem ? I18n.tr(" · 我喜欢的音乐") : "")
               : ""
 
     actions: [
@@ -50,7 +50,7 @@ DetailScaffold {
             icon: "edit"
             iconSize: 22
             size: 44
-            tooltip: "重命名歌单"
+            tooltip: I18n.tr("重命名歌单")
             visible: page.playlist !== null && !page.isSystem
             onClicked: renameDialog.openFor(page.playlist.name, page.playlist.id)
         },
@@ -58,11 +58,11 @@ DetailScaffold {
             icon: "delete"
             iconSize: 22
             size: 44
-            tooltip: "删除歌单"
+            tooltip: I18n.tr("删除歌单")
             visible: page.playlist !== null && !page.isSystem
-            onClicked: deleteDialog.openFor("删除歌单",
-                                            "确定要删除歌单「" + page.playlist.name + "」吗？此操作不可恢复。",
-                                            "删除")
+            onClicked: deleteDialog.openFor(I18n.tr("删除歌单"),
+                                            I18n.tr("确定要删除歌单「") + page.playlist.name + I18n.tr("」吗？此操作不可恢复。"),
+                                            I18n.tr("删除"))
         }
     ]
 
@@ -71,16 +71,16 @@ DetailScaffold {
         Api.get("collections.list", {}, function(result, error) {
             page.loading = false
             if (error) {
-                page.errorText = error.message || "加载歌单失败"
+                page.errorText = error.message || I18n.tr("加载歌单失败")
                 return
             }
             page.errorText = ""
             page.userPlaylists = result.playlists || []
             page.favoritesPlaylist = result.favorites || null
             if (page.favoritesMode && page.favoritesPlaylist === null)
-                page.favoritesPlaylist = { id: "system:favorites", name: "我喜欢的音乐", songs: [], system: true }
+                page.favoritesPlaylist = { id: "system:favorites", name: I18n.tr("我喜欢的音乐"), songs: [], system: true }
             if (!page.favoritesMode && page.playlist === null)
-                page.errorText = "歌单不存在，它可能已经被删除"
+                page.errorText = I18n.tr("歌单不存在，它可能已经被删除")
         })
     }
 
@@ -112,10 +112,10 @@ DetailScaffold {
         if (!page.playlist || !song)
             return
         Api.call("collections.removeSong", { id: page.playlist.id, songKey: song.key }).then(function() {
-            Toast.show("已从歌单移除")
+            Toast.show(I18n.tr("已从歌单移除"))
             page.reload()
         }).catch(function(error) {
-            Toast.show(error && error.message ? error.message : "移除失败", "error")
+            Toast.show(error && error.message ? error.message : I18n.tr("移除失败"), "error")
         })
     }
 
@@ -133,17 +133,17 @@ DetailScaffold {
             return
         const to = from + delta
         if (to < 0) {
-            Toast.show("已经是第一首了")
+            Toast.show(I18n.tr("已经是第一首了"))
             return
         }
         if (to >= page.songs.length) {
-            Toast.show("已经是最后一首了")
+            Toast.show(I18n.tr("已经是最后一首了"))
             return
         }
         Api.call("collections.moveSong", { id: page.playlist.id, from: from, to: to }).then(function() {
             page.reload()
         }).catch(function(error) {
-            Toast.show(error && error.message ? error.message : "排序失败", "error")
+            Toast.show(error && error.message ? error.message : I18n.tr("排序失败"), "error")
         })
     }
 
@@ -152,10 +152,10 @@ DetailScaffold {
             return
         const playlistId = page.playlist.id
         Api.call("collections.delete", { id: playlistId }).then(function() {
-            Toast.show("歌单已删除")
+            Toast.show(I18n.tr("歌单已删除"))
             Nav.back()
         }).catch(function(error) {
-            Toast.show(error && error.message ? error.message : "删除失败", "error")
+            Toast.show(error && error.message ? error.message : I18n.tr("删除失败"), "error")
         })
     }
 
@@ -186,7 +186,7 @@ DetailScaffold {
     LoadingState {
         anchors.fill: parent
         visible: page.loading && page.playlist === null
-        text: "正在加载歌单…"
+        text: I18n.tr("正在加载歌单…")
     }
 
     ErrorCard {
@@ -262,7 +262,7 @@ DetailScaffold {
                         spacing: Theme.spacingSm
 
                         LibraryButton {
-                            text: "播放全部"
+                            text: I18n.tr("播放全部")
                             icon: "play_arrow"
                             filled: true
                             enabled: page.songs.length > 0
@@ -270,7 +270,7 @@ DetailScaffold {
                         }
 
                         LibraryButton {
-                            text: "随机播放"
+                            text: I18n.tr("随机播放")
                             icon: "shuffle"
                             enabled: page.songs.length > 0
                             onClicked: page.shuffleAll()
@@ -281,9 +281,9 @@ DetailScaffold {
 
             SectionHeader {
                 width: songList.width
-                title: "歌曲"
+                title: I18n.tr("歌曲")
                 icon: "music_note"
-                trailingText: page.songs.length + " 首"
+                trailingText: page.songs.length + I18n.tr(" 首")
             }
         }
 
@@ -316,10 +316,10 @@ DetailScaffold {
             width: songList.width
             visible: page.songs.length === 0
             icon: "queue_music"
-            title: "歌单还是空的"
+            title: I18n.tr("歌单还是空的")
             hint: page.isSystem
-                  ? "在歌曲的「更多」菜单里点击「收藏」，歌曲会出现在这里"
-                  : "在歌曲的「更多」菜单中选择「添加到歌单…」"
+                  ? I18n.tr("在歌曲的「更多」菜单里点击「收藏」，歌曲会出现在这里")
+                  : I18n.tr("在歌曲的「更多」菜单中选择「添加到歌单…」")
         }
     }
 
@@ -327,8 +327,8 @@ DetailScaffold {
     function songSummaryText() {
         if (!page.playlist)
             return ""
-        return page.songs.length + " 首 · " + Format.formatLongDuration(Format.totalDuration(page.songs))
-                + (page.isSystem ? " · 我喜欢的音乐" : "")
+        return page.songs.length + I18n.tr(" 首 · ") + Format.formatLongDuration(Format.totalDuration(page.songs))
+                + (page.isSystem ? I18n.tr(" · 我喜欢的音乐") : "")
     }
 
     SongActionsMenu {

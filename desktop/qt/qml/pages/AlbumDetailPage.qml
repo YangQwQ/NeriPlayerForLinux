@@ -47,13 +47,13 @@ Item {
     readonly property string sourceLabel: {
         switch (page.argSource) {
         case "NETEASE":
-            return "网易云音乐"
+            return I18n.tr("网易云音乐")
         case "YOUTUBE":
             return "YouTube Music"
         case "BILIBILI":
-            return "哔哩哔哩"
+            return I18n.tr("哔哩哔哩")
         default:
-            return "本地音乐"
+            return I18n.tr("本地音乐")
         }
     }
     readonly property string headerTitle: {
@@ -61,7 +61,7 @@ Item {
             return String(page.detail.name)
         if (page.argName !== "")
             return page.argName
-        return "专辑"
+        return I18n.tr("专辑")
     }
     readonly property string headerCover: {
         if (page.detail && page.detail.coverUrl)
@@ -93,7 +93,7 @@ Item {
     readonly property string statsText: {
         const parts = []
         if (page.trackCount > 0)
-            parts.push(page.trackCount + " 首")
+            parts.push(page.trackCount + I18n.tr(" 首"))
         if (page.totalDurationMs > 0)
             parts.push(Format.formatLongDuration(page.totalDurationMs))
         return parts.join(" · ")
@@ -129,11 +129,11 @@ Item {
     function handleLoadError(error) {
         if (error && error.code === "unknown_method") {
             page.degraded = true
-            page.degradeText = "当前后端暂不支持 YouTube 专辑详情（ytmusic.album）"
+            page.degradeText = I18n.tr("当前后端暂不支持 YouTube 专辑详情（ytmusic.album）")
             page.loading = false
             return
         }
-        page.errorMessage = error && error.message ? error.message : "加载失败"
+        page.errorMessage = error && error.message ? error.message : I18n.tr("加载失败")
         page.loading = false
     }
 
@@ -153,21 +153,21 @@ Item {
             page.songs = []
             page.loading = false
             page.degraded = true
-            page.degradeText = "B 站暂不支持专辑详情"
+            page.degradeText = I18n.tr("B 站暂不支持专辑详情")
             return
         }
         if (page.argId === "" && page.argName === "") {
             page.songs = []
             page.loading = false
-            page.errorMessage = "缺少专辑参数，请从专辑卡片或歌曲菜单打开"
+            page.errorMessage = I18n.tr("缺少专辑参数，请从专辑卡片或歌曲菜单打开")
             return
         }
         if (page.argSource === "YOUTUBE" && page.argId === "") {
             page.songs = []
             page.loading = false
             page.degraded = true
-            page.degradeText = "该 YouTube 歌曲没有专辑 id，暂无法打开专辑页，可在探索页搜索「"
-                               + page.argName + "」"
+            page.degradeText = I18n.tr("该 YouTube 歌曲没有专辑 id，暂无法打开专辑页，可在探索页搜索「")
+                               + page.argName + I18n.tr("」")
             return
         }
 
@@ -228,7 +228,7 @@ Item {
     // 用专辑名搜索网易云，挑同名专辑后用真实 id 加载详情。
     function resolveAlbumAndLoad(seq) {
         if (page.argName === "") {
-            page.errorMessage = "缺少专辑参数，请从专辑卡片或歌曲菜单打开"
+            page.errorMessage = I18n.tr("缺少专辑参数，请从专辑卡片或歌曲菜单打开")
             page.loading = false
             return
         }
@@ -250,7 +250,7 @@ Item {
             if (!hit && list.length > 0)
                 hit = list[0]
             if (!hit) {
-                page.errorMessage = "未找到专辑「" + page.argName + "」"
+                page.errorMessage = I18n.tr("未找到专辑「") + page.argName + I18n.tr("」")
                 page.loading = false
                 return
             }
@@ -281,7 +281,7 @@ Item {
         if (wanted === "") {
             page.songs = []
             page.loading = false
-            page.errorMessage = "缺少专辑名，无法从本地媒体库查找"
+            page.errorMessage = I18n.tr("缺少专辑名，无法从本地媒体库查找")
             return
         }
         const seq = ++page._seq
@@ -315,7 +315,7 @@ Item {
         }).catch(function(error) {
             if (seq !== page._seq)
                 return
-            page.errorMessage = error && error.message ? error.message : "读取本地媒体库失败"
+            page.errorMessage = error && error.message ? error.message : I18n.tr("读取本地媒体库失败")
             page.loading = false
         })
     }
@@ -368,7 +368,7 @@ Item {
             return
         }
         if (page.argSource !== "NETEASE") {
-            Toast.show("暂时无法打开该歌手的详情页", "info")
+            Toast.show(I18n.tr("暂时无法打开该歌手的详情页"), "info")
             return
         }
         // 网易云专辑详情没有直接给歌手 id，用歌手搜索兜底一次。
@@ -391,7 +391,7 @@ Item {
             if (!hit && list.length > 0)
                 hit = list[0]
             if (!hit) {
-                Toast.show("未找到歌手「" + name + "」", "info")
+                Toast.show(I18n.tr("未找到歌手「") + name + I18n.tr("」"), "info")
                 return
             }
             Nav.push("remoteArtist", {
@@ -402,7 +402,7 @@ Item {
                          "songCount": hit.songCount || 0
                      })
         }).catch(function() {
-            Toast.show("歌手信息加载失败", "error")
+            Toast.show(I18n.tr("歌手信息加载失败"), "error")
         })
     }
 
@@ -507,7 +507,7 @@ Item {
                 anchors.top: parent.top
                 anchors.topMargin: 96
                 visible: page.loading
-                text: "正在加载专辑…"
+                text: I18n.tr("正在加载专辑…")
             }
 
             ErrorCard {
@@ -516,7 +516,7 @@ Item {
                 anchors.top: parent.top
                 anchors.topMargin: 24
                 visible: page.errorMessage !== ""
-                message: "加载失败：" + page.errorMessage
+                message: I18n.tr("加载失败：") + page.errorMessage
                 onRetry: page.load()
             }
         }
@@ -602,7 +602,7 @@ Item {
                                     Text {
                                         id: artistLink
 
-                                        text: page.headerCreator !== "" ? page.headerCreator : "未知艺术家"
+                                        text: page.headerCreator !== "" ? page.headerCreator : I18n.tr("未知艺术家")
                                         color: artistLinkMouse.containsMouse && page.headerCreator !== ""
                                                ? Theme.primary : Theme.onSurfaceVariantColor
                                         font.family: Theme.fontFamily
@@ -647,7 +647,7 @@ Item {
                                     spacing: Theme.spacingSm
 
                                     PillButton {
-                                        label: "播放全部"
+                                        label: I18n.tr("播放全部")
                                         iconName: "play_arrow"
                                         filled: true
                                         enabled: page.songs.length > 0
@@ -656,7 +656,7 @@ Item {
                                     }
 
                                     PillButton {
-                                        label: "随机播放"
+                                        label: I18n.tr("随机播放")
                                         iconName: "shuffle"
                                         filled: false
                                         enabled: page.songs.length > 0
@@ -743,7 +743,7 @@ Item {
 
                             Text {
                                 width: parent.width
-                                text: page.descriptionExpanded ? "收起简介" : "展开简介"
+                                text: page.descriptionExpanded ? I18n.tr("收起简介") : I18n.tr("展开简介")
                                 color: Theme.primary
                                 font.family: Theme.fontFamily
                                 font.pixelSize: Theme.textStyle("labelMedium").size
@@ -760,7 +760,7 @@ Item {
 
                     SectionHeader {
                         width: parent.width
-                        title: "歌曲（" + page.songs.length + "）"
+                        title: I18n.tr("歌曲（") + page.songs.length + I18n.tr("）")
                         icon: "queue_music"
                     }
 
@@ -771,8 +771,8 @@ Item {
                         EmptyState {
                             anchors.fill: parent
                             visible: page.songs.length === 0
-                            title: page.degraded ? "专辑曲目暂不可用" : "这张专辑还没有曲目"
-                            hint: page.degraded ? page.degradeText : "稍后重试，或检查该音源是否需要登录"
+                            title: page.degraded ? I18n.tr("专辑曲目暂不可用") : I18n.tr("这张专辑还没有曲目")
+                            hint: page.degraded ? page.degradeText : I18n.tr("稍后重试，或检查该音源是否需要登录")
                             icon: "album"
                         }
                     }

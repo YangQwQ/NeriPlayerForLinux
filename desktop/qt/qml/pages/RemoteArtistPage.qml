@@ -44,20 +44,20 @@ Item {
     readonly property string sourceLabel: {
         switch (page.argSource) {
         case "NETEASE":
-            return "网易云音乐"
+            return I18n.tr("网易云音乐")
         case "YOUTUBE":
             return "YouTube Music"
         case "BILIBILI":
-            return "哔哩哔哩"
+            return I18n.tr("哔哩哔哩")
         default:
-            return "本地音乐"
+            return I18n.tr("本地音乐")
         }
     }
     readonly property var artistData: page.detail && page.detail.artist ? page.detail.artist : ({})
     readonly property string headerTitle: {
         if (page.artistData && page.artistData.name)
             return String(page.artistData.name)
-        return page.argName !== "" ? page.argName : "歌手"
+        return page.argName !== "" ? page.argName : I18n.tr("歌手")
     }
     readonly property string headerAvatar: {
         if (page.artistData && page.artistData.avatarUrl)
@@ -91,21 +91,21 @@ Item {
         if (page.detail && page.detail.artist && page.detail.artist.briefDesc)
             return String(page.detail.artist.briefDesc)
         if (page.argSource === "NETEASE" && page.workCount > 0)
-            return "网易云音乐歌手，共 " + page.workCount + " 首作品。"
+            return I18n.tr("网易云音乐歌手，共 ") + page.workCount + I18n.tr(" 首作品。")
         if (page.argSource === "YOUTUBE")
-            return "YouTube Music 艺术家。"
+            return I18n.tr("YouTube Music 艺术家。")
         if (page.argSource === "LOCAL")
-            return "本地媒体库中的歌手，共 " + page.songs.length + " 首歌曲、"
-                   + page.albums.length + " 张专辑。"
+            return I18n.tr("本地媒体库中的歌手，共 ") + page.songs.length + I18n.tr(" 首歌曲、")
+                   + page.albums.length + I18n.tr(" 张专辑。")
         return page.degradeText
     }
     // 头部信息行：作品数 + 当前热门曲目数（音源在顶栏/降级提示里展示，不重复）。
     readonly property string statsText: {
         const parts = []
         if (page.workCount > 0)
-            parts.push("作品 " + page.workCount + " 首")
+            parts.push(I18n.tr("作品 ") + page.workCount + I18n.tr(" 首"))
         if (page.songs.length > 0)
-            parts.push("热门 " + page.songs.length + " 首")
+            parts.push(I18n.tr("热门 ") + page.songs.length + I18n.tr(" 首"))
         return parts.join(" · ")
     }
     // 包成 {song, idx}，避免 Repeater 上下文里的 index 与 SongRow.index 同名冲突。
@@ -146,14 +146,14 @@ Item {
     function handleLoadError(error) {
         if (error && error.code === "unknown_method") {
             page.degraded = true
-            page.degradeText = "当前后端暂不支持 YouTube 歌手详情（ytmusic.artist）"
+            page.degradeText = I18n.tr("当前后端暂不支持 YouTube 歌手详情（ytmusic.artist）")
             page.detail = ({})
             page.songs = []
             page.albums = []
             page.loading = false
             return
         }
-        page.errorMessage = error && error.message ? error.message : "加载失败"
+        page.errorMessage = error && error.message ? error.message : I18n.tr("加载失败")
         page.loading = false
     }
 
@@ -173,21 +173,21 @@ Item {
             page.albums = []
             page.loading = false
             page.degraded = true
-            page.degradeText = "B 站暂不支持歌手详情，可在探索页按名称搜索「" + page.argName + "」。"
+            page.degradeText = I18n.tr("B 站暂不支持歌手详情，可在探索页按名称搜索「") + page.argName + I18n.tr("」。")
             if (page.argName === "")
-                page.degradeText = "B 站暂不支持歌手详情，可在探索页搜索该 UP 主。"
+                page.degradeText = I18n.tr("B 站暂不支持歌手详情，可在探索页搜索该 UP 主。")
             return
         }
         if (page.argId === "" && page.argName === "") {
             page.loading = false
-            page.errorMessage = "缺少歌手参数，请从探索页或歌曲菜单打开"
+            page.errorMessage = I18n.tr("缺少歌手参数，请从探索页或歌曲菜单打开")
             return
         }
         if (page.argSource === "YOUTUBE" && page.argId === "") {
             page.loading = false
             page.degraded = true
-            page.degradeText = "该 YouTube 歌曲没有歌手 id，暂无法打开歌手页，可在探索页搜索「"
-                               + page.argName + "」"
+            page.degradeText = I18n.tr("该 YouTube 歌曲没有歌手 id，暂无法打开歌手页，可在探索页搜索「")
+                               + page.argName + I18n.tr("」")
             return
         }
 
@@ -266,7 +266,7 @@ Item {
     // 用歌手名搜索网易云，挑同名歌手后用真实 id 加载详情。
     function resolveArtistAndLoad(seq) {
         if (page.argName === "") {
-            page.errorMessage = "缺少歌手参数，请从探索页或歌曲菜单打开"
+            page.errorMessage = I18n.tr("缺少歌手参数，请从探索页或歌曲菜单打开")
             page.loading = false
             return
         }
@@ -297,7 +297,7 @@ Item {
             if (!hit && list.length > 0)
                 hit = list[0]
             if (!hit) {
-                page.errorMessage = "未找到歌手「" + page.argName + "」"
+                page.errorMessage = I18n.tr("未找到歌手「") + page.argName + I18n.tr("」")
                 page.loading = false
                 return
             }
@@ -334,7 +334,7 @@ Item {
         const wanted = page.argName !== "" ? page.argName : page.argId
         if (wanted === "") {
             page.loading = false
-            page.errorMessage = "缺少歌手名，无法从本地媒体库查找"
+            page.errorMessage = I18n.tr("缺少歌手名，无法从本地媒体库查找")
             return
         }
         page.loading = true
@@ -384,7 +384,7 @@ Item {
         }).catch(function(error) {
             if (seq !== page._seq)
                 return
-            page.errorMessage = error && error.message ? error.message : "读取本地媒体库失败"
+            page.errorMessage = error && error.message ? error.message : I18n.tr("读取本地媒体库失败")
             page.loading = false
         })
     }
@@ -619,7 +619,7 @@ Item {
                                     spacing: Theme.spacingSm
 
                                     PillButton {
-                                        label: "播放全部"
+                                        label: I18n.tr("播放全部")
                                         iconName: "play_arrow"
                                         filled: true
                                         enabled: page.songs.length > 0
@@ -628,7 +628,7 @@ Item {
                                     }
 
                                     PillButton {
-                                        label: "随机播放"
+                                        label: I18n.tr("随机播放")
                                         iconName: "shuffle"
                                         filled: false
                                         enabled: page.songs.length > 0
@@ -697,7 +697,7 @@ Item {
 
                             Text {
                                 width: parent.width
-                                text: "简介"
+                                text: I18n.tr("简介")
                                 color: Theme.onSurfaceColor
                                 font.family: Theme.fontFamily
                                 font.pixelSize: Theme.textStyle("titleSmall").size
@@ -721,7 +721,7 @@ Item {
                     // ---- 热门歌曲 ----
                     SectionHeader {
                         width: parent.width
-                        title: "热门歌曲（" + page.songs.length + "）"
+                        title: I18n.tr("热门歌曲（") + page.songs.length + I18n.tr("）")
                         icon: "music_note"
                     }
 
@@ -729,8 +729,8 @@ Item {
                         width: parent.width
                         visible: page.songs.length === 0
                         height: visible ? 200 : 0
-                        title: page.degraded ? "歌手详情暂不可用" : "暂无热门歌曲"
-                        hint: page.degraded ? page.degradeText : "稍后重试，或检查该音源是否需要登录"
+                        title: page.degraded ? I18n.tr("歌手详情暂不可用") : I18n.tr("暂无热门歌曲")
+                        hint: page.degraded ? page.degradeText : I18n.tr("稍后重试，或检查该音源是否需要登录")
                         icon: "person"
                     }
 
@@ -754,7 +754,7 @@ Item {
                     SectionHeader {
                         width: parent.width
                         visible: page.albums.length > 0
-                        title: "专辑（" + page.albums.length + "）"
+                        title: I18n.tr("专辑（") + page.albums.length + I18n.tr("）")
                         icon: "album"
                     }
 
@@ -768,8 +768,8 @@ Item {
                         width: parent.width
                         visible: page.albums.length === 0 && !page.degraded
                         height: visible ? 160 : 0
-                        title: "暂无专辑"
-                        hint: "该歌手暂时没有可展示的专辑"
+                        title: I18n.tr("暂无专辑")
+                        hint: I18n.tr("该歌手暂时没有可展示的专辑")
                         icon: "album"
                     }
 
@@ -785,7 +785,7 @@ Item {
                 anchors.top: parent.top
                 anchors.topMargin: 96
                 visible: page.loading
-                text: "正在加载歌手信息…"
+                text: I18n.tr("正在加载歌手信息…")
             }
 
             ErrorCard {
@@ -794,7 +794,7 @@ Item {
                 anchors.top: parent.top
                 anchors.topMargin: 24
                 visible: page.errorMessage !== ""
-                message: "加载失败：" + page.errorMessage
+                message: I18n.tr("加载失败：") + page.errorMessage
                 onRetry: page.load()
             }
         }

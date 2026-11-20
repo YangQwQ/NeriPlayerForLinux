@@ -176,8 +176,8 @@ Item {
             anchors.centerIn: parent
             visible: !page.hasSong
             icon: "music_note"
-            title: "暂无播放"
-            hint: "在媒体库或探索中选择一首歌开始播放"
+            title: I18n.tr("暂无播放")
+            hint: I18n.tr("在媒体库或探索中选择一首歌开始播放")
             contentWidth: Math.min(420, content.width - 48)
             iconColor: Theme.withAlpha(np.foreground, 0.4)
             titleColor: np.foregroundDim
@@ -295,7 +295,7 @@ Item {
             size: 44
             iconColor: np.foregroundDim
             hoverColor: np.hoverFill
-            tooltip: "收起播放页（Esc 退出沉浸）"
+            tooltip: I18n.tr("收起播放页（Esc 退出沉浸）")
             onClicked: Nav.back()
         }
 
@@ -309,7 +309,7 @@ Item {
             size: 44
             iconColor: np.foregroundDim
             hoverColor: np.hoverFill
-            tooltip: Nav.immersive ? "退出全屏沉浸 (Esc)" : "全屏沉浸模式"
+            tooltip: Nav.immersive ? I18n.tr("退出全屏沉浸 (Esc)") : I18n.tr("全屏沉浸模式")
             onClicked: page.toggleImmersive()
         }
     }
@@ -370,7 +370,7 @@ Item {
                 size: 40
                 iconColor: np.foregroundDim
                 hoverColor: np.hoverFill
-                tooltip: "评论"
+                tooltip: I18n.tr("评论")
                 onClicked: {
                     if (typeof Nav.openCommentsPanel === "function")
                         Nav.openCommentsPanel()
@@ -386,7 +386,7 @@ Item {
                 size: 40
                 iconColor: np.foregroundDim
                 hoverColor: np.hoverFill
-                tooltip: "一起听"
+                tooltip: I18n.tr("一起听")
                 onClicked: {
                     if (typeof Nav.openListenTogetherPanel === "function")
                         Nav.openListenTogetherPanel()

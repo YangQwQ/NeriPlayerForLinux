@@ -20,21 +20,21 @@ Item {
         const settings = Settings.values
         const list = []
         if (Settings.get("neteaseEnabled", true) !== false)
-            list.push({ "id": "NETEASE", "name": "网易云" })
+            list.push({ "id": "NETEASE", "name": I18n.tr("网易云") })
         if (Settings.get("bilibiliEnabled", true) !== false)
-            list.push({ "id": "BILIBILI", "name": "哔哩哔哩" })
+            list.push({ "id": "BILIBILI", "name": I18n.tr("哔哩哔哩") })
         if (Settings.get("youtubeEnabled", false) === true)
             list.push({ "id": "YOUTUBE", "name": "YouTube" })
         if (list.length === 0)
-            list.push({ "id": "NETEASE", "name": "网易云" })
+            list.push({ "id": "NETEASE", "name": I18n.tr("网易云") })
         return list
     }
     readonly property string sourceName: {
         if (source === "BILIBILI")
-            return "哔哩哔哩"
+            return I18n.tr("哔哩哔哩")
         if (source === "YOUTUBE")
             return "YouTube"
-        return "网易云"
+        return I18n.tr("网易云")
     }
     readonly property bool youtube: source === "YOUTUBE"
 
@@ -66,11 +66,11 @@ Item {
     property string ytKind: ""
 
     readonly property var ytKinds: [
-        { "id": "", "name": "全部" },
-        { "id": "SONG", "name": "单曲" },
-        { "id": "ALBUM", "name": "专辑" },
-        { "id": "ARTIST", "name": "歌手" },
-        { "id": "PLAYLIST", "name": "歌单" }
+        { "id": "", "name": I18n.tr("全部") },
+        { "id": "SONG", "name": I18n.tr("单曲") },
+        { "id": "ALBUM", "name": I18n.tr("专辑") },
+        { "id": "ARTIST", "name": I18n.tr("歌手") },
+        { "id": "PLAYLIST", "name": I18n.tr("歌单") }
     ]
 
     readonly property var resultSongs: results && results.songs ? results.songs : []
@@ -203,9 +203,9 @@ Item {
             if (seq !== page._searchSeq)
                 return
             page.results = page.emptyResults()
-            page.errorMessage = error && error.message ? error.message : "搜索失败"
+            page.errorMessage = error && error.message ? error.message : I18n.tr("搜索失败")
             page.loading = false
-            Toast.show("搜索失败：" + page.errorMessage, "error")
+            Toast.show(I18n.tr("搜索失败：") + page.errorMessage, "error")
         })
     }
 
@@ -222,9 +222,9 @@ Item {
             if (seq !== page._searchSeq)
                 return
             page.results = page.emptyResults()
-            page.errorMessage = error && error.message ? error.message : "YouTube 搜索失败"
+            page.errorMessage = error && error.message ? error.message : I18n.tr("YouTube 搜索失败")
             page.loading = false
-            Toast.show("搜索失败：" + page.errorMessage, "error")
+            Toast.show(I18n.tr("搜索失败：") + page.errorMessage, "error")
         })
     }
 
@@ -294,7 +294,7 @@ Item {
         }).catch(function(error) {
             if (seq !== page._searchSeq)
                 return
-            page.errorMessage = error && error.message ? error.message : "加载标签歌单失败"
+            page.errorMessage = error && error.message ? error.message : I18n.tr("加载标签歌单失败")
             page.loading = false
             Toast.show(page.errorMessage, "error")
         })
@@ -398,7 +398,7 @@ Item {
             if (seq !== page._defaultSeq)
                 return
             page.ytSections = []
-            page.ytMessage = error && error.message ? String(error.message) : "YouTube 推荐加载失败"
+            page.ytMessage = error && error.message ? String(error.message) : I18n.tr("YouTube 推荐加载失败")
             page.defaultLoading = false
         })
     }
@@ -525,7 +525,7 @@ Item {
         anchors.leftMargin: 20
         anchors.top: parent.top
         anchors.topMargin: 16
-        text: "探索"
+        text: I18n.tr("探索")
         color: Theme.onSurfaceColor
         font.family: Theme.fontFamily
         font.pixelSize: 24
@@ -633,7 +633,7 @@ Item {
                 SectionHeader {
                     width: scrollColumn.width
                     visible: page.submittedQuery === "" && page.activeTag === "" && page.hotKeywords.length > 0
-                    title: "热门搜索"
+                    title: I18n.tr("热门搜索")
                     icon: "local_fire_department"
                 }
 
@@ -647,7 +647,7 @@ Item {
                 SectionHeader {
                     width: scrollColumn.width
                     visible: page.submittedQuery === "" && page.activeTag === "" && page.tags.length > 0
-                    title: "风格标签"
+                    title: I18n.tr("风格标签")
                     icon: "sell"
                 }
 
@@ -661,7 +661,7 @@ Item {
                 SectionHeader {
                     width: scrollColumn.width
                     visible: page.submittedQuery === "" && page.activeTag === "" && page.recommended.length > 0
-                    title: "推荐歌单"
+                    title: I18n.tr("推荐歌单")
                     icon: "album"
                 }
 
@@ -707,8 +707,8 @@ Item {
                     visible: page.submittedQuery === "" && page.activeTag === ""
                              && page.source === "BILIBILI" && !page.defaultLoading
                              && page.hotKeywords.length === 0 && page.recommended.length === 0
-                    title: "哔哩哔哩暂无推荐内容"
-                    hint: "输入关键词搜索视频，切换回网易云可以浏览推荐歌单"
+                    title: I18n.tr("哔哩哔哩暂无推荐内容")
+                    hint: I18n.tr("输入关键词搜索视频，切换回网易云可以浏览推荐歌单")
                     icon: "explore"
                 }
 
@@ -716,8 +716,8 @@ Item {
                     width: scrollColumn.width
                     visible: page.submittedQuery === "" && page.activeTag === ""
                              && page.source === "NETEASE" && !page.defaultLoading && page.defaultContentEmpty
-                    title: "暂无推荐内容"
-                    hint: "请检查网络连接，或在设置中开启网易云音源"
+                    title: I18n.tr("暂无推荐内容")
+                    hint: I18n.tr("请检查网络连接，或在设置中开启网易云音源")
                     icon: "explore"
                 }
 
@@ -726,7 +726,7 @@ Item {
                     visible: page.submittedQuery === "" && page.activeTag === ""
                              && page.youtube && !page.defaultLoading && page.hasResults === false
                              && page.ytSections.length === 0 && page.ytMessage !== ""
-                    title: "YouTube 暂无推荐内容"
+                    title: I18n.tr("YouTube 暂无推荐内容")
                     hint: page.ytMessage
                     icon: "smart_display"
                 }
@@ -748,9 +748,9 @@ Item {
                 EmptyState {
                     width: scrollColumn.width
                     visible: page.submittedQuery !== "" && page.activeTag === "" && !page.hasResults
-                    title: "无搜索结果"
-                    hint: page.youtube ? "尝试更换关键词或分类，YouTube 未登录时也能匿名搜索"
-                                       : "尝试更换关键词，或切换到其它音源"
+                    title: I18n.tr("无搜索结果")
+                    hint: page.youtube ? I18n.tr("尝试更换关键词或分类，YouTube 未登录时也能匿名搜索")
+                                       : I18n.tr("尝试更换关键词，或切换到其它音源")
                     icon: "search"
                 }
 
@@ -758,9 +758,9 @@ Item {
                 SectionHeader {
                     width: scrollColumn.width
                     visible: page.activeTag !== ""
-                    title: "「" + page.activeTag + "」歌单（" + page.tagCollections.length + "）"
+                    title: I18n.tr("「") + page.activeTag + I18n.tr("」歌单（") + page.tagCollections.length + I18n.tr("）")
                     icon: "sell"
-                    actionText: "清除"
+                    actionText: I18n.tr("清除")
                     onActionClicked: page.clearTag()
                 }
 
@@ -774,8 +774,8 @@ Item {
                 EmptyState {
                     width: scrollColumn.width
                     visible: page.activeTag !== "" && page.tagCollections.length === 0
-                    title: "暂无标签歌单"
-                    hint: "该标签下没有取到歌单，可以换个标签试试"
+                    title: I18n.tr("暂无标签歌单")
+                    hint: I18n.tr("该标签下没有取到歌单，可以换个标签试试")
                     icon: "sell"
                 }
 
@@ -788,7 +788,7 @@ Item {
             anchors.top: parent.top
             anchors.topMargin: 72
             visible: page.loading || page.showDefaultLoading
-            text: page.showDefaultLoading ? "正在加载探索内容…" : "正在加载…"
+            text: page.showDefaultLoading ? I18n.tr("正在加载探索内容…") : I18n.tr("正在加载…")
         }
 
         ErrorCard {

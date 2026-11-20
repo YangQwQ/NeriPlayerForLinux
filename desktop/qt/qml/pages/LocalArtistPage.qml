@@ -34,15 +34,15 @@ DetailScaffold {
 
     readonly property string currentKey: Player.hasSong && Player.song ? Player.song.key : ""
 
-    title: page.artistName !== "" ? page.artistName : "歌手"
-    subtitle: page.artistName !== "" ? page.songs.length + " 首歌曲 · 本地" : ""
+    title: page.artistName !== "" ? page.artistName : I18n.tr("歌手")
+    subtitle: page.artistName !== "" ? page.songs.length + I18n.tr(" 首歌曲 · 本地") : ""
 
     function reload() {
         page.loading = true
         Api.get("library.artists", {}, function(result, error) {
             if (error) {
                 page.loading = false
-                page.errorText = error.message || "加载歌手列表失败"
+                page.errorText = error.message || I18n.tr("加载歌手列表失败")
                 return
             }
             page.artistGroups = result.artists || []
@@ -105,7 +105,7 @@ DetailScaffold {
     LoadingState {
         anchors.fill: parent
         visible: page.loading && page.songs.length === 0
-        text: "正在加载歌手作品…"
+        text: I18n.tr("正在加载歌手作品…")
     }
 
     ErrorCard {
@@ -157,7 +157,7 @@ DetailScaffold {
 
                     Text {
                         width: parent.width
-                        text: page.artistName !== "" ? page.artistName : "未知艺术家"
+                        text: page.artistName !== "" ? page.artistName : I18n.tr("未知艺术家")
                         elide: Text.ElideRight
                         maximumLineCount: 1
                         color: Theme.onSurfaceColor
@@ -168,8 +168,8 @@ DetailScaffold {
 
                     Text {
                         width: parent.width
-                        text: page.songs.length + " 首歌曲 · "
-                              + Format.formatLongDuration(Format.totalDuration(page.songs)) + " · 本地"
+                        text: page.songs.length + I18n.tr(" 首歌曲 · ")
+                              + Format.formatLongDuration(Format.totalDuration(page.songs)) + I18n.tr(" · 本地")
                         elide: Text.ElideRight
                         maximumLineCount: 1
                         color: Theme.onSurfaceVariantColor
@@ -181,7 +181,7 @@ DetailScaffold {
                         spacing: Theme.spacingSm
 
                         LibraryButton {
-                            text: "播放全部"
+                            text: I18n.tr("播放全部")
                             icon: "play_arrow"
                             filled: true
                             enabled: page.songs.length > 0
@@ -189,7 +189,7 @@ DetailScaffold {
                         }
 
                         LibraryButton {
-                            text: "随机播放"
+                            text: I18n.tr("随机播放")
                             icon: "shuffle"
                             enabled: page.songs.length > 0
                             onClicked: page.shuffleAll()
@@ -200,9 +200,9 @@ DetailScaffold {
 
             SectionHeader {
                 width: songList.width
-                title: "歌曲"
+                title: I18n.tr("歌曲")
                 icon: "music_note"
-                trailingText: page.songs.length + " 首"
+                trailingText: page.songs.length + I18n.tr(" 首")
             }
         }
 
@@ -231,8 +231,8 @@ DetailScaffold {
             width: songList.width
             visible: page.songs.length === 0 && !page.loading
             icon: "person"
-            title: "暂无歌曲"
-            hint: "该歌手在当前媒体库中没有歌曲"
+            title: I18n.tr("暂无歌曲")
+            hint: I18n.tr("该歌手在当前媒体库中没有歌曲")
         }
     }
 

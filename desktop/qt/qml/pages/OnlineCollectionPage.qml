@@ -12,7 +12,7 @@ Item {
     readonly property string kind: arg && arg.kind ? String(arg.kind).toLowerCase() : "playlist"
     readonly property string argSource: arg && arg.source ? String(arg.source).toUpperCase() : "NETEASE"
     readonly property string argId: arg && arg.id !== undefined && arg.id !== null ? String(arg.id) : ""
-    readonly property string headerTitle: detail && detail.title ? detail.title : (arg && arg.name ? arg.name : "在线歌单")
+    readonly property string headerTitle: detail && detail.title ? detail.title : (arg && arg.name ? arg.name : I18n.tr("在线歌单"))
     readonly property string headerCover: detail && detail.coverUrl ? detail.coverUrl
                                      : (arg && arg.coverUrl ? arg.coverUrl : "")
     readonly property string headerDescription: detail && detail.description ? detail.description : ""
@@ -20,7 +20,7 @@ Item {
         const parts = []
         if (detail && detail.creator)
             parts.push(detail.creator)
-        parts.push("已加载 " + page.songs.length + " 首")
+        parts.push(I18n.tr("已加载 ") + page.songs.length + I18n.tr(" 首"))
         return parts.join(" · ")
     }
 
@@ -36,7 +36,7 @@ Item {
     function load() {
         if (argId === "") {
             loading = false
-            errorMessage = "缺少歌单参数，请从探索页打开"
+            errorMessage = I18n.tr("缺少歌单参数，请从探索页打开")
             return
         }
         loading = true
@@ -64,11 +64,11 @@ Item {
                     return
                 if (error && error.code === "unknown_method") {
                     page.degraded = true
-                    page.degradeText = "当前后端暂不支持 YouTube 歌单详情（ytmusic.playlist）"
+                    page.degradeText = I18n.tr("当前后端暂不支持 YouTube 歌单详情（ytmusic.playlist）")
                     page.loading = false
                     return
                 }
-                page.errorMessage = error && error.message ? error.message : "加载失败"
+                page.errorMessage = error && error.message ? error.message : I18n.tr("加载失败")
                 page.loading = false
             })
             return
@@ -87,7 +87,7 @@ Item {
         }).catch(function(error) {
             if (seq !== page._seq)
                 return
-            page.errorMessage = error && error.message ? error.message : "加载失败"
+            page.errorMessage = error && error.message ? error.message : I18n.tr("加载失败")
             page.loading = false
         })
     }
@@ -149,7 +149,7 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             icon: "chevron_left"
             iconSize: 24
-            tooltip: "返回"
+            tooltip: I18n.tr("返回")
             onClicked: Nav.back()
         }
 
@@ -190,7 +190,7 @@ Item {
             anchors.top: parent.top
             anchors.topMargin: 96
             visible: page.loading
-            text: "正在加载歌单…"
+            text: I18n.tr("正在加载歌单…")
         }
 
         ErrorCard {
@@ -201,7 +201,7 @@ Item {
             anchors.top: parent.top
             anchors.topMargin: 24
             visible: page.errorMessage !== ""
-            message: "加载失败：" + page.errorMessage
+            message: I18n.tr("加载失败：") + page.errorMessage
             onRetry: page.load()
         }
     }
@@ -300,7 +300,7 @@ Item {
 
                                 Text {
                                     height: 20
-                                    text: "打开专辑页"
+                                    text: I18n.tr("打开专辑页")
                                     verticalAlignment: Text.AlignVCenter
                                     color: Theme.primary
                                     font.family: Theme.fontFamily
@@ -322,7 +322,7 @@ Item {
 
                     SectionHeader {
                         width: parent.width
-                        title: "歌曲（" + page.songs.length + "）"
+                        title: I18n.tr("歌曲（") + page.songs.length + I18n.tr("）")
                         icon: "queue_music"
                     }
 
@@ -333,8 +333,8 @@ Item {
                         EmptyState {
                             anchors.fill: parent
                             visible: page.songs.length === 0
-                            title: "暂时没有获取到歌曲"
-                            hint: "该歌单可能需要登录后才能完整访问"
+                            title: I18n.tr("暂时没有获取到歌曲")
+                            hint: I18n.tr("该歌单可能需要登录后才能完整访问")
                             icon: "queue_music"
                         }
                     }

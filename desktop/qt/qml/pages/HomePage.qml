@@ -71,7 +71,7 @@ Item {
                 loadedOnce = true
             }
             if (loadError === "")
-                loadError = "后端未连接"
+                loadError = I18n.tr("后端未连接")
             return
         }
         const seq = ++page._loadSeq
@@ -100,7 +100,7 @@ Item {
             loadTimeout.stop()
             homeData = null
             homeErrors = []
-            loadError = (error && error.message) ? error.message : "无法连接在线推荐服务"
+            loadError = (error && error.message) ? error.message : I18n.tr("无法连接在线推荐服务")
             finishLoad()
         })
     }
@@ -115,7 +115,7 @@ Item {
             ++page._loadSeq
             page.homeData = null
             page.homeErrors = []
-            page.loadError = "加载超时，请检查网络后重试"
+            page.loadError = I18n.tr("加载超时，请检查网络后重试")
             page.finishLoad()
         }
     }
@@ -226,23 +226,23 @@ Item {
             return fallback
         switch (id) {
         case "guessYouLike":
-            return "猜你喜欢"
+            return I18n.tr("猜你喜欢")
         case "radar":
-            return "雷达歌单"
+            return I18n.tr("雷达歌单")
         case "dailyRecommend":
-            return "每日推荐"
+            return I18n.tr("每日推荐")
         case "privateFm":
-            return "私人 FM"
+            return I18n.tr("私人 FM")
         case "biliMusic":
-            return "B站音乐"
+            return I18n.tr("B站音乐")
         case "ranks":
-            return "排行榜"
+            return I18n.tr("排行榜")
         case "newSongs":
-            return "推荐新歌"
+            return I18n.tr("推荐新歌")
         case "playlists":
-            return "推荐歌单"
+            return I18n.tr("推荐歌单")
         default:
-            return "推荐"
+            return I18n.tr("推荐")
         }
     }
 
@@ -275,7 +275,7 @@ Item {
         if (history.length > 0 && page.cardEnabled("continuePlaying")) {
             result.push({
                 "key": "continuePlaying",
-                "title": "继续播放",
+                "title": I18n.tr("继续播放"),
                 "icon": "history",
                 "kind": "continue",
                 "items": history,
@@ -292,11 +292,11 @@ Item {
             // 兜底：后端没有 sections（旧后端）时按兼容字段拼一遍
             rawSections = []
             const fallback = [
-                ["guessYouLike", "猜你喜欢", "songs"],
-                ["hotTracks", "热歌榜", "songs"],
-                ["newSongs", "推荐新歌", "songs"],
-                ["radar", "雷达歌单", "collections"],
-                ["hotLists", "热门榜单", "collections"]
+                ["guessYouLike", I18n.tr("猜你喜欢"), "songs"],
+                ["hotTracks", I18n.tr("热歌榜"), "songs"],
+                ["newSongs", I18n.tr("推荐新歌"), "songs"],
+                ["radar", I18n.tr("雷达歌单"), "collections"],
+                ["hotLists", I18n.tr("热门榜单"), "collections"]
             ]
             for (let i = 0; i < fallback.length; i++) {
                 const entry = data[fallback[i][0]]
@@ -429,7 +429,7 @@ Item {
                 page.loadTimeout.stop()
                 page.loading = false
                 page.refreshing = false
-                page.loadError = "后端未连接，正在等待重连…"
+                page.loadError = I18n.tr("后端未连接，正在等待重连…")
             }
         }
     }
@@ -442,7 +442,7 @@ Item {
             if (!Api.connected && page.loading) {
                 page.loading = false
                 page.loadedOnce = true
-                page.loadError = "后端未连接"
+                page.loadError = I18n.tr("后端未连接")
             }
         }
     }
@@ -481,7 +481,7 @@ Item {
 
             Text {
                 width: parent.width
-                text: "音理音理!!"
+                text: I18n.tr("音理音理!!")
                 elide: Text.ElideRight
                 color: Theme.onSurfaceColor
                 font.family: Theme.fontFamily
@@ -505,7 +505,7 @@ Item {
                 Text {
                     id: subtitleText
                     width: parent.width
-                    text: "发现今天的好音乐"
+                    text: I18n.tr("发现今天的好音乐")
                     elide: Text.ElideRight
                     color: Theme.onSurfaceVariantColor
                     font.family: Theme.fontFamily
@@ -529,7 +529,7 @@ Item {
             icon: "refresh"
             iconSize: 24
             size: 44
-            tooltip: page.refreshing ? "正在刷新首页…" : "刷新首页"
+            tooltip: page.refreshing ? I18n.tr("正在刷新首页…") : I18n.tr("刷新首页")
             opacity: page.refreshing ? 0.5 : 1
             enabled: !page.refreshing
             onClicked: page.reload(true)
@@ -559,7 +559,7 @@ Item {
         LoadingState {
             anchors.centerIn: parent
             width: parent.width
-            text: "正在加载首页推荐…"
+            text: I18n.tr("正在加载首页推荐…")
         }
     }
 
@@ -661,7 +661,7 @@ Item {
                 height: page.showErrorCard ? 48 : 0
                 visible: page.showErrorCard
                 message: page.loadError !== ""
-                         ? "首页加载失败：" + page.loadError
+                         ? I18n.tr("首页加载失败：") + page.loadError
                          : page.loadErrors.join("；")
                 onRetry: page.reload(true)
             }
@@ -734,8 +734,8 @@ Item {
                 height: page.showEmpty ? 280 : 0
                 visible: page.showEmpty
                 icon: "home"
-                title: "首页还没有内容"
-                hint: "在设置中开启在线音源，或先播放几首本地音乐"
+                title: I18n.tr("首页还没有内容")
+                hint: I18n.tr("在设置中开启在线音源，或先播放几首本地音乐")
             }
 
             Item {

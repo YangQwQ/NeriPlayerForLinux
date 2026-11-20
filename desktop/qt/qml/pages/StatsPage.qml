@@ -21,17 +21,17 @@ DetailScaffold {
 
     readonly property string currentKey: Player.hasSong && Player.song ? Player.song.key : ""
 
-    title: "播放统计"
+    title: I18n.tr("播放统计")
 
     actions: [
         IconButton {
             icon: "delete"
             iconSize: 22
             size: 44
-            tooltip: "清空统计"
-            onClicked: clearDialog.openFor("清空播放统计",
-                                           "确定要清空所有播放统计数据吗？此操作不可撤销。",
-                                           "清空")
+            tooltip: I18n.tr("清空统计")
+            onClicked: clearDialog.openFor(I18n.tr("清空播放统计"),
+                                           I18n.tr("确定要清空所有播放统计数据吗？此操作不可撤销。"),
+                                           I18n.tr("清空"))
         }
     ]
 
@@ -65,7 +65,7 @@ DetailScaffold {
     function reloadSummary() {
         Api.get("stats.summary", { period: page.period }, function(result, error) {
             if (error) {
-                page.errorText = error.message || "加载统计汇总失败"
+                page.errorText = error.message || I18n.tr("加载统计汇总失败")
                 return
             }
             page.errorText = ""
@@ -77,7 +77,7 @@ DetailScaffold {
         Api.get("stats.top", { period: page.period, sort: page.sort, limit: 50 }, function(result, error) {
             page.loading = false
             if (error) {
-                page.errorText = error.message || "加载排行失败"
+                page.errorText = error.message || I18n.tr("加载排行失败")
                 return
             }
             page.topSongs = result.songs || []
@@ -99,10 +99,10 @@ DetailScaffold {
 
     function clearStats() {
         Api.call("stats.clear").then(function() {
-            Toast.show("播放统计已清空")
+            Toast.show(I18n.tr("播放统计已清空"))
             page.reloadAll()
         }).catch(function(error) {
-            Toast.show(error && error.message ? error.message : "清空失败", "error")
+            Toast.show(error && error.message ? error.message : I18n.tr("清空失败"), "error")
         })
     }
 
@@ -137,7 +137,7 @@ DetailScaffold {
     LoadingState {
         anchors.fill: parent
         visible: page.loading && page.topSongs.length === 0
-        text: "正在加载播放统计…"
+        text: I18n.tr("正在加载播放统计…")
     }
 
     ErrorCard {
@@ -181,14 +181,14 @@ DetailScaffold {
                         spacing: 4
 
                         Text {
-                            text: "播放次数"
+                            text: I18n.tr("播放次数")
                             color: Theme.onSurfaceVariantColor
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.textStyle("labelSmall").size
                         }
 
                         Text {
-                            text: String(page.summary.plays || 0) + " 次"
+                            text: String(page.summary.plays || 0) + I18n.tr(" 次")
                             color: Theme.onSurfaceColor
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.textStyle("titleLarge").size
@@ -209,7 +209,7 @@ DetailScaffold {
                         spacing: 4
 
                         Text {
-                            text: "收听时长"
+                            text: I18n.tr("收听时长")
                             color: Theme.onSurfaceVariantColor
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.textStyle("labelSmall").size
@@ -240,14 +240,14 @@ DetailScaffold {
                         spacing: 4
 
                         Text {
-                            text: "歌曲数"
+                            text: I18n.tr("歌曲数")
                             color: Theme.onSurfaceVariantColor
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.textStyle("labelSmall").size
                         }
 
                         Text {
-                            text: String(page.summary.trackCount || 0) + " 首"
+                            text: String(page.summary.trackCount || 0) + I18n.tr(" 首")
                             color: Theme.onSurfaceColor
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.textStyle("titleLarge").size
@@ -277,9 +277,9 @@ DetailScaffold {
 
             SectionHeader {
                 width: topList.width
-                title: "最常播放"
+                title: I18n.tr("最常播放")
                 icon: "trending_up"
-                trailingText: page.topSongs.length > 0 ? page.topSongs.length + " 首" : ""
+                trailingText: page.topSongs.length > 0 ? page.topSongs.length + I18n.tr(" 首") : ""
             }
         }
 
@@ -300,7 +300,7 @@ DetailScaffold {
                          && topDelegate.item.song
                          && topDelegate.item.song.key === page.currentKey
                 extraText: topDelegate.item
-                           ? topDelegate.item.playCount + " 次 · "
+                           ? topDelegate.item.playCount + I18n.tr(" 次 · ")
                              + Format.formatLongDuration(topDelegate.item.listenMs)
                            : ""
                 onActivated: function(index) { page.playAt(index) }
@@ -313,8 +313,8 @@ DetailScaffold {
             width: topList.width
             visible: page.topSongs.length === 0 && !page.loading
             icon: "bar_chart"
-            title: "当前时间范围内还没有播放统计"
-            hint: "开始听歌后这里会显示统计数据"
+            title: I18n.tr("当前时间范围内还没有播放统计")
+            hint: I18n.tr("开始听歌后这里会显示统计数据")
         }
     }
 

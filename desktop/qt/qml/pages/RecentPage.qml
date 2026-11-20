@@ -8,19 +8,19 @@ import "../components/library/Format.js" as Format
 DetailScaffold {
     id: page
 
-    title: "最近播放"
-    subtitle: page.entries.length > 0 ? "共 " + page.entries.length + " 条记录" : ""
+    title: I18n.tr("最近播放")
+    subtitle: page.entries.length > 0 ? I18n.tr("共 ") + page.entries.length + I18n.tr(" 条记录") : ""
 
     actions: [
         IconButton {
             icon: "delete"
             iconSize: 22
             size: 44
-            tooltip: "清空历史"
+            tooltip: I18n.tr("清空历史")
             visible: page.entries.length > 0
-            onClicked: confirmDialog.openFor("清空最近播放",
-                                             "确定要清空全部最近播放记录吗？此操作不可恢复。",
-                                             "清空")
+            onClicked: confirmDialog.openFor(I18n.tr("清空最近播放"),
+                                             I18n.tr("确定要清空全部最近播放记录吗？此操作不可恢复。"),
+                                             I18n.tr("清空"))
         }
     ]
 
@@ -35,7 +35,7 @@ DetailScaffold {
         Api.get("history.list", {}, function(result, error) {
             page.loading = false
             if (error) {
-                page.errorText = error.message || "加载最近播放失败"
+                page.errorText = error.message || I18n.tr("加载最近播放失败")
                 return
             }
             page.errorText = ""
@@ -53,9 +53,9 @@ DetailScaffold {
     function clearHistory() {
         Api.call("history.clear").then(function() {
             page.entries = []
-            Toast.show("最近播放已清空")
+            Toast.show(I18n.tr("最近播放已清空"))
         }).catch(function(error) {
-            Toast.show(error && error.message ? error.message : "清空失败", "error")
+            Toast.show(error && error.message ? error.message : I18n.tr("清空失败"), "error")
         })
     }
 
@@ -84,7 +84,7 @@ DetailScaffold {
     LoadingState {
         anchors.fill: parent
         visible: page.loading && page.entries.length === 0
-        text: "正在加载最近播放…"
+        text: I18n.tr("正在加载最近播放…")
     }
 
     ErrorCard {
@@ -121,8 +121,8 @@ DetailScaffold {
                 index: entryDelegate.itemIndex
                 showAlbum: false
                 extraText: entryDelegate.item
-                           ? Format.formatDateTime(entryDelegate.item.playedAt) + " · 播放 "
-                             + entryDelegate.item.playCount + " 次"
+                           ? Format.formatDateTime(entryDelegate.item.playedAt) + I18n.tr(" · 播放 ")
+                             + entryDelegate.item.playCount + I18n.tr(" 次")
                            : ""
                 playing: page.currentKey !== "" && entryDelegate.item && entryDelegate.item.song
                          && entryDelegate.item.song.key === page.currentKey
@@ -137,8 +137,8 @@ DetailScaffold {
         anchors.fill: parent
         visible: !page.loading && page.errorText === "" && page.entries.length === 0
         icon: "history"
-        title: "暂无最近播放"
-        hint: "播放过的歌曲会出现在这里"
+        title: I18n.tr("暂无最近播放")
+        hint: I18n.tr("播放过的歌曲会出现在这里")
     }
 
     SongActionsMenu {
@@ -146,10 +146,10 @@ DetailScaffold {
 
         onRemoveRequested: function(song) {
             Api.call("history.remove", { songKey: song.key }).then(function() {
-                Toast.show("已从最近播放移除")
+                Toast.show(I18n.tr("已从最近播放移除"))
                 page.reload()
             }).catch(function(error) {
-                Toast.show(error && error.message ? error.message : "移除失败", "error")
+                Toast.show(error && error.message ? error.message : I18n.tr("移除失败"), "error")
             })
         }
     }
