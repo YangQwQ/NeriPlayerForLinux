@@ -109,13 +109,19 @@ Item {
     // ---------------------------------------------------------------- 分类导航与搜索
 
     // 分类顺序参考上游：账号与同步（含音乐源登录）→ 常规（含语言）→ 外观与主题
-    // → 播放与音频 → 歌词 → 快捷键 → 下载与存储 → 备份与同步 → 关于。
+    // → 音效与倍速 → 播放设置 → 歌词 → 快捷键 → 下载与存储 → 备份与同步 → 关于。
     // 快捷键条目最多、内容自成一屏，因此从「常规」里拆出独立分类。
+    //
+    // 「音效与倍速」与「播放设置」原本是同一个分类：DSP 面板改成标签页后自带
+    // 预设/均衡器/音色/空间/动态/扬声器/倍速八个 Tab，内容自成一屏，与「淡入淡出、
+    // 音质、B 站跳过」这类播放行为没有共同语境，因此拆成两个分类
+    // （上游安卓端同样是 AudioEffects 与 Playback 两个独立设置页）。
     readonly property var categoryDefs: [
         { id: "accountSync", title: I18n.tr("账号与同步"), description: I18n.tr("音乐源登录 · 一起听 · 云端同步"), icon: "account_circle", sectionIds: ["sources", "listenTogether", "sync"] },
         { id: "general", title: I18n.tr("常规"), description: I18n.tr("首页栏目 · 后台 · 语言"), icon: "tune", sectionIds: ["homeCards", "background", "language"] },
         { id: "appearance", title: I18n.tr("外观与主题"), description: I18n.tr("深浅色 · 字体 · 背景 · 播放页"), icon: "palette", sectionIds: ["theme", "appFonts", "appBackground", "playerDesign"] },
-        { id: "playback", title: I18n.tr("播放与音频"), description: I18n.tr("倍速 · 淡入淡出 · 音效 · 音质"), icon: "graphic_eq", sectionIds: ["playback", "fade", "equalizer", "quality"] },
+        { id: "audioEffects", title: I18n.tr("音效与倍速"), description: I18n.tr("均衡器 · 音色 · 空间 · 动态 · 扬声器 · 倍速"), icon: "graphic_eq", sectionIds: ["dsp"] },
+        { id: "playback", title: I18n.tr("播放设置"), description: I18n.tr("倍速 · 淡入淡出 · 音质 · 跳过区间"), icon: "play_circle", sectionIds: ["playback", "fade", "quality", "biliSkip"] },
         { id: "lyrics", title: I18n.tr("歌词"), description: I18n.tr("悬浮歌词样式 · 歌词字体"), icon: "lyrics", sectionIds: ["floatingLyrics"] },
         { id: "shortcuts", title: I18n.tr("快捷键"), description: I18n.tr("应用内与全局快捷键"), icon: "keyboard", sectionIds: ["shortcuts"] },
         { id: "downloadStorage", title: I18n.tr("下载与存储"), description: I18n.tr("媒体库 · 下载 · 缓存清理"), icon: "download", sectionIds: ["library", "downloads", "dataCache"] },
@@ -123,7 +129,7 @@ Item {
         { id: "about", title: I18n.tr("关于"), description: I18n.tr("版本与开源信息"), icon: "info", sectionIds: ["about"] }
     ]
 
-    property string currentCategory: "playback"
+    property string currentCategory: "audioEffects"
     property string searchQuery: ""
 
     readonly property var sectionIndex: ({
@@ -132,7 +138,7 @@ Item {
         "theme": secTheme, "appFonts": secAppFonts, "appBackground": secAppBackground,
         "playerDesign": secPlayerDesign,
         "playback": secPlayback, "fade": secFade,
-        "equalizer": secEqualizer, "quality": secQuality,
+        "dsp": secDsp, "quality": secQuality, "biliSkip": secBiliSkip,
         "floatingLyrics": secFloatingLyrics,
         "library": secLibrary, "downloads": secDownloads, "dataCache": secDataCache,
         "backupSync": secBackupSync,
@@ -145,9 +151,10 @@ Item {
         { title: I18n.tr("应用字体"), keywords: "界面字体 字体 字族  font family 中文 预览", category: "appearance", section: "appFonts" },
         { title: I18n.tr("程序背景"), keywords: "背景 图片 模糊 暗化 壁纸 background blur dim", category: "appearance", section: "appBackground" },
         { title: I18n.tr("媒体库"), keywords: "音乐文件夹 扫描 封面", category: "downloadStorage", section: "library" },
-        { title: I18n.tr("播放"), keywords: "倍速 变调 响度 音效", category: "playback", section: "playback" },
+        { title: I18n.tr("DSP 音效"), keywords: "音效 DSP 预设 均衡器 EQ 频段 十段 音色 空间 动态 扬声器 外放 倍速 变调 equalizer preset effect speaker", category: "audioEffects", section: "dsp" },
+        { title: I18n.tr("播放"), keywords: "倍速 变调 播放速度 音调 播放行为", category: "playback", section: "playback" },
         { title: I18n.tr("淡入淡出"), keywords: "淡入 淡出 交叉淡入 渐变 crossfade fade 时长", category: "playback", section: "fade" },
-        { title: I18n.tr("均衡器"), keywords: "均衡器 EQ 频段 十段 预设 响度 音效 equalizer preset", category: "playback", section: "equalizer" },
+        { title: I18n.tr("视频跳过区间"), keywords: "B站 跳过 片头 interval skip bilibili", category: "playback", section: "biliSkip" },
         { title: I18n.tr("播放页"), keywords: "封面 控制条 歌词对齐 背景", category: "appearance", section: "playerDesign" },
         { title: I18n.tr("在线播放音质"), keywords: "音质 码率 hires 无损 quality", category: "playback", section: "quality" },
         { title: I18n.tr("下载设置"), keywords: "下载目录 并发 通知", category: "downloadStorage", section: "downloads" },
@@ -327,6 +334,41 @@ Item {
 
     // 仅供截图验证：>0 时把设置页滚动到该位置；-1 表示不启用（--screenshot 模式下自动定位到快捷键卡片）。
     property int __debugScrollTo: -1
+    /** 仅供截图：指定要打开的分类（空串则沿用旧行为切快捷键）。 */
+    property string __debugCategory: ""
+    /**
+     * 仅供截图：把 DSP 面板切到指定标签页（presets/equalizer/tone/space/dynamics/speaker/speed/advanced）。
+     * 空串表示不动。面板是 Loader 里的独立对象，所以这里通过它的 currentTab 属性转发。
+     */
+    property string __debugDspTab: ""
+
+    function applyDebugDspTab() {
+        if (page.__debugDspTab === "" || !dspLoader.item)
+            return
+        dspLoader.item.currentTab = page.__debugDspTab
+    }
+
+    /**
+     * 截图验证用：从 `--page settings --arg '{"category":"…","dspTab":"…"}'` 里取分类与标签页。
+     * 设置页是 tab 路由，Nav 不会把 arg 传下来，所以这里直接读命令行。
+     */
+    function readDebugArg() {
+        const raw = page.cliArgument("--arg")
+        if (!raw)
+            return
+        let arg = null
+        try {
+            arg = JSON.parse(raw)
+        } catch (error) {
+            return
+        }
+        if (!arg || typeof arg !== "object")
+            return
+        if (typeof arg.category === "string")
+            page.__debugCategory = arg.category
+        if (typeof arg.dspTab === "string")
+            page.__debugDspTab = arg.dspTab
+    }
 
     // ---------------------------------------------------------------- 工具函数
 
@@ -353,12 +395,18 @@ Item {
     function scrollToDebugTarget() {
         if (!flick)
             return
-        if (page.__debugScrollTo < 0)
+        page.readDebugArg()
+        // 截图验证：可用 __debugCategory 指定分类（默认仍切到快捷键，兼容既有用法）。
+        if (page.__debugCategory !== "")
+            page.selectCategory(page.__debugCategory)
+        else if (page.__debugScrollTo < 0)
             page.selectCategory("shortcuts")
+        page.applyDebugDspTab()
         const maxY = Math.max(0, flick.contentHeight - flick.height)
         const shortcutY = shortcutSection.mapToItem(contentColumn, 0, 0).y
         const target = page.__debugScrollTo >= 0 ? page.__debugScrollTo
-                                                 : Math.max(0, shortcutY - 8)
+                                                 : (page.__debugCategory !== "" ? 0
+                                                                                : Math.max(0, shortcutY - 8))
         flick.contentY = Math.max(0, Math.min(target, maxY))
     }
 
@@ -848,7 +896,8 @@ Item {
     }
 
     Component.onCompleted: {
-        page.selectCategory("playback")
+        // 默认落在「音效与倍速」：DSP 标签页是这一页最主要的操作对象
+        page.selectCategory("audioEffects")
         if (Backend.connected) {
             page.loadSnapshot()
             page.loadAccounts()
@@ -1801,47 +1850,45 @@ Item {
                     width: parent.width
                     spacing: 12
 
-            // ============================================================ 播放
+            // ============================================================ 播放行为
             SettingsSection {
                 id: secPlayback
                 width: parent.width - 24
                 x: 12
-                title: I18n.tr("播放")
-                description: I18n.tr("默认倍速与音调")
-                icon: "graphic_eq"
+                title: I18n.tr("播放行为")
+                description: I18n.tr("响度增强与睡眠定时默认时长")
+                icon: "play_circle"
 
-                SliderRow {
+                SettingsSwitchRow {
                     width: parent.width
-                    label: I18n.tr("默认播放速度")
-                    externalValue: page.sv("playbackSpeed", 1.0)
-                    from: 0.5
-                    to: 3.0
-                    formatValue: function(value) {
-                        return Number(value).toFixed(2) + "x"
-                    }
-                    onCommitted: function(value) {
-                        Player.setSpeed(value)
-                    }
+                    title: I18n.tr("响度增强")
+                    description: I18n.tr("对整体音量做动态归一化，安静段落更清楚；与 DSP 动态分区相互独立")
+                    checked: Player.loudness
+                    onToggled: function(checked) { Player.setLoudness(checked) }
                 }
 
-                SliderRow {
+                Item { width: 1; height: 6 }
+
+                SettingsLabel {
                     width: parent.width
-                    label: I18n.tr("音调")
-                    externalValue: page.sv("pitchSemitone", 0)
-                    from: -12
-                    to: 12
-                    formatValue: function(value) {
-                        const rounded = Number(value).toFixed(1)
-                        return (value > 0 ? "+" : "") + rounded + I18n.tr(" 半音")
-                    }
-                    onCommitted: function(value) {
-                        Player.setPitch(value)
-                    }
+                    text: I18n.tr("睡眠定时默认时长")
+                }
+
+                SegmentedOptions {
+                    width: parent.width
+                    options: [
+                        { value: 15, label: I18n.tr("15 分钟") },
+                        { value: 30, label: I18n.tr("30 分钟") },
+                        { value: 60, label: I18n.tr("60 分钟") },
+                        { value: 90, label: I18n.tr("90 分钟") }
+                    ]
+                    value: Number(page.sv("sleepTimerMinutes", 30))
+                    onSelected: function(value) { page.setSetting("sleepTimerMinutes", Number(value)) }
                 }
 
                 SettingsNote {
                     width: parent.width
-                    text: I18n.tr("倍速与变调需要后端具备 ffmpeg 支持；不可用时设置仍会保存，下次具备条件时生效。")
+                    text: I18n.tr("播放速度与音调在「音效与倍速」分类里调节（倍速标签页），会同时作用于当前播放。")
                 }
             }
 
@@ -1931,18 +1978,43 @@ Item {
                 }
             }
 
-            // ============================================================ 均衡器
-            SettingsSection {
-                id: secEqualizer
+            // ============================================================ B站视频跳过区间
+            Item {
+                id: secBiliSkip
                 width: parent.width - 24
                 x: 12
-                title: I18n.tr("均衡器")
-                description: I18n.tr("十段增益微调、预设与响度增强")
-                icon: "equalizer"
+                height: biliSkipCard.height
 
-                EqualizerPanel {
+                SettingsSection {
+                    id: biliSkipCard
                     width: parent.width
+                    title: I18n.tr("视频跳过区间")
+                    description: I18n.tr("B站音频按视频+分P记录片头等区间，播放时自动跳过")
+                    icon: "fast_forward"
+
+                    SettingsRow {
+                        width: parent.width
+                        title: I18n.tr("管理跳过区间")
+                        description: I18n.tr("规则按「视频 + 分P」保存在本机")
+                        SettingsButton {
+                            text: I18n.tr("打开")
+                            onClicked: biliSkipDialog.openFor(
+                                Player.song ? String(Player.song.remoteId || "") : "",
+                                Player.song ? String(Player.song.extraId || "") : "",
+                                Player.song ? String(Player.song.title || "") : "")
+                        }
+                    }
                 }
+
+                // 对话框是独立 Popup，不占布局高度。
+                Loader {
+                    id: biliSkipDialogLoader
+                    source: Qt.resolvedUrl("../components/settings/BiliVideoSkipDialog.qml")
+                    active: true
+                    onStatusChanged: if (status === Loader.Error)
+                                         console.warn("[settings] BiliVideoSkipDialog.qml 尚未就绪")
+                }
+                property var biliSkipDialog: biliSkipDialogLoader.item
             }
 
             // ============================================================ 在线播放音质
@@ -1976,6 +2048,45 @@ Item {
                 SettingsNote {
                     width: parent.width
                     text: I18n.tr("后端按 standard / higher / exhigh / lossless / hires 映射解析码率；实际可用档位取决于音源与登录状态，无损与 Hi-Res 档位在部分接口上会回落到较高码率。")
+                }
+            }
+
+                }
+            }
+            Item {
+                id: catAudioEffects
+                width: parent.width
+                height: visible ? innerAudioEffects.height + 12 : 0
+                visible: page.currentCategory === "audioEffects"
+
+                Column {
+                    id: innerAudioEffects
+                    width: parent.width
+                    spacing: 12
+
+            // ============================================================ 音效与倍速（DSP 面板）
+            // 面板按标签页组织（预设/均衡器/音色/空间/动态/扬声器/倍速/高级），
+            // 内容自成一屏，与「淡入淡出、音质、跳过区间」这类播放行为没有共同语境，
+            // 所以单独成分类（上游安卓端同样是 AudioEffects 与 Playback 两个设置页）。
+            SettingsSection {
+                id: secDsp
+                width: parent.width - 24
+                x: 12
+                title: I18n.tr("音效与倍速")
+                description: I18n.tr("预设 · 均衡器 · 音色 · 空间 · 动态 · 扬声器 · 倍速")
+                icon: "graphic_eq"
+                expanded: true
+
+                // 面板自包含内容；文件缺失时静默退化，不阻塞设置页。
+                Loader {
+                    id: dspLoader
+                    width: parent.width
+                    source: Qt.resolvedUrl("../components/settings/DspSettingsPanel.qml")
+                    active: true
+                    visible: status === Loader.Ready
+                    onStatusChanged: if (status === Loader.Error)
+                                         console.warn("[settings] DspSettingsPanel.qml 尚未就绪")
+                    height: status === Loader.Ready && item ? item.implicitHeight : 0
                 }
             }
 
@@ -2396,6 +2507,17 @@ Item {
                 description: I18n.tr("清理封面缓存、下载记录与本地统计")
                 icon: "storage"
 
+                // 存储占用详情：按目录统计磁盘占用，清理入口在对话框内（只清可再生缓存）。
+                SettingsRow {
+                    width: parent.width
+                    title: I18n.tr("存储占用详情")
+                    description: I18n.tr("统计各目录的实际磁盘占用")
+                    SettingsButton {
+                        text: I18n.tr("查看")
+                        onClicked: if (storageDialogLoader.item) storageDialogLoader.item.open()
+                    }
+                }
+
                 SettingsRow {
                     width: parent.width
                     title: I18n.tr("封面缓存")
@@ -2460,6 +2582,16 @@ Item {
                     id: innerGeneral
                     width: parent.width
                     spacing: 12
+
+                // 存储管理对话框（独立 Popup，不占布局高度）
+                Loader {
+                    id: storageDialogLoader
+                    source: Qt.resolvedUrl("../components/settings/StorageManagementDialog.qml")
+                    active: true
+                    onStatusChanged: if (status === Loader.Error)
+                                         console.warn("[settings] StorageManagementDialog.qml 尚未就绪")
+                }
+
 
             // ============================================================ 首页栏目
             SettingsSection {
@@ -2715,6 +2847,59 @@ Item {
                     width: parent.width
                     spacing: 12
 
+                    // 设置快照导入导出（本机备份/迁移，不含凭据）
+                    SettingsSection {
+                        width: parent.width - 24
+                        x: 12
+                        title: I18n.tr("备份与恢复设置")
+                        description: I18n.tr("把当前偏好存成 JSON 文件，或从备份文件恢复")
+                        icon: "save"
+
+                        SettingsRow {
+                            width: parent.width
+                            title: I18n.tr("导出当前设置")
+                            description: I18n.tr("保存为可读的 JSON 文件，便于备份或迁移到另一台机器")
+                            SettingsButton {
+                                text: I18n.tr("导出…")
+                                onClicked: if (configDialogLoader.item) configDialogLoader.item.openDialog()
+                            }
+                        }
+
+                        SettingsRow {
+                            width: parent.width
+                            title: I18n.tr("导入设置快照")
+                            description: I18n.tr("导入会覆盖当前全部偏好，导入前会先校验并显示差异")
+                            SettingsButton {
+                                text: I18n.tr("导入…")
+                                onClicked: if (configDialogLoader.item) configDialogLoader.item.openDialog()
+                            }
+                        }
+
+                        SettingsNote {
+                            width: parent.width
+                            text: I18n.tr("快照只包含偏好设置，不含 Cookie、登录状态、同步 Token，也不含歌单与播放记录。")
+                        }
+                    }
+
+                    // 调试：后端最近日志（已脱敏）
+                    SettingsSection {
+                        width: parent.width - 24
+                        x: 12
+                        title: I18n.tr("调试")
+                        description: I18n.tr("后端最近日志（已脱敏）")
+                        icon: "bug_report"
+
+                        SettingsRow {
+                            width: parent.width
+                            title: I18n.tr("运行日志")
+                            description: I18n.tr("查看后端最近日志；敏感信息已脱敏")
+                            SettingsButton {
+                                text: I18n.tr("查看")
+                                onClicked: if (debugViewerLoader.item) debugViewerLoader.item.openViewer()
+                            }
+                        }
+                    }
+
                     // SyncPanel 自包含标题与内容；外层只提供滚动定位用的 id，不再套 SettingsSection。
                     Item {
                         id: secBackupSync
@@ -2734,6 +2919,22 @@ Item {
                             height: status === Loader.Ready && item ? item.implicitHeight : 0
                         }
                     }
+                }
+
+                // 两个对话框都是独立 Popup，不占布局高度。
+                Loader {
+                    id: configDialogLoader
+                    source: Qt.resolvedUrl("../components/settings/ConfigTransferDialog.qml")
+                    active: true
+                    onStatusChanged: if (status === Loader.Error)
+                                         console.warn("[settings] ConfigTransferDialog.qml 尚未就绪")
+                }
+                Loader {
+                    id: debugViewerLoader
+                    source: Qt.resolvedUrl("../components/settings/DebugLogViewer.qml")
+                    active: true
+                    onStatusChanged: if (status === Loader.Error)
+                                         console.warn("[settings] DebugLogViewer.qml 尚未就绪")
                 }
             }
 

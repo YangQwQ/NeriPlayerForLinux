@@ -12,7 +12,9 @@ Window {
     readonly property real panelWidth: 340
     // 高度固定：面板是可见状态的无边框 Qt.Tool 窗口，运行期改 height 会让内容停在
     // 旧布局里错位（重新显示才恢复），所以新增控件一律在行内解决、不撑高窗口。
-    readonly property real panelHeight: 436
+    // 底部退出行锚定面板底边（bottomMargin 12 + 高 34），动作列表是流式布局；
+    // 内容增多（如悬浮歌词锁定时多出解锁按钮）会顶到分隔线，这里留出足够余量。
+    readonly property real panelHeight: 476
 
     /** 常驻：开启后不因失焦 / 主窗口激活自动收起（Esc、关闭按钮、点动作项仍会收起）。 */
     readonly property bool persistent: Settings.get("trayPanelPersistent", false) === true
