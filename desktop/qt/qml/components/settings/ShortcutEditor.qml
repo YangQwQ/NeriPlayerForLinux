@@ -158,11 +158,25 @@ Item {
         return shortcuts.local[actionId] ? shortcuts.local[actionId] : null
     }
 
+    /** 后端 ShortcutBinding.display() 返回的中文媒体键名，按当前语言翻译。 */
+    function formatKeyText(text) {
+        if (!text)
+            return text
+        if (text === "未设置" || text === "没有绑定")
+            return I18n.tr("未设置")
+        const mapping = {
+            "媒体上一首": "Media previous", "媒体下一首": "Media next",
+            "媒体停止": "Media stop", "媒体播放": "Media play",
+            "媒体暂停": "Media pause", "媒体播放/暂停": "Media play/pause"
+        }
+        return mapping[text] ? I18n.tr(text) : text
+    }
+
     function localText(action) {
         const stored = root.storedLocal(action.id)
         if (stored)
             return root.formatBinding(stored)
-        return action.localDefault ? action.localDefault : I18n.tr("未设置")
+        return action.localDefault ? root.formatKeyText(action.localDefault) : I18n.tr("未设置")
     }
 
     function globalText(action) {
@@ -289,8 +303,8 @@ Item {
     // ---------------------------------------------------------------- 录制 / 保存
 
     function startRecording(action, scope) {
-        if (action.systemKey) {
-            Toast.show("「" + action.label + I18n.tr("」是固定键，不能修改"), "info")
+        if (action.systemKey || action.localSupported === false) {
+            Toast.show(I18n.tr("「") + I18n.tr(action.label) + I18n.tr("」是固定键，不能修改"), "info")
             return
         }
         root.recordingActionId = action.id
@@ -354,7 +368,7 @@ Item {
 
     function clearLocal(action) {
         if (action.systemKey) {
-            Toast.show("「" + action.label + I18n.tr("」是固定键，不能修改"), "info")
+            Toast.show(I18n.tr("「") + I18n.tr(action.label) + I18n.tr("」是固定键，不能修改"), "info")
             return
         }
         if (!root.storedLocal(action.id))
@@ -512,7 +526,7 @@ Item {
                     Text {
                         x: 0
                         anchors.verticalCenter: parent.verticalCenter
-                        text: groupColumn.modelData.category
+                        text: I18n.tr(groupColumn.modelData.category)
                         color: Theme.onSurfaceVariantColor
                         font.family: Theme.fontFamily
                         font.pixelSize: 12
@@ -564,7 +578,7 @@ Item {
 
                             Text {
                                 width: parent.width
-                                text: shortcutRow.action.label
+                                text: I18n.tr(shortcutRow.action.label)
                                 color: Theme.onSurfaceColor
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 14
@@ -640,10 +654,11 @@ Item {
                             radius: 10
                             color: shortcutRow.recording
                                    ? Theme.primaryContainer
-                                   : (localHover.hovered && !shortcutRow.isSystem
-                                      ? Theme.surfaceContainerHighest
-                                      : Theme.surfaceContainerHigh)
-                            border.width: 1
+                                   : (!shortcutRow.action.localSupported ? "transparent"
+                                      : (localHover.hovered && !shortcutRow.isSystem
+                                         ? Theme.surfaceContainerHighest
+                                         : Theme.surfaceContainerHigh))
+                            border.width: shortcutRow.action.localSupported ? 1 : 0
                             border.color: shortcutRow.recording ? Theme.primary : Theme.outlineVariant
 
                             Behavior on color {
@@ -656,7 +671,8 @@ Item {
                                 anchors.centerIn: parent
                                 width: parent.width - 16
                                 horizontalAlignment: Text.AlignHCenter
-                                text: shortcutRow.recording ? I18n.tr("按下新键…") : root.localText(shortcutRow.action)
+                                text: !shortcutRow.action.localSupported ? "—"
+                                      : (shortcutRow.recording ? I18n.tr("按下新键…") : root.localText(shortcutRow.action))
                                 elide: Text.ElideRight
                                 color: shortcutRow.recording
                                        ? Theme.onPrimaryContainerColor
