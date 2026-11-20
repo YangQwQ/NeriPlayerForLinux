@@ -654,11 +654,11 @@ Item {
                             radius: 10
                             color: shortcutRow.recording
                                    ? Theme.primaryContainer
-                                   : (!shortcutRow.action.localSupported ? "transparent"
+                                   : (shortcutRow.action.localSupported === false ? "transparent"
                                       : (localHover.hovered && !shortcutRow.isSystem
                                          ? Theme.surfaceContainerHighest
                                          : Theme.surfaceContainerHigh))
-                            border.width: shortcutRow.action.localSupported ? 1 : 0
+                            border.width: shortcutRow.action.localSupported === false ? 0 : 1
                             border.color: shortcutRow.recording ? Theme.primary : Theme.outlineVariant
 
                             Behavior on color {
@@ -671,7 +671,7 @@ Item {
                                 anchors.centerIn: parent
                                 width: parent.width - 16
                                 horizontalAlignment: Text.AlignHCenter
-                                text: !shortcutRow.action.localSupported ? "—"
+                                text: shortcutRow.action.localSupported === false ? "—"
                                       : (shortcutRow.recording ? I18n.tr("按下新键…") : root.localText(shortcutRow.action))
                                 elide: Text.ElideRight
                                 color: shortcutRow.recording
