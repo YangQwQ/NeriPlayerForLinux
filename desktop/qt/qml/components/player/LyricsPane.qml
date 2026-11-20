@@ -338,7 +338,7 @@ Item {
                             textFormat: Text.PlainText
                             horizontalAlignment: pane.textAlignment
                             color: np.accent
-                            font.family: Theme.fontFamily
+                            font.family: Prefs.effectiveLyricFont
                             font.pixelSize: pane.mainFontSize
                             font.weight: Font.DemiBold
                             lineHeightMode: Text.FixedHeight
@@ -368,7 +368,7 @@ Item {
                         horizontalAlignment: pane.textAlignment
                         color: Theme.withAlpha(np.foreground,
                                               pane.wordHighlight && lineDelegate.active ? 0.42 : 1.0)
-                        font.family: Theme.fontFamily
+                        font.family: Prefs.effectiveLyricFont
                         font.pixelSize: pane.mainFontSize
                         font.weight: lineDelegate.active ? Font.DemiBold : Font.Normal
                         lineHeightMode: Text.FixedHeight
@@ -399,7 +399,7 @@ Item {
                             textFormat: Text.PlainText
                             horizontalAlignment: pane.textAlignment
                             color: np.accent
-                            font.family: Theme.fontFamily
+                            font.family: Prefs.effectiveLyricFont
                             font.pixelSize: pane.mainFontSize
                             font.weight: Font.DemiBold
                             lineHeightMode: Text.FixedHeight
@@ -418,7 +418,7 @@ Item {
                     color: lineDelegate.active
                            ? Theme.withAlpha(np.foreground, 0.78)
                            : Theme.withAlpha(np.foreground, 0.45)
-                    font.family: Theme.fontFamily
+                    font.family: Prefs.effectiveLyricFont
                     font.pixelSize: pane.translationFontSize
                     lineHeightMode: Text.FixedHeight
                     lineHeight: pane.translationLineHeight

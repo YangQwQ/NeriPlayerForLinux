@@ -106,7 +106,7 @@ Item {
                     Layout.alignment: Qt.AlignVCenter
                     text: root.currentScale.toFixed(2) + "x"
                     color: np.foregroundFaint
-                    font.family: Theme.fontFamily
+                    font.family: Prefs.effectiveLyricFont
                     font.pixelSize: Theme.textStyle("labelSmall").size
                 }
 

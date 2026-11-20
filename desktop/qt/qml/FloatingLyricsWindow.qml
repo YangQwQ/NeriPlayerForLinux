@@ -327,7 +327,7 @@ Window {
                     elide: Text.ElideRight
                     color: win.shadowColor
                     opacity: win.lyricAlpha * 0.6
-                    font.family: Theme.fontFamily
+                    font.family: Prefs.effectiveLyricFont
                     font.pixelSize: win.baseFontSize
                     font.weight: Font.Bold
                 }
@@ -342,7 +342,7 @@ Window {
                     elide: Text.ElideRight
                     color: win.textColor
                     opacity: win.lyricAlpha
-                    font.family: Theme.fontFamily
+                    font.family: Prefs.effectiveLyricFont
                     font.pixelSize: win.baseFontSize
                     font.weight: Font.Bold
                     // OUTLINE 样式交回 Qt 文字引擎（单个 item，描边随字形一起光栅化）
@@ -364,7 +364,7 @@ Window {
                 elide: Text.ElideRight
                 color: win.textColor
                 opacity: win.translationAlpha
-                font.family: Theme.fontFamily
+                font.family: Prefs.effectiveLyricFont
                 font.pixelSize: Math.round(win.baseFontSize * 0.78)
             }
         }

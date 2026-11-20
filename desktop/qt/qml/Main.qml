@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Effects
 import "components"
 
 // 应用主窗口。对应 Compose 版的 Main.kt + NeriApp.kt。
@@ -15,6 +16,38 @@ ApplicationWindow {
     // bootstrap 失败或后端迟迟连不上时由 revealFallback 兜底显示，避免黑屏。
     visible: themeReady
     color: Theme.background
+
+    /** 用户自定义程序背景（设置页选择），铺满窗口、位于所有内容之下。 */
+    Item {
+        id: appBackgroundLayer
+        anchors.fill: parent
+        visible: Prefs.backgroundImage !== ""
+        z: -1
+        clip: true
+
+        Image {
+            id: bgImage
+            anchors.fill: parent
+            source: Prefs.backgroundImage !== "" ? "file://" + Prefs.backgroundImage : ""
+            fillMode: Image.PreserveAspectCrop
+            smooth: true
+            cache: false
+
+            MultiEffect {
+                source: bgImage
+                anchors.fill: bgImage
+                blurEnabled: Prefs.backgroundBlur > 0
+                blur: Math.min(1, Prefs.backgroundBlur / 20)
+                blurMax: 24
+            }
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            color: "black"
+            opacity: Prefs.backgroundDim
+        }
+    }
 
     /** 主题是否已就绪（拿到后端 theme 即可显示）。 */
     property bool themeReady: false
@@ -139,9 +172,13 @@ ApplicationWindow {
         }
     }
 
+    /** bootstrap 重试次数：后端刚启动时内部模块可能尚未就绪，失败后有限次重试。 */
+    property int bootstrapAttempts: 0
+
     function bootstrap() {
         console.log("[app] bootstrap requested")
         Api.call("app.bootstrap").then(function(snapshot) {
+            root.bootstrapAttempts = 0
             console.log("[app] bootstrap ok, roles=", snapshot && snapshot.theme ? snapshot.theme.roles ? snapshot.theme.roles.primary : "no roles" : "no theme")
             if (!snapshot)
                 return
@@ -162,10 +199,24 @@ ApplicationWindow {
             root.themeReady = true
         }).catch(function(error) {
             console.warn("[app] bootstrap failed:", error.message)
-            // 后端异常时也要显示界面，否则用户看到的是「程序没起来」
+            // 后端刚起来时可能还没就绪：有限次延迟重试，避免首屏永久空白；
+            // 重试耗尽仍失败则显示界面并提示，让用户可手动刷新。
+            if (root.bootstrapAttempts < 3) {
+                root.bootstrapAttempts++
+                bootstrapRetryTimer.start()
+                return
+            }
+            root.bootstrapAttempts = 0
             root.revealWindow()
             Toast.show("无法连接播放后端：" + (error.message || "未知错误"), "error")
         })
+    }
+
+    Timer {
+        id: bootstrapRetryTimer
+        interval: 600
+        repeat: false
+        onTriggered: root.bootstrap()
     }
 
     Connections {

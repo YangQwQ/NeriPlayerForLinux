@@ -106,7 +106,9 @@ QtObject {
     readonly property color surfaceContainerHighest: c("surfaceContainerHighest")
 
     // ---- 排版（Material 3 默认 Typography，单位：逻辑像素） ----
-    readonly property string fontFamily: "Noto Sans CJK SC"
+    // 界面字体跟随用户在设置页选择的偏好（Prefs 从后端设置读取，跨重启持久）。
+    readonly property string fontFamily: (typeof Prefs !== "undefined" && Prefs && Prefs.effectiveAppFont)
+                                          ? Prefs.effectiveAppFont : "Noto Sans CJK SC"
     property FontLoader iconFontLoader: FontLoader {
         source: Qt.resolvedUrl("../resources/fonts/MaterialSymbolsOutlined.ttf")
     }

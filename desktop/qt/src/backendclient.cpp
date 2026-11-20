@@ -186,7 +186,9 @@ void BackendClient::onSocketStateChanged()
         qInfo() << "[backend] connected to" << m_socketPath;
         // QLocalSocket 在 stateChanged(ConnectedState) 的调用栈里还没真正 open，
         // 直接写会得到 "device not open"；把通知排到事件循环下一轮再发出去。
-        QTimer::singleShot(0, this, [this]() {
+        // 额外留 250ms 让后端完成内部初始化（登录态/在线客户端），否则首屏
+        // bootstrap 可能拿到尚未就绪的空快照，页面数据要手动刷新才出现。
+        QTimer::singleShot(250, this, [this]() {
             if (m_connected)
                 emit connectedChanged();
         });
