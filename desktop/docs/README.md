@@ -17,6 +17,10 @@
 | [protocol-youtube.md](protocol-youtube.md) | `ytmusic.*` YouTube Music |
 | [protocol-listen-together.md](protocol-listen-together.md) | `listenTogether.*` 一起听 |
 | [protocol-login.md](protocol-login.md) | `login.*` 扫码登录与账号态 |
+| [protocol-audio-effects.md](protocol-audio-effects.md) | `audioEffects.*` DSP 音效 / AutoEQ / 频响曲线 |
+| [protocol-storage.md](protocol-storage.md) | `storage.*` 存储占用统计与缓存清理 |
+| [protocol-bili-video-skip.md](protocol-bili-video-skip.md) | `biliVideoSkip.*` B站分P跳过区间 |
+| [protocol-config.md](protocol-config.md) | `config.*` 设置快照导入导出、`debug.recentLogs` 日志 |
 | [core-api-inventory.md](core-api-inventory.md) | 核心对象图、状态流、数据模型、设置项字段的**索引** |
 
 ## 二、前端（Qt6/QML）
