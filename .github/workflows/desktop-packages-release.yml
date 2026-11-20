@@ -131,6 +131,10 @@ jobs:
     permissions:
       contents: write
     steps:
+      # gh release create --verify-tag 需要 git 仓库上下文，必须先 checkout
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
