@@ -11,6 +11,7 @@ object ShortcutCatalog {
             "label" to action.label,
             "category" to action.category,
             "systemKey" to action.systemKey,
+            "localSupported" to action.localSupported,
             "globalSupported" to action.globalSupported,
             "localDefault" to action.defaultLocalBinding.display(),
             "globalDefault" to action.defaultGlobalBinding.display(),
