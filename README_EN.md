@@ -6,17 +6,22 @@
 >
 > Built on top of [cwuom/NeriPlayer](https://github.com/cwuom/NeriPlayer) (a native Android app), this fork adds a
 > Linux desktop application that **does not require Android runtime or a browser engine**:
-> **Qt 6 / QML frontend + Kotlin headless backend over a local Unix-socket JSON protocol**, shipped as a single
-> `.deb` with a slim bundled JRE. Fast startup, low memory, and it follows the desktop's dark/light mode and accent color.
+> **Qt 6 / QML frontend + Kotlin headless backend over a local Unix-socket JSON protocol**, with a slim bundled JRE.
+> Fast startup, low memory, follows the desktop's dark/light mode and accent color. CI builds **`.deb` / `.rpm` /
+> `.AppImage`** Linux packages automatically.
 >
-> - 📖 Desktop docs: [`desktop/README.md`](./desktop/README.md)
-> - ⬇️ Download: [Releases](https://github.com/YangQwQ/NeriPlayerForLinux/releases) → `neriplayer_<version>_amd64.deb`
+> - 📖 Desktop docs: [`desktop/README.md`](./desktop/README.md), [docs index](./desktop/docs/README.md), [packaging](./desktop/qt/packaging/README.md)
+> - ⬇️ Download: [Releases](https://github.com/YangQwQ/NeriPlayerForLinux/releases) → `neriplayer_<version>_amd64.deb` / `_x86_64.rpm` / `_x86_64.AppImage` (with `SHA256SUMS.txt`)
 > - 📦 Runtime & optional dependencies (ffmpeg / yt-dlp / layer-shell, etc.) are documented in
 >   [desktop/README.md](./desktop/README.md#依赖与运行环境) (Chinese)
 > - 🔄 Shares the same GitHub sync format with the Android app (playlists / favorites / recents / play stats)
 > - 🔑 QR login for NetEase & Bilibili, local library, lyrics (including floating lyrics), multi-source playback
 > - 🖥️ Background residency: tray (StatusNotifierItem) + control panel + MPRIS media keys + xdg global shortcuts
 > - 🎨 Material 3 UI whose colors follow KDE/GNOME system theme by default
+> - 🌊 Fade-in/fade-out and crossfade on track change; in-memory audio cache makes seeking instant when the current track is cached (one track only, bounded memory)
+> - 🌐 Full UI localization (Chinese / English); configurable app font, lyric font, and program background
+> - 🎚️ Sidebar-categorized settings with a dedicated Shortcuts category; floating lyrics can run as a layer-shell overlay or a normal draggable window
+> - 🎧 Refined Now Playing style: cross-faded blurred cover background, synced bilingual lyrics with configurable scroll easing/duration
 >
 > Desktop sources live in [`desktop/`](./desktop) and do not overlap with the upstream Android project.
 >
@@ -31,7 +36,7 @@
 
 <h3>✨ A native Android audio player uniting multi-source streaming, local libraries, self-hosted servers (preview), and word-synced lyrics 🎵</h3>
 
-<p><strong>🖥️ Looking for the PC version? <a href="https://github.com/cwuom/NeriPlayer-Desktop">Visit the NeriPlayer Desktop repository →</a></strong></p>
+<p><strong>🖥️ Looking for the Linux desktop version? It's right here in this fork's <a href="./desktop/README.md">desktop/ directory</a> (native Qt6/QML); see also <a href="https://github.com/YangQwQ/NeriPlayerForLinux/releases">Linux releases</a>.</strong></p>
 
 <p>
   <a href="https://github.com/cwuom/NeriPlayer/releases">

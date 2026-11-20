@@ -5,11 +5,11 @@
 >
 > 在 [cwuom/NeriPlayer](https://github.com/cwuom/NeriPlayer)（原生 Android 应用）的基础上，本 fork 新增了
 > **不依赖 Android 运行环境、也不依赖浏览器内核**的 Linux 原生桌面版：
-> **Qt 6 / QML 前端 + Kotlin 无头后端（本地 Unix socket IPC）**，打包为单个 `.deb`，
-> 启动快、占用低，主题与深浅色跟随桌面环境。
+> **Qt 6 / QML 前端 + Kotlin 无头后端（本地 Unix socket IPC）**，启动快、占用低，
+> 主题与深浅色跟随桌面环境。自动构建产出 **`.deb` / `.rpm` / `.AppImage`** 三种 Linux 安装包。
 >
-> - 📖 桌面版文档：[`desktop/README.md`](./desktop/README.md)
-> - ⬇️ 下载安装：[Releases](https://github.com/YangQwQ/NeriPlayerForLinux/releases) → `neriplayer_<版本>_amd64.deb`
+> - 📖 桌面版文档：[`desktop/README.md`](./desktop/README.md)、[文档索引](./desktop/docs/README.md)、[打包说明](./desktop/qt/packaging/README.md)
+> - ⬇️ 下载安装：[Releases](https://github.com/YangQwQ/NeriPlayerForLinux/releases) → `neriplayer_<版本>_amd64.deb` / `_x86_64.rpm` / `_x86_64.AppImage`（附 `SHA256SUMS.txt`）
 > - 📦 运行依赖与可选组件（ffmpeg / yt-dlp / layer-shell 等）见
 >   [桌面版 README 的「依赖与运行环境」](./desktop/README.md#依赖与运行环境)
 > - 🔄 与原应用**共用同一套 GitHub 同步协议**，歌单 / 收藏 / 最近播放 / 播放统计可双向同步
@@ -18,7 +18,10 @@
 > - 🎨 Material 3 界面，但深浅色与强调色默认取自 KDE/GNOME 系统设置
 > - 💬 与手机版对齐的新能力：评论区、一起听（NeriPlayer-LTW 协议互通）、红心收藏、专辑/歌手详情页、
 >   首页每日推荐 / 私人 FM / 排行榜 / 雷达 / 推荐歌单 / B站音乐 / YouTube 推荐
-> - 🎧 播放页按 Refined Now Playing 风格重做：封面模糊背景、大封面、双语滚动歌词、沉浸模式与 hover 控制条
+> - 🎧 播放页按 Refined Now Playing 风格重做：封面模糊背景（双层交叉淡入）、大封面、双语滚动歌词（吸附动画可调曲线与时长）、沉浸模式与 hover 控制条
+> - 🌊 播放支持淡入淡出与切歌交叉淡入；在线音频有内存缓存，seek 命中缓存时瞬时响应（只缓存当前歌，内存占用可控）
+> - 🌐 全应用界面支持中文 / 英文切换（设置 → 语言）；界面字体、歌词字体与程序背景可在设置中调整
+> - 🎚️ 设置页按左侧分类导航组织，快捷键独立成类；悬浮歌词可选「置顶覆盖层 / 普通窗口（可跨屏拖动）」两种模式
 >
 > 桌面版源码位于 [`desktop/`](./desktop) 目录，与上游 Android 工程零重叠，不影响原有工程。
 >
@@ -35,7 +38,7 @@
 
 <h3>✨ 聚合多平台音源、本地曲库、自建音乐服务器（预览版）与逐字歌词的原生 Android 音频播放器 🎵</h3>
 
-<p><strong>🖥️ 在找 PC 端吗？ <a href="https://github.com/cwuom/NeriPlayer-Desktop">前往 NeriPlayer Desktop 仓库 →</a></strong></p>
+<p><strong>🖥️ 在找 Linux 桌面端吗？本仓库的 <a href="./desktop/README.md">desktop/ 目录</a> 就是（Qt6/QML 原生版）；另见 <a href="https://github.com/YangQwQ/NeriPlayerForLinux/releases">Linux 版 Releases</a>。</strong></p>
 
 <p>
   <a href="https://github.com/cwuom/NeriPlayer/releases">
@@ -92,7 +95,8 @@
 
 | 快速导航 | 说明 |
 | :--- | :--- |
-| [快速体验](#快速体验--getting-started) | 下载 APK、获取 CI 构建或从源码编译 |
+| [桌面版文档](./desktop/README.md) | Linux 桌面版（Qt6/QML）的安装、依赖与功能 |
+| [快速体验](#快速体验--getting-started) | 下载 Linux 安装包 / Android APK、获取 CI 构建或从源码编译 |
 | [核心特性](#核心特性--key-features) | 播放、音效、歌词与本地管理 |
 | [平台现状](#平台现状--platform-status) | 各平台的支持范围 |
 | [连接音乐服务器](#连接音乐服务器) | 接入 Navidrome / OpenSubsonic 自建曲库（预览版） |
@@ -234,9 +238,36 @@ NeriPlayer 是基于 **Jetpack Compose + Media3** 的原生 Android 音频播放
 
 ## 快速体验 / Getting Started
 
-### a. 下载 Release 版本（推荐）
+### 🐧 Linux 桌面版（本 fork 新增）
 
-前往 [GitHub Releases](https://github.com/cwuom/NeriPlayer/releases)，下载对应架构的 APK。
+从 [本仓库 Releases](https://github.com/YangQwQ/NeriPlayerForLinux/releases) 下载对应格式安装（三种包内容相同，按你的发行版选一种）：
+
+| 格式 | 适用 | 安装 |
+| :--- | :--- | :--- |
+| `.deb` | Debian / Ubuntu 及衍生版 | `sudo apt install ./neriplayer_<版本>_amd64.deb` |
+| `.rpm` | Fedora / openSUSE 及衍生版 | `sudo rpm -i neriplayer_<版本>_x86_64.rpm` |
+| `.AppImage` | 其它发行版，免安装 | `chmod +x *.AppImage && ./neriplayer_<版本>_x86_64.AppImage` |
+
+> 三种包都依赖宿主 Qt6/QML 运行库（AppImage 不自带 Qt）；ffmpeg / yt-dlp 为可选组件，
+> 用于音效、在线播放与音源兜底。校验和见 Release 附带的 `SHA256SUMS.txt`。
+
+从源码构建桌面版：
+
+```bash
+git clone --recursive https://github.com/YangQwQ/NeriPlayerForLinux.git
+cd NeriPlayerForLinux/desktop/qt
+# 单次构建 deb / rpm / AppImage（按本地可用工具自动跳过缺失的格式）
+./packaging/build-packages.sh 2.6.3
+# 或只构建 deb：./packaging/build-packages.sh 2.6.3 --only deb
+```
+
+构建依赖、隔离测试与截图验证方式见 [Qt 开发指南](./desktop/qt/docs/qt-dev-guide.md)；CI 自动打包与 Release 流程见 [打包说明](./desktop/qt/packaging/README.md)。
+
+### 📱 Android 版（上游项目）
+
+#### a. 下载 Release 版本（推荐）
+
+前往 [上游 Releases](https://github.com/cwuom/NeriPlayer/releases)，下载对应架构的 APK。
 
 | APK 架构 (ABI) | 适用设备 |
 | :--- | :--- |
@@ -247,14 +278,14 @@ NeriPlayer 是基于 **Jetpack Compose + Media3** 的原生 Android 音频播放
 > [!IMPORTANT]
 > Release 在一批功能完成后手动发布，可能包含尚未发现的问题。
 
-### b. 下载 CI 版本
+#### b. 下载 CI 版本
 
 1. 前往 [GitHub Actions](https://github.com/cwuom/NeriPlayer/actions)，下载最近一次成功构建的 Artifacts 并解压。
 2. 或访问 Telegram 频道 [NeriPlayer CI Builds](https://t.me/neriplayer_ci)。
 
 > master 分支 CI 默认上传 `arm64-v8a` APK，手动 Release 流程构建多 ABI APK。
 
-### c. 本地构建
+#### c. 本地构建
 
 1. 克隆仓库并初始化子模块：
    ```bash
