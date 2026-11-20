@@ -56,7 +56,7 @@ jobs:
             build-essential cmake ninja-build \
             qt6-base-dev qt6-base-dev-tools qt6-declarative-dev \
             libqt6svg6-dev \
-            openjdk-17-jdk-headless rpm rpm-build \
+            openjdk-17-jdk-headless rpm \
             libfuse2 desktop-file-utils
           # qt6-tools-dev 不是构建必需，装不到也不影响（CMake 只用 Qt6 Core/Gui/Quick/Qml/Network/Svg/DBus）。
           sudo apt-get install -y --no-install-recommends qt6-tools-dev || true
