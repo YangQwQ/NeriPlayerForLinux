@@ -102,6 +102,33 @@ class PlayerManager(
     private val _equalizerBands = MutableStateFlow(settings.current.equalizerBands)
     val equalizerBands: StateFlow<List<Float>> = _equalizerBands.asStateFlow()
 
+    /**
+     * DSP 音效参数（唯一权威来源）。旧 `equalizerEnabled/equalizerBands` 是它的视图：
+     * 十段图形均衡的增益，供旧的均衡器界面继续读取。
+     *
+     * 初始化时若音效文件从没保存过，就用 AppSettings 里的旧均衡器设置迁移一份，
+     * 老用户升级后听感不变；保存过一次之后旧值不再覆盖。
+     */
+    private val _audioEffects = MutableStateFlow(
+        AudioEffectsStore.currentOrMigrate(
+            LegacyEqualizer(
+                enabled = settings.current.equalizerEnabled,
+                preset = settings.current.equalizerPreset,
+                bands = settings.current.equalizerBands,
+            ),
+        ),
+    )
+    val audioEffects: StateFlow<AudioEffectsSound> = _audioEffects.asStateFlow()
+
+    /**
+     * 音效参数上次落盘的时间戳；0 表示从没保存过（此时启动会走旧均衡器迁移）。
+     * 放在内存里而不是每次回包都读一遍配置文件：滑块每次提交都会取快照，
+     * 每次都做文件 IO 既慢又没必要。
+     */
+    @Volatile
+    var audioEffectsUpdatedAt: Long = AudioEffectsStore.load().updatedAt
+        private set
+
     private val _sleepTimer = MutableStateFlow(SleepTimerState())
     val sleepTimer: StateFlow<SleepTimerState> = _sleepTimer.asStateFlow()
 
@@ -178,7 +205,6 @@ class PlayerManager(
             engine.setSpeed(_speed.value)
             engine.setPitch(_pitch.value)
             engine.setLoudness(_loudness.value)
-            engine.setEqualizer(if (_equalizerEnabled.value) _equalizerBands.value else null)
         }
         // 边播放边累计统计，保证统计页面实时更新
         scope.launch {
@@ -228,7 +254,7 @@ class PlayerManager(
             target.setSpeed(_speed.value)
             target.setPitch(_pitch.value)
             target.setLoudness(_loudness.value)
-            target.setEqualizer(if (_equalizerEnabled.value) _equalizerBands.value else null)
+            target.setAudioEffects(_audioEffects.value)
         }
     }
 
@@ -521,7 +547,7 @@ class PlayerManager(
                 engine.setSpeed(_speed.value)
                 engine.setPitch(_pitch.value)
                 engine.setLoudness(_loudness.value)
-                engine.setEqualizer(if (_equalizerEnabled.value) _equalizerBands.value else null)
+                engine.setAudioEffects(_audioEffects.value)
             }
             engine.play()
             currentPlayingKey = song.key
@@ -798,26 +824,69 @@ class PlayerManager(
         settings.update { it.copy(loudnessEnhancer = enabled) }
     }
 
-    fun setEqualizerEnabled(enabled: Boolean) {
-        _equalizerEnabled.value = enabled
-        engine.setEqualizer(if (enabled) _equalizerBands.value else null)
-        settings.update { it.copy(equalizerEnabled = enabled) }
+    /**
+     * 应用一整份 DSP 参数：写内存 → 写引擎 → 落盘，并把旧的十段均衡器视图同步过去。
+     *
+     * 这是音效参数的**唯一写入口**（`player.setAudioEffects` 与 `audioEffects.updateSound` 都走它），
+     * 引擎侧只在参数真的变了时才重启解码器，所以重复下发同样的值没有代价。
+     */
+    fun setAudioEffects(effects: AudioEffectsSound): AudioEffectsSound {
+        val normalized = effects.normalized()
+        if (normalized == _audioEffects.value) return normalized
+        _audioEffects.value = normalized
+        // 旧界面的视图：图形均衡段的增益；分区/总开关关掉时对旧界面表现为「均衡器已关闭」
+        val legacyBands = normalized.graphicBandsDb.map { it.toFloat() }
+        _equalizerBands.value = legacyBands
+        _equalizerEnabled.value = normalized.enabled && normalized.equalizerEnabled
+        if (engine.supportsEffects) engine.setAudioEffects(normalized)
+        settings.updateDeferred {
+            it.copy(
+                equalizerEnabled = _equalizerEnabled.value,
+                equalizerBands = legacyBands,
+            )
+        }
+        audioEffectsUpdatedAt = AudioEffectsStore.save(normalized).updatedAt
+        return normalized
     }
 
+    /** 只改一部分字段（滑块一次只改一个值），其余保留当前值。 */
+    fun updateAudioEffects(transform: (AudioEffectsSound) -> AudioEffectsSound): AudioEffectsSound =
+        setAudioEffects(transform(_audioEffects.value))
+
+    fun setEqualizerEnabled(enabled: Boolean) {
+        setAudioEffects(_audioEffects.value.copy(enabled = true, equalizerEnabled = enabled))
+    }
+
+    /** 切换预设：只是把一组十段增益写进图形均衡，后端不内置预设曲线。 */
     fun setEqualizerPreset(name: String, bands: List<Float>) {
-        _equalizerBands.value = bands
-        _equalizerEnabled.value = true
-        engine.setEqualizer(bands)
-        settings.update { it.copy(equalizerPreset = name, equalizerBands = bands, equalizerEnabled = true) }
+        setAudioEffects(
+            _audioEffects.value.copy(
+                enabled = true,
+                equalizerEnabled = true,
+                graphicBandsDb = List(GRAPHIC_EQ_FREQUENCIES.size) { index ->
+                    (bands.getOrNull(index) ?: 0f).toDouble()
+                },
+            ),
+        )
+        settings.update { it.copy(equalizerPreset = name) }
     }
 
     fun setEqualizerBand(index: Int, gain: Float) {
-        val bands = _equalizerBands.value.toMutableList()
-        if (index !in bands.indices) return
-        bands[index] = gain
-        _equalizerBands.value = bands
-        engine.setEqualizer(bands)
-        settings.update { it.copy(equalizerBands = bands, equalizerPreset = "自定义") }
+        if (index !in 0 until GRAPHIC_EQ_FREQUENCIES.size) return
+        setAudioEffects(
+            _audioEffects.value.copy(
+                enabled = true,
+                equalizerEnabled = true,
+                graphicBandsDb = List(GRAPHIC_EQ_FREQUENCIES.size) { position ->
+                    if (position == index) {
+                        gain.toDouble()
+                    } else {
+                        _audioEffects.value.graphicBandsDb.getOrElse(position) { 0.0 }
+                    }
+                },
+            ),
+        )
+        settings.update { it.copy(equalizerPreset = "自定义") }
     }
 
     /** 更新淡入淡出 / 交叉淡入设置；内存与引擎立即生效，写盘延迟合并。 */
@@ -847,8 +916,8 @@ class PlayerManager(
         setSpeed(1f)
         setPitch(0f)
         setLoudness(false)
-        _equalizerBands.value = List(10) { 0f }
-        setEqualizerEnabled(false)
+        // 全部恢复默认：DSP 参数回到出厂值，旧均衡器视图随之清零
+        setAudioEffects(AudioEffectsSound())
         settings.update { it.copy(equalizerPreset = "平直") }
     }
 

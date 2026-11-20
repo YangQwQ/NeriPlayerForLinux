@@ -51,7 +51,20 @@ interface AudioEngine {
     fun setSpeed(speed: Float)
     fun setPitch(semitones: Float)
     fun setLoudness(enabled: Boolean)
+
+    /**
+     * 旧版十段均衡器入口：`null` 表示关闭。
+     * 现在只是 [setAudioEffects] 的语法糖（把十段增益映射成图形均衡），保留是为了老调用方。
+     */
     fun setEqualizer(bands: List<Float>?)
+
+    /**
+     * DSP 音效参数：`null` 表示完全旁路。
+     *
+     * 引擎只认这一个入口，DSP 模型 → 具体滤镜的映射集中在 `FfmpegAudioEngine.applyAudioEffectsToFilters()`，
+     * 换成原生 DSP 时替换那一处即可，Player / 协议 / 界面都不用动。
+     */
+    fun setAudioEffects(effects: AudioEffectsSound?) = Unit
 
     /** 渐变目标：target=1f 淡入、0f 淡出；durationMs<=0 时立即跳变。 */
     fun fadeTo(target: Float, sampleRate: Int, durationMs: Int) = Unit
@@ -72,10 +85,9 @@ interface AudioEngine {
 private const val SAMPLE_RATE = 48_000
 private const val CHANNELS = 2
 private const val BYTES_PER_FRAME = CHANNELS * 2
-private const val EQ_FREQUENCIES = "31,62,125,250,500,1000,2000,4000,8000,16000"
 
-private val EQ_FREQ_LIST = EQ_FREQUENCIES.split(',').map { it.trim() }
-
+/** 每次从 ffmpeg 管道读的块大小（32 KiB ≈ 170 ms 音频）。 */
+private const val READ_BLOCK_BYTES = 1 shl 15
 object FfmpegSupport {
     val available: Boolean by lazy {
         runCatching {
@@ -135,7 +147,28 @@ class FfmpegAudioEngine : AudioEngine {
     private var speed: Float = 1.0f
     private var pitch: Float = 0.0f
     private var loudness: Boolean = false
-    private var equalizer: List<Float>? = null
+
+    /** 当前 DSP 音效参数；`null` 表示旁路。由命令线程写、滤镜构建时读。 */
+    @Volatile private var audioEffects: AudioEffectsSound? = null
+
+    /**
+     * 手递给音频线程的 native DSP 参数快照（SPSC：命令线程写、音频线程读）。
+     *
+     * `null` 表示「完全不碰 native 引擎」（DSP 从未启用）；`enabled=false` 的音效参数
+     * 会是 MASTER_ENABLED=0 的数组，native 借此把总混合比淡到 0（等价直通），
+     * 不需要重启解码器。
+     */
+    private val dspParams = AtomicReference<FloatArray?>(null)
+
+    /**
+     * 当前这条解码流水线是否把音效交给 native DSP。
+     *
+     * 这个布尔量决定两件事，必须同时成立：
+     * 1. `buildFilterChain()` 不再拼 equalizer/bass/treble/volume（否则同一套参数处理两遍）；
+     * 2. `readLoop` 在写 `line` 之前调用 native 处理。
+     * 因此它只在 `startPipeline()` 里按 [NativeDsp.isAvailable] 求值一次，整条流水线一致。
+     */
+    @Volatile private var nativeDsp = false
     private var playRequested = false
     private var restarting = false
     private var generation = 0
@@ -274,8 +307,71 @@ class FfmpegAudioEngine : AudioEngine {
     }
 
     override fun setEqualizer(bands: List<Float>?) {
-        this.equalizer = bands
-        restartPreservingPosition()
+        // 旧接口语义：null = 关闭；有值 = 打开并写入十段增益。
+        // 转成 DSP 模型后走同一条映射，避免两套 EQ 逻辑并存导致听感不一致。
+        val current = audioEffects ?: AudioEffectsSound()
+        this.audioEffects = if (bands == null) {
+            null
+        } else {
+            current.copy(
+                enabled = true,
+                equalizerEnabled = true,
+                graphicBandsDb = List(GRAPHIC_EQ_FREQUENCIES.size) { index ->
+                    (bands.getOrNull(index) ?: 0f).toDouble()
+                },
+            ).normalized()
+        }
+        refreshEffectsPath()
+    }
+
+    override fun setAudioEffects(effects: AudioEffectsSound?) {
+        val normalized = effects?.normalized()
+        // 参数完全一致时不要重启解码器：SetEqualizer 类命令可能被重复下发，
+        // 每来一次就重启 ffmpeg 会造成拖动滑块时的明显卡顿与爆音。
+        if (normalized == audioEffects) return
+        this.audioEffects = normalized
+        refreshEffectsPath()
+    }
+
+    /**
+     * 音效参数变更后决定「换参数」还是「重启解码器」。
+     *
+     * native DSP 走的是常驻处理环：参数通过 [dspParams] 手递给音频线程，下一块就生效，
+     * 完全不用重启 ffmpeg（滑块拖动不再有重启造成的卡顿与爆音）。只有回退到
+     * ffmpeg 滤镜方案时才必须重启——ffmpeg 的滤镜图在进程启动时固定。
+     */
+    private fun refreshEffectsPath() {
+        val native = resolveNativeDsp()
+        // 这条流水线的路径（滤镜 / native）由 startPipeline 决定并保持不变；
+        // 只有可用性发生翻转（例如 native 中途失效、或首次尝试后加载成功）才重建。
+        if (native != nativeDsp) {
+            restartPreservingPosition()
+            return
+        }
+        if (native) publishDspParams(audioEffects) else restartPreservingPosition()
+    }
+
+    /**
+     * native 在播放中途失效（引擎创建失败 / 连续处理失败 / 参数被拒）。
+     * 已经 [NativeDsp.disable]，这里只需要重建流水线让回退路径生效。
+     */
+    private fun onNativeDspFailed() {
+        if (synchronized(lock) { input } == null) return
+        runCatching { restartPreservingPosition() }
+    }
+
+    /**
+     * 把参数快照交给 native DSP；返回 true 表示这台机器上 native 可用（不必重启解码器）。
+     *
+     * `null`（整体旁路）也把快照清空，音频线程看到 null 就完全跳过 native 引擎。
+     */
+    private fun publishDspParams(effects: AudioEffectsSound?): Boolean {
+        if (!NativeDsp.isAvailable) {
+            dspParams.set(null)
+            return false
+        }
+        dspParams.set(effects?.toDspParams())
+        return true
     }
 
     private fun restartPreservingPosition() {
@@ -291,6 +387,19 @@ class FfmpegAudioEngine : AudioEngine {
         offsetMs + frames * 1000L / SAMPLE_RATE
     }
 
+    /**
+     * 决定这条解码流水线是否把音效交给 native DSP（调用方已持有 [lock]）。
+     *
+     * 必须同时满足「库能加载」与「引擎接受这条流的格式」：ffmpeg 的输出格式是常量
+     * （48kHz/双声道/16bit），被拒说明 native 这条路走不通，整条流水线改用滤镜回退。
+     */
+    private fun resolveNativeDspLocked(): Boolean = resolveNativeDsp()
+
+    /** [resolveNativeDspLocked] 的无锁版本；结论只取决于进程级状态，不需要持锁。 */
+    private fun resolveNativeDsp(): Boolean =
+        NativeDsp.ensureLoaded() &&
+            NativeDsp.probeFormat(SAMPLE_RATE, CHANNELS, NeriDspEncoding.PCM_16BIT)
+
     private fun buildFilterChain(): String {
         val filters = mutableListOf<String>()
         val pitchRatio = 2.0.pow(pitch / 12.0)
@@ -304,16 +413,142 @@ class FfmpegAudioEngine : AudioEngine {
         if (loudness) {
             filters += "dynaudnorm=f=250:g=15:p=0.9"
         }
-        val bands = equalizer
-        if (bands != null) {
-            bands.take(EQ_FREQ_LIST.size).forEachIndexed { index, gain ->
-                if (abs(gain) > 0.05f) {
-                    filters += "equalizer=f=${EQ_FREQ_LIST[index]}:t=q:w=1.2:g=${"%.1f".format(gain)}"
+        // native DSP 可用时，音效参数全部交给 native（readLoop 里逐块处理），
+        // ffmpeg 这条链只留变速/变调/响度。决不能两边都挂：那就是双重 EQ + 双重增益。
+        if (!nativeDsp) applyAudioEffectsToFilters(filters)
+        return filters.joinToString(",")
+    }
+
+    /**
+     * DSP 音效参数 → ffmpeg 滤镜（**native DSP 不可用时的回退路径**）。
+     *
+     * 正常情况下音效由 [NeriDspStage] 在 PCM 上逐块处理（见 `readLoop`），这里完全不参与，
+     * 否则同一套参数会被处理两遍（双重 EQ + 双重增益）。
+     * 只有 `lib_neri.so` 加载失败 / 本机架构不符 / 引擎配置失败时，[buildFilterChain] 才会
+     * 调到这里，用 ffmpeg 滤镜近似；方法名保持不变，作为回退路径的稳定入口。
+     *
+     * ffmpeg 能力之外的参数（混响、压缩、限幅、虚拟低音、温暖度、激励器、人声）
+     * 由 [AudioEffectsCapabilities] 在 native 不可用时标为未生效，这里**不生成任何滤镜**，
+     * 以免出现「界面能调但听感对不上」的假象。
+     *
+     * 关于实时性：ffmpeg 子进程的滤镜图在启动时固定，运行期改参数必须重启进程；
+     * 官方支持的运行期改参路子是 `azmq`（需要 libzmq + JVM 侧 ZMQ 客户端），
+     * 本项目没有引入这两个依赖，所以保持「重启 + 界面防抖」，见 DspSettingsPanel 的提交时机。
+     */
+    private fun applyAudioEffectsToFilters(filters: MutableList<String>) {
+        val sound = audioEffects?.normalized() ?: return
+        if (!sound.enabled) return
+        // 分区开关关闭时按默认值处理，与 AudioEffectsSound.effective() 语义一致
+        val value = sound.effective()
+
+        // ---------------- SPACE：声道矩阵 ----------------
+        filters += spaceFilters(value)
+
+        // ---------------- EQUALIZER ----------------
+        if (value.equalizerEnabled) {
+            if (value.preampDb != 0.0) {
+                filters += "volume=${formatDb(value.preampDb)}dB"
+            }
+            value.graphicBandsDb.forEachIndexed { index, gain ->
+                if (abs(gain) > 0.05) {
+                    filters += "equalizer=f=${formatFreq(GRAPHIC_EQ_FREQUENCIES[index])}" +
+                        ":t=q:w=1.2:g=${formatDb(gain)}"
+                }
+            }
+            if (value.parametricEnabled) {
+                for (band in value.parametricBands) {
+                    if (!band.enabled) continue
+                    filters += ffmpegBand(band)
                 }
             }
         }
-        return filters.joinToString(",")
+
+        // ---------------- TONE ----------------
+        if (value.toneEnabled) {
+            if (abs(value.bassDb) > 0.05) {
+                filters += "bass=f=${formatFreq(value.bassFrequencyHz)}:t=q:w=0.707:g=${formatDb(value.bassDb)}"
+            }
+            if (abs(value.trebleDb) > 0.05) {
+                filters += "treble=f=${formatFreq(value.trebleFrequencyHz)}:t=q:w=0.707:g=${formatDb(value.trebleDb)}"
+            }
+            // clarity 是 0~1 的力度旋钮，用峰值 EQ 近似：0 表示不挂滤镜，1 约等于 +6 dB
+            if (value.clarity > 0.0) {
+                filters += "equalizer=f=${formatFreq(value.clarityFrequencyHz)}" +
+                    ":t=q:w=1.0:g=${formatDb(value.clarity * 6.0)}"
+            }
+        }
+
+        // ---------------- DYNAMICS ----------------
+        if (value.dynamicsEnabled && abs(value.outputGainDb) > 0.05) {
+            filters += "volume=${formatDb(value.outputGainDb)}dB"
+        }
     }
+
+    /**
+     * 空间分区里 ffmpeg 能表达的部分：单声道、左右互换、立体声宽度、低频单声道化。
+     *
+     * 声道矩阵只挂**一个** pan：串多个 pan 会反复重混声道，既损失精度又难预测。
+     * 低频单声道化必须拆成两条支路（低通后取中置再与高通支路相加），
+     * 所以它是一段带标签的子图，和前面的逗号链用 `;` 隔开。
+     *
+     * @return 需要追加的滤镜片段，没有任何处理时为空
+     */
+    private fun spaceFilters(value: AudioEffectsSound): List<String> {
+        if (!value.spaceEnabled) return emptyList()
+        // stereoWidth 1.0 是原样：mid/side 里侧向分量权重 w，0 = 单声道，2 = 最宽
+        val width = if (value.mono) 0.0 else value.stereoWidth.coerceIn(0.0, 2.0)
+        val monoBassHz = value.monoBassHz.takeIf { it >= 40.0 && !value.mono }
+        val matrix = if (value.mono || abs(width - 1.0) > 0.02 || value.swapChannels) {
+            // L' = a·L + b·R，R' = b·L + a·R，其中 a = (1+w)/2、b = (1-w)/2
+            // w=1 退化成直通，w=0 两个声道都是中置，w=2 时 b 为负即左右相减（加宽）
+            val a = (1.0 + width) / 2.0
+            val b = (1.0 - width) / 2.0
+            val left = if (value.swapChannels) "c1" else "c0"
+            val right = if (value.swapChannels) "c0" else "c1"
+            "pan=stereo|c0=%.3f*$left+%.3f*$right|c1=%.3f*$left+%.3f*$right".format(a, b, b, a)
+        } else {
+            null
+        }
+        if (matrix == null && monoBassHz == null) return emptyList()
+        val out = mutableListOf("aformat=channel_layouts=stereo")
+        if (matrix != null) out += matrix
+        if (monoBassHz != null) {
+            val hz = formatFreq(monoBassHz)
+            out += "asplit=2[dsp_mb_low][dsp_mb_high]" +
+                ";[dsp_mb_low]lowpass=f=$hz:w=0.707," +
+                "pan=stereo|c0=0.5*c0+0.5*c1|c1=0.5*c0+0.5*c1[dsp_mb_mono]" +
+                ";[dsp_mb_high]anull[dsp_mb_rest]" +
+                ";[dsp_mb_mono][dsp_mb_rest]amix=inputs=2:normalize=0"
+        }
+        return out
+    }
+
+    /** 参数均衡段 → ffmpeg 滤镜；7 种类型逐一映射（LP/HP/带通/陷波忽略增益）。 */
+    private fun ffmpegBand(band: ParametricEqBand): String {
+        val frequency = formatFreq(band.frequencyHz)
+        val width = ":t=q:w=" + "%.3f".format(band.q.coerceIn(0.1, 20.0))
+        return when (band.type) {
+            ParametricEqBandType.PEAK ->
+                "equalizer=f=$frequency$width:g=${formatDb(band.gainDb)}"
+            ParametricEqBandType.LOW_SHELF ->
+                "bass=f=$frequency$width:g=${formatDb(band.gainDb)}"
+            ParametricEqBandType.HIGH_SHELF ->
+                "treble=f=$frequency$width:g=${formatDb(band.gainDb)}"
+            ParametricEqBandType.LOW_PASS -> "lowpass=f=$frequency$width"
+            ParametricEqBandType.HIGH_PASS -> "highpass=f=$frequency$width"
+            ParametricEqBandType.NOTCH -> "bandreject=f=$frequency$width"
+            ParametricEqBandType.BAND_PASS -> "bandpass=f=$frequency$width"
+        }
+    }
+
+    /** ffmpeg 的频率参数要求有限正数；带小数便于精确对齐 31.25 Hz 这类中心频率。 */
+    private fun formatFreq(hz: Double): String {
+        val value = if (hz.isFinite()) hz.coerceIn(10.0, 20_000.0) else 1000.0
+        return "%.2f".format(value)
+    }
+
+    /** 增益一律保留 1 位小数：低于 0.05 dB 的差别听不出来，却会让命令行无谓地变化。 */
+    private fun formatDb(db: Double): String = "%.1f".format(if (db.isFinite()) db else 0.0)
 
     private fun tempoChain(tempo: Double): List<String> {
         var value = tempo.coerceIn(0.25, 4.0)
@@ -363,6 +598,12 @@ class FfmpegAudioEngine : AudioEngine {
             myGeneration = generation
             offsetMs = startMs.coerceAtLeast(0L)
             playRequested = autoPlay || playRequested
+            // 音效走哪条路必须在建 ffmpeg 命令行**之前**定好：滤镜链与 native 处理环
+            // 是二选一，同一条流水线上不允许两边都生效。
+            nativeDsp = resolveNativeDspLocked()
+            // 新流水线要从当前参数起步：native 首次加载可能发生在 setAudioEffects 之后，
+            // 那时快照还是空的，这里补一次，避免"接了 DSP 但参数没送到"。
+            if (nativeDsp) publishDspParams(audioEffects)
         }
         val format = AudioFormat(SAMPLE_RATE.toFloat(), 16, CHANNELS, true, false)
         val info = DataLine.Info(SourceDataLine::class.java, format)
@@ -404,7 +645,20 @@ class FfmpegAudioEngine : AudioEngine {
             _snapshot.value = _snapshot.value.copy(playing = true, buffering = false)
         }
 
-        val reader = Thread({ readLoop(myGeneration, newProcess, newLine, startMs) }, "neri-audio-reader")
+        // native 处理环绑定这条解码流水线：换一条流水线就建新的引擎（JNI 句柄不能跨线程复用）
+        val dspStage = if (nativeDsp) {
+            NeriDspStage(
+                sampleRate = SAMPLE_RATE,
+                channelCount = CHANNELS,
+                encoding = NeriDspEncoding.PCM_16BIT,
+                params = dspParams,
+                maxBlockBytes = READ_BLOCK_BYTES,
+            )
+        } else {
+            null
+        }
+
+        val reader = Thread({ readLoop(myGeneration, newProcess, newLine, startMs, dspStage) }, "neri-audio-reader")
         reader.isDaemon = true
         readerThread = reader
         reader.start()
@@ -417,9 +671,15 @@ class FfmpegAudioEngine : AudioEngine {
         }
     }
 
-    private fun readLoop(myGeneration: Int, process: Process, line: SourceDataLine, startMs: Long) {
+    private fun readLoop(
+        myGeneration: Int,
+        process: Process,
+        line: SourceDataLine,
+        startMs: Long,
+        dspStage: NeriDspStage?,
+    ) {
         val inputStream: InputStream = BufferedInputStream(process.inputStream, 1 shl 16)
-        val buffer = ByteArray(1 shl 15)
+        val buffer = ByteArray(READ_BLOCK_BYTES)
         var finishedNormally = false
         try {
             while (true) {
@@ -436,6 +696,14 @@ class FfmpegAudioEngine : AudioEngine {
                     break
                 }
                 if (read == 0) continue
+                // DSP 必须在 applyVolume 之前：压缩器/限幅器的阈值按 dBFS 判定，对绝对电平敏感。
+                // 放在音量之后的话，用户把音量拉到 20% 就等于让压缩器彻底失效。
+                if (dspStage != null && !dspStage.process(buffer, read)) {
+                    // native 在这条流上失效了，而这条流水线没有挂滤镜 —— 重建一次，
+                    // 让新流水线走 applyAudioEffectsToFilters 的回退路径，别让声音变成未处理。
+                    onNativeDspFailed()
+                    return
+                }
                 applyVolume(buffer, read)
                 var written = 0
                 while (written < read) {
@@ -448,6 +716,8 @@ class FfmpegAudioEngine : AudioEngine {
         } catch (_: Throwable) {
             // 管道被主动关闭时忽略
         } finally {
+            // JNI 句柄必须在本线程销毁（引擎不保证跨线程安全），跟随读线程一起收尾
+            dspStage?.close()
             runCatching { inputStream.close() }
             val stillCurrent = synchronized(lock) { generation == myGeneration }
             if (finishedNormally && stillCurrent) {
@@ -473,8 +743,9 @@ class FfmpegAudioEngine : AudioEngine {
         val frames = length / BYTES_PER_FRAME
         val gain = volume * fadeGain.gainAndAdvance(frames)
         mixSource.drain().let { (other, otherLength) -> mixPcm(buffer, length, other, otherLength, BYTES_PER_FRAME) }
-        if (abs(gain - 1f) < 0.001f) return
-        scalePcm(buffer, length, gain, BYTES_PER_FRAME)
+        if (abs(gain - 1f) >= 0.001f) scalePcm(buffer, length, gain, BYTES_PER_FRAME)
+        // pcmTap 必须在缩放之外调用：原来 gain≈1 时提前 return 会跳过 tap，
+        // 交叉淡入在音量接近 1 时就没有旧曲 PCM 可混，表现为淡入失效。
         pcmTap?.invoke(buffer, length)
     }
 
@@ -760,8 +1031,8 @@ class JavaSoundAudioEngine : AudioEngine {
         val frames = length / frameBytes
         val gain = volume * fadeGain.gainAndAdvance(frames)
         mixSource.drain().let { (other, otherLength) -> mixPcm(buffer, length, other, otherLength, frameBytes) }
-        if (abs(gain - 1f) < 0.001f) return
-        scalePcm(buffer, length, gain, frameBytes)
+        if (abs(gain - 1f) >= 0.001f) scalePcm(buffer, length, gain, frameBytes)
+        // 同 FfmpegAudioEngine：tap 不能跟着提前 return，否则音量≈1 时交叉淡入拿不到旧曲 PCM
         pcmTap?.invoke(buffer, length)
     }
 
