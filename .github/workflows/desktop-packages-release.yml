@@ -68,6 +68,12 @@ jobs:
             https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
           chmod +x /usr/local/bin/appimagetool
 
+      - name: Install Qt 6.6 (Qt Quick Effects/MultiEffect needs Qt >= 6.5)
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.6.3'
+          modules: 'qtsvg'
+
       - name: Build deb / rpm / AppImage
         shell: bash
         env:
