@@ -68,11 +68,12 @@ jobs:
             https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
           chmod +x /usr/local/bin/appimagetool
 
+      # Qt Quick Effects/MultiEffect 需要 Qt >= 6.5；Ubuntu 22.04 自带的 6.2 不够。
+      # 不指定 modules：默认 archives 已含 qtbase/qtdeclarative/qtsvg。
       - name: Install Qt 6.6 (Qt Quick Effects/MultiEffect needs Qt >= 6.5)
         uses: jurplel/install-qt-action@v4
         with:
           version: '6.6.3'
-          modules: 'qtsvg'
 
       - name: Build deb / rpm / AppImage
         shell: bash
