@@ -11,6 +11,8 @@ Item {
     property string path: ""
     property string url: ""
     property int radius: 10
+    /** 正圆模式：遮罩半径取实际尺寸的一半，不受传入 radius 与取整影响。 */
+    property bool circle: false
     property real placeholderIconSize: 22
 
     // 远程 URL 解析后的本地缓存路径
@@ -29,7 +31,9 @@ Item {
     // QSvgRenderer 光栅化自带抗锯齿，配合下面 MultiEffect 的软阈值就能得到平滑边缘。
     readonly property int maskWidth: Math.max(1, Math.round(width))
     readonly property int maskHeight: Math.max(1, Math.round(height))
-    readonly property real maskRadius: Math.max(0, Math.min(radius, Math.min(maskWidth, maskHeight) / 2))
+    readonly property real maskRadius: circle
+        ? Math.min(maskWidth, maskHeight) / 2
+        : Math.max(0, Math.min(radius, Math.min(maskWidth, maskHeight) / 2))
     readonly property string maskUri: "data:image/svg+xml;utf8," + encodeURIComponent(
         "<svg xmlns='http://www.w3.org/2000/svg' width='" + maskWidth + "' height='" + maskHeight
         + "'><rect width='" + maskWidth + "' height='" + maskHeight + "' rx='" + maskRadius
@@ -115,7 +119,7 @@ Item {
     // 占位背景（无图时）：有图时完全交给遮罩输出，避免半透明边缘露出底色形成一圈暗边
     Rectangle {
         anchors.fill: parent
-        radius: cover.radius
+        radius: cover.maskRadius
         color: Theme.surfaceContainerHighest
         antialiasing: true
         visible: !cover.hasImage

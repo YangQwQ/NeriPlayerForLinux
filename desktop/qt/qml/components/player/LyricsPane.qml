@@ -58,6 +58,25 @@ Item {
         const d = Settings.get("lyricsHighlightDuration", 220)
         return (typeof d === "number" && d >= 0) ? d : 220
     }
+    /** 吸附滚动动画的缓动曲线：LINEAR / SINE / QUAD / CUBIC。 */
+    readonly property string scrollEasing: {
+        const e = Settings.get("lyricsScrollEasing", "CUBIC")
+        return (e === "LINEAR" || e === "SINE" || e === "QUAD" || e === "CUBIC") ? e : "CUBIC"
+    }
+    /** 吸附滚动动画基准时长（毫秒），实际按时距离微调。 */
+    readonly property int scrollDuration: {
+        const d = Settings.get("lyricsScrollDuration", 420)
+        return (typeof d === "number" && d >= 80 && d <= 2000) ? d : 420
+    }
+    /** 把设置里的缓动名映射成 QML Easing 枚举。 */
+    readonly property int scrollEasingType: {
+        switch (scrollEasing) {
+            case "LINEAR": return Easing.Linear
+            case "SINE":   return Easing.InOutSine
+            case "QUAD":   return Easing.InOutQuad
+            default:       return Easing.OutCubic
+        }
+    }
 
     /** 歌词水平对齐（Settings.lyricsAlignment：LEFT / CENTER / RIGHT）。 */
     readonly property string alignment: {
@@ -450,12 +469,12 @@ Item {
             id: scrollAnimation
             target: list
             property: "contentY"
-            duration: 420
-            easing.type: Easing.OutCubic
+            duration: pane.scrollDuration
+            easing.type: pane.scrollEasingType
         }
 
         // 行高要等 delegate 实例化后才准，contentHeight 变化后补一次定位
-        onContentHeightChanged: Qt.callLater(pane.scrollToCurrent, false)
+        onContentHeightChanged: Qt.callLater(function() { pane.scrollToCurrent(false) })
 
         onMovementStarted: pane.beginUserScroll()
         onMovementEnded: pane.endUserScroll()
@@ -487,8 +506,9 @@ Item {
         scrollAnimation.stop()
         scrollAnimation.from = oldY
         scrollAnimation.to = target
-        // 远距离也是平滑动画，只是时长按距离放大（320~600ms），不再瞬移
-        scrollAnimation.duration = Math.max(320, Math.min(600, Math.round(distance * 0.8)))
+        // 以设置的基准时长为准，按距离小幅放大；不再强制 320~600 覆盖用户设置
+        const base = pane.scrollDuration
+        scrollAnimation.duration = Math.max(80, Math.min(2000, Math.round(base + distance * 0.3)))
         scrollAnimation.start()
     }
 
@@ -498,12 +518,12 @@ Item {
         repeat: false
         onTriggered: {
             pane.autoScrollPaused = false
-            Qt.callLater(pane.scrollToCurrent, true)
+            Qt.callLater(function() { scrollToCurrent(true) })
         }
     }
 
-    onCurrentIndexChanged: Qt.callLater(scrollToCurrent, true)
-    onLinesChanged: Qt.callLater(scrollToCurrent, false)
-    onHeightChanged: Qt.callLater(scrollToCurrent, false)
-    onVisibleChanged: if (visible) Qt.callLater(scrollToCurrent, false)
+    onCurrentIndexChanged: Qt.callLater(function() { scrollToCurrent(true) })
+    onLinesChanged: Qt.callLater(function() { scrollToCurrent(false) })
+    onHeightChanged: Qt.callLater(function() { scrollToCurrent(false) })
+    onVisibleChanged: if (visible) Qt.callLater(function() { scrollToCurrent(false) })
 }

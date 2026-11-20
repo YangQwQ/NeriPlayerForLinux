@@ -95,6 +95,7 @@ Item {
 
             anchors.fill: parent
             radius: root.shapeRadius
+            circle: root.shape === "CIRCLE"
             placeholderIconSize: Math.max(28, root.coverSize * 0.22)
             path: Player.song && Player.song.artworkPath ? Player.song.artworkPath : ""
             url: Player.song && Player.song.artworkUrl ? Player.song.artworkUrl : ""

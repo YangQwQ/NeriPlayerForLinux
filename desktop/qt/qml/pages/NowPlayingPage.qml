@@ -295,7 +295,6 @@ Item {
             size: 44
             iconColor: np.foregroundDim
             hoverColor: np.hoverFill
-            tooltip: I18n.tr("收起播放页（Esc 退出沉浸）")
             onClicked: Nav.back()
         }
 
@@ -309,7 +308,6 @@ Item {
             size: 44
             iconColor: np.foregroundDim
             hoverColor: np.hoverFill
-            tooltip: Nav.immersive ? I18n.tr("退出全屏沉浸 (Esc)") : I18n.tr("全屏沉浸模式")
             onClicked: page.toggleImmersive()
         }
     }

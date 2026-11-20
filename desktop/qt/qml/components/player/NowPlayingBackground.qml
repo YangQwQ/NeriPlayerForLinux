@@ -67,35 +67,73 @@ Item {
                                  : Theme.mix(Theme.surface, Theme.primary, 0.22)
         }
 
-        // BLUR：封面放大到超出窗口，模糊后不会露出硬边
+        // BLUR：双层封面交叉淡入。切歌时把新封面加载到非活跃层，加载完成后
+        // 两层 opacity 互换，避免单 Image 复用纹理导致偶发不刷新，同时得到淡入淡出。
         Item {
             id: blurLayer
 
             anchors.fill: parent
             visible: root.mode === "BLUR" && root.hasCover
 
-            Image {
-                id: bgImage
+            // 当前显示的层（0 或 1），另一层作为下一首的缓冲。
+            property int active: 0
+            property string shownSource: ""
 
-                anchors.fill: parent
-                anchors.margins: -Math.max(root.width, root.height) * 0.15
-                source: root.source
-                fillMode: Image.PreserveAspectCrop
-                asynchronous: true
-                cache: true
-                smooth: true
-                // 背景本来就是糊的，解码小图即可：既省内存，放大本身也自带柔化
-                sourceSize.width: 320
-                sourceSize.height: 320
-                visible: false
+            function submitSource(src) {
+                if (src === "")
+                    return
+                if (shownSource === "") {
+                    // 首次加载：直接放进活跃层，无需淡入
+                    if (active === 0) img0.source = src; else img1.source = src
+                    shownSource = src
+                    return
+                }
+                if (src === shownSource)
+                    return
+                // 加载到非活跃层，由它的 onStatusChanged 触发交叉淡入
+                if (active === 0) img1.source = src; else img0.source = src
             }
 
-            MultiEffect {
-                anchors.fill: bgImage
-                source: bgImage
-                blurEnabled: true
-                blur: 1.0
-                blurMax: 64
+            onVisibleChanged: {
+                if (visible && shownSource === "")
+                    submitSource(root.source)
+            }
+
+            Component.onCompleted: submitSource(root.source)
+            Connections {
+                target: root
+                function onSourceChanged() { blurLayer.submitSource(root.source) }
+            }
+
+            property real crossDuration: Theme.motionLong
+
+            // 层 0
+            BlurCoverImage {
+                id: img0
+                anchors.fill: parent
+                objectName: "0"
+                layerIndex: 0
+                host: blurLayer
+                opacity: blurLayer.active === 0 ? 1 : 0
+                Behavior on opacity { NumberAnimation { duration: blurLayer.crossDuration; easing.type: Easing.InOutQuad } }
+            }
+            // 层 1
+            BlurCoverImage {
+                id: img1
+                anchors.fill: parent
+                objectName: "1"
+                layerIndex: 1
+                host: blurLayer
+                opacity: blurLayer.active === 1 ? 1 : 0
+                Behavior on opacity { NumberAnimation { duration: blurLayer.crossDuration; easing.type: Easing.InOutQuad } }
+            }
+
+            // 当非活跃层的图片就绪，切换 active 并更新 shownSource。
+            function onLayerReady(index) {
+                if (index === active)
+                    return
+                active = index
+                shownSource = index === 0 ? img0.source : img1.source
             }
         }
 
