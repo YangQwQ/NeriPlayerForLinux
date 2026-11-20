@@ -20,7 +20,9 @@
 > - 🎨 Material 3 UI whose colors follow KDE/GNOME system theme by default
 > - 🌊 Fade-in/fade-out and crossfade on track change; in-memory audio cache makes seeking instant when the current track is cached (one track only, bounded memory)
 > - 🌐 Full UI localization (Chinese / English); configurable app font, lyric font, and program background
-> - 🎚️ Sidebar-categorized settings with a dedicated Shortcuts category; floating lyrics can run as a layer-shell overlay or a normal draggable window
+> - 🎚️ Full **native DSP engine** (bundled `lib_neri.so`): all 23 parameters active, including virtual bass, surround, reverb, compressor/limiter and speaker optimization; an 8-tab effects panel (Presets / EQ / Tone / Space / Dynamics / Speaker / Speed / Advanced) with AutoEQ import and frequency-response preview
+> - 🛠️ Sidebar-categorized settings with separate "Audio effects & speed" and "Playback" sections plus a dedicated Shortcuts category; floating lyrics support a layer-shell overlay or normal draggable window, and per-word karaoke highlighting
+> - 📦 Desktop utilities: per-video Bilibili skip intervals, storage usage with safe cache cleanup, settings snapshot export/import and a redacted log viewer
 > - 🎧 Refined Now Playing style: cross-faded blurred cover background, synced bilingual lyrics with configurable scroll easing/duration
 >
 > Desktop sources live in [`desktop/`](./desktop) and do not overlap with the upstream Android project.
