@@ -50,6 +50,78 @@ Window {
         return currentLine.translation ? String(currentLine.translation) : ""
     }
 
+    // ---------------------------------------------------------------- 逐字高亮
+    //
+    // 当前行有 yrc 逐词时间时，把主歌词拆成「未唱层 + 已唱层」两层同布局的文字，
+    // 已唱层用一个按进度推进宽度的裁切矩形盖在上面。没有逐词数据（普通 LRC）时
+    // 只画未唱层，观感与引入逐字之前完全一致。
+    readonly property var currentWords: (currentLine && currentLine.words) ? currentLine.words : []
+    readonly property bool karaokeActive: currentWords.length > 0
+
+    /**
+     * 逐字模式下「未唱」的透明度。
+     *
+     * 已唱层直接沿用用户设置的颜色，未唱层把它压暗——这样用户换文字颜色时两层一起跟着变，
+     * 不需要额外加一个「高亮色」设置项。0.42 与播放页歌词未唱行一致。
+     */
+    readonly property real karaokeUnplayedAlpha: 0.42
+
+    /**
+     * 当前行每个词的排版宽度（与主歌词同字体度量）。
+     *
+     * 单独抽成一个只随「歌词行 / 字号 / 字体」变化的绑定：逐字进度每帧都要用这些宽度，
+     * 若把 advanceWidth 塞进 wordProgress，30Hz 刷新下每帧都要重新测一轮字宽，
+     * 在 layer-shell 覆盖层上是纯浪费。没有逐词数据时返回 null。
+     */
+    readonly property var wordWidths: {
+        // 显式读一次字号/字体：这两个值变化时（用户改字号、换歌词字体）本绑定要重算，
+        // 否则缓存的词宽会和实际排版对不上。
+        const fontSize = win.baseFontSize
+        const family = Prefs.effectiveLyricFont
+        const words = win.currentWords
+        if (!words || words.length === 0 || fontSize <= 0)
+            return null
+        const widths = []
+        let total = 0
+        for (let i = 0; i < words.length; i++) {
+            const width = lyricMetrics.advanceWidth(String(words[i].text || ""))
+            widths.push(width)
+            total += width
+        }
+        return total > 0 ? { widths: widths, total: total } : null
+    }
+
+    /**
+     * 当前行已唱比例（0..1），算法与播放页 LyricsPane 的 lineProgress 一致：
+     * 有逐词时间就按「词时间插值 + 词宽累计」，没有就返回 0（上层回退整行显示）。
+     *
+     * 时钟必须用 Player.smoothPositionMs：行切换（Player.currentLyricIndex）也用同一个
+     * 时钟，否则 4Hz 快照的 positionMs 滞后会让逐字进度和换行错半拍。
+     */
+    readonly property real wordProgress: {
+        const data = win.wordWidths
+        if (!data)
+            return 0
+        const words = win.currentWords
+        const clock = Player.smoothPositionMs
+        let passedWidth = 0
+        for (let i = 0; i < words.length; i++) {
+            const start = Number(words[i].startMs)
+            const duration = Math.max(0, Number(words[i].durationMs))
+            if (clock < start)
+                return Math.max(0, Math.min(1, passedWidth / data.total))
+            if (clock < start + duration) {
+                // 词内按时间线性插值，唱到第几个词的哪个位置就亮多少，
+                // 不按词数均分（中文词可能一两个字、还可能带空格/标点）
+                const inner = duration > 0 ? (clock - start) / duration : 1
+                return Math.max(0, Math.min(1, (passedWidth + data.widths[i] * inner) / data.total))
+            }
+            passedWidth += data.widths[i]
+        }
+        // 最后一个词唱完后整行亮满，保持到下一行开始（不会亮完就跳字）
+        return 1
+    }
+
     readonly property real baseFontSize: (Settings.get("floatingLyricsFontSize", 30) || 30)
     readonly property string renderStyle: Settings.get("floatingLyricsRenderStyle", "SHADOW")
     readonly property string textColor: colorOf(Settings.get("floatingLyricsTextColor", "WHITE"))
@@ -305,6 +377,18 @@ Window {
         value: Math.round(win.screen ? availY + (availH - win.height) * win.normalizedY : 0)
     }
 
+    // 逐字进度要按词宽累计，必须用与主歌词完全相同的字体度量（族/字号/字重）。
+    // 悬浮窗字号只有一档，建一个 FontMetrics 就够，不必每帧重算。
+    FontMetrics {
+        id: lyricMetrics
+
+        font: Qt.font({
+            family: Prefs.effectiveLyricFont,
+            pixelSize: win.baseFontSize,
+            weight: Font.Bold
+        })
+    }
+
     function colorOf(name) {
         switch (String(name || "").toUpperCase()) {
         case "BLACK": return "#000000"
@@ -432,11 +516,25 @@ Window {
             spacing: 2
 
             // 主歌词（带阴影或描边）
+            //
+            // 逐字高亮的分层方式：同一个 Text 画两遍——未唱层（底层，逐字模式下压暗）
+            // 与已唱层（上层，正常颜色），已唱层套一个宽度 = 已唱进度的裁切矩形。
+            // 两层字体/换行/对齐参数逐项相同，否则两层字形会错位。
             Item {
                 id: mainItem
                 width: parent.width
                 // 固定窗口下最多显示两行，超出部分不参与布局（避免内容撑破窗口）
                 height: Math.min(mainLine.implicitHeight, win.baseFontSize * 1.6 * 2)
+
+                // 已唱层裁切窗口的横向基准：文字实际起点与文字实际宽度。
+                // 中间/右对齐时文字不在 x=0，裁切窗口若从 0 开始按比例放宽，
+                // 会在文字左侧先亮出一段空白，所以要先加上文字起点偏移。
+                readonly property real textWidth: Math.min(width, mainLine.contentWidth)
+                readonly property real highlightX: win.alignment === Text.AlignLeft
+                                                   ? 0
+                                                   : (win.alignment === Text.AlignRight
+                                                      ? Math.max(0, width - textWidth)
+                                                      : Math.max(0, (width - textWidth) / 2))
 
                 // SHADOW 样式：单个偏移副本。不要用多个 Repeater 副本叠阴影——
                 // 透明置顶窗口里每换一行都要重建/重绘十几层文本，拖动时会留下残影。
@@ -466,7 +564,8 @@ Window {
                     maximumLineCount: 2
                     elide: Text.ElideRight
                     color: win.textColor
-                    opacity: win.lyricAlpha
+                    // 逐字模式下底层压暗，才能看出「唱到哪」；没有逐词数据时保持原样
+                    opacity: win.lyricAlpha * (win.karaokeActive ? win.karaokeUnplayedAlpha : 1)
                     font.family: Prefs.effectiveLyricFont
                     font.pixelSize: win.baseFontSize
                     font.weight: Font.Bold
@@ -475,6 +574,39 @@ Window {
                     styleColor: win.outlineColor
                     // Text.Outline 的描边宽度只能取整数像素
                     font.preferShaping: true
+                }
+
+                // 已唱层：同一段文字用满亮度再画一遍，被宽度随进度推进的整块矩形裁切。
+                // 两层共用用户选的文字颜色，靠底层压暗区分「唱过/没唱」，不额外引入强调色。
+                //
+                // 裁切从 x=0 起、宽度含 highlightX（与文字起点一致），文字仍按完整宽度
+                // 排版在内部，所以裁剪前后字形位置完全不变，只有「露出多少」在变。
+                // 这里只用 clip，不加模糊/阴影动画：layer-shell 覆盖层上每帧重绘代价很高。
+                Item {
+                    id: sungLayer
+                    x: 0
+                    y: 0
+                    width: Math.max(0, mainItem.highlightX + mainItem.textWidth * win.wordProgress)
+                    height: mainItem.height
+                    visible: win.karaokeActive && width > 0
+                    clip: true
+
+                    Text {
+                        width: mainItem.width
+                        text: mainLine.text
+                        horizontalAlignment: win.alignment
+                        wrapMode: Text.Wrap
+                        maximumLineCount: 2
+                        elide: Text.ElideRight
+                        color: win.textColor
+                        opacity: win.lyricAlpha
+                        font.family: Prefs.effectiveLyricFont
+                        font.pixelSize: win.baseFontSize
+                        font.weight: Font.Bold
+                        style: win.renderStyle === "OUTLINE" ? Text.Outline : Text.Normal
+                        styleColor: win.outlineColor
+                        font.preferShaping: true
+                    }
                 }
             }
 
