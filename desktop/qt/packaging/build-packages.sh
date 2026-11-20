@@ -113,7 +113,8 @@ stage_payload() {
     DESTDIR="$STAGE" cmake --install "$BUILD_DIR/cmake" >/dev/null
 
     echo "==> 构建后端 jar"
-    ( cd "$DESKTOP_DIR" && JAVA_HOME="$JAVA_HOME" ./gradlew -q backendJar --offline )
+    # 不能加 --offline：CI 的全新 runner 没有 Gradle 缓存，离线模式解析不到 Kotlin 插件。
+    ( cd "$DESKTOP_DIR" && JAVA_HOME="$JAVA_HOME" ./gradlew -q backendJar )
     install -m 644 "$DESKTOP_DIR/build/libs/neriplayer-core.jar" \
         "$STAGE/usr/lib/neriplayer/neriplayer-core.jar"
 
