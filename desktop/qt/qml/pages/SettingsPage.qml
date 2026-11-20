@@ -87,6 +87,12 @@ Item {
         { value: "RIGHT", label: I18n.tr("居右") }
     ]
 
+    // 悬浮歌词窗口形态：LAYER 走 layer-shell 置顶覆盖层，NORMAL 是普通窗口（可跨屏拖动）。
+    readonly property var floatingWindowModeOptions: [
+        { value: "LAYER", label: I18n.tr("置顶覆盖层") },
+        { value: "NORMAL", label: I18n.tr("普通窗口") }
+    ]
+
     readonly property var floatingLyricColors: [
         { name: "WHITE", label: I18n.tr("白色"), color: "#FFFFFF" },
         { name: "BLACK", label: I18n.tr("黑色"), color: "#000000" },
@@ -102,14 +108,16 @@ Item {
 
     // ---------------------------------------------------------------- 分类导航与搜索
 
-    // 分类顺序参考上游：账号与同步（含音乐源登录）→ 常规与快捷键（含语言）→ 外观与主题
-    // → 播放与音频 → 歌词 → 下载与存储 → 备份与同步 → 关于。
+    // 分类顺序参考上游：账号与同步（含音乐源登录）→ 常规（含语言）→ 外观与主题
+    // → 播放与音频 → 歌词 → 快捷键 → 下载与存储 → 备份与同步 → 关于。
+    // 快捷键条目最多、内容自成一屏，因此从「常规」里拆出独立分类。
     readonly property var categoryDefs: [
         { id: "accountSync", title: I18n.tr("账号与同步"), description: I18n.tr("音乐源登录 · 一起听 · 云端同步"), icon: "account_circle", sectionIds: ["sources", "listenTogether", "sync"] },
-        { id: "general", title: I18n.tr("常规与快捷键"), description: I18n.tr("首页 · 后台 · 语言 · 快捷键"), icon: "tune", sectionIds: ["homeCards", "background", "language", "shortcuts"] },
+        { id: "general", title: I18n.tr("常规"), description: I18n.tr("首页栏目 · 后台 · 语言"), icon: "tune", sectionIds: ["homeCards", "background", "language"] },
         { id: "appearance", title: I18n.tr("外观与主题"), description: I18n.tr("深浅色 · 字体 · 背景 · 播放页"), icon: "palette", sectionIds: ["theme", "appFonts", "appBackground", "playerDesign"] },
         { id: "playback", title: I18n.tr("播放与音频"), description: I18n.tr("倍速 · 淡入淡出 · 音效 · 音质"), icon: "graphic_eq", sectionIds: ["playback", "fade", "equalizer", "quality"] },
         { id: "lyrics", title: I18n.tr("歌词"), description: I18n.tr("悬浮歌词样式 · 歌词字体"), icon: "lyrics", sectionIds: ["floatingLyrics"] },
+        { id: "shortcuts", title: I18n.tr("快捷键"), description: I18n.tr("应用内与全局快捷键"), icon: "keyboard", sectionIds: ["shortcuts"] },
         { id: "downloadStorage", title: I18n.tr("下载与存储"), description: I18n.tr("媒体库 · 下载 · 缓存清理"), icon: "download", sectionIds: ["library", "downloads", "dataCache"] },
         { id: "backupSync", title: I18n.tr("备份与同步"), description: I18n.tr("歌单 / 收藏备份与恢复"), icon: "backup", sectionIds: ["backupSync"] },
         { id: "about", title: I18n.tr("关于"), description: I18n.tr("版本与开源信息"), icon: "info", sectionIds: ["about"] }
@@ -133,27 +141,27 @@ Item {
     })
 
     readonly property var _searchIndex: [
-        { title: "主题设置", keywords: "深浅色 主题色 动态取色 调色 缩放", category: "appearance", section: "theme" },
-        { title: "应用字体", keywords: "界面字体 字体 字族  font family 中文 预览", category: "appearance", section: "appFonts" },
-        { title: "程序背景", keywords: "背景 图片 模糊 暗化 壁纸 background blur dim", category: "appearance", section: "appBackground" },
-        { title: "媒体库", keywords: "音乐文件夹 扫描 封面", category: "downloadStorage", section: "library" },
-        { title: "播放", keywords: "倍速 变调 响度 音效", category: "playback", section: "playback" },
-        { title: "淡入淡出", keywords: "淡入 淡出 交叉淡入 渐变 crossfade fade 时长", category: "playback", section: "fade" },
-        { title: "均衡器", keywords: "均衡器 EQ 频段 十段 预设 响度 音效 equalizer preset", category: "playback", section: "equalizer" },
-        { title: "播放页", keywords: "封面 控制条 歌词对齐 背景", category: "appearance", section: "playerDesign" },
-        { title: "在线播放音质", keywords: "音质 码率 hires 无损 quality", category: "playback", section: "quality" },
-        { title: "下载设置", keywords: "下载目录 并发 通知", category: "downloadStorage", section: "downloads" },
-        { title: "悬浮歌词", keywords: "桌面歌词 字体 颜色 透明度", category: "lyrics", section: "floatingLyrics" },
-        { title: "首页栏目", keywords: "推荐 排行榜 歌单 私人FM 平铺 网格 homeGridMode", category: "general", section: "homeCards" },
-        { title: "后台与系统控制", keywords: "托盘 MPRIS 通知 启动", category: "general", section: "background" },
-        { title: "音乐源", keywords: "网易云 B站 bilibili YouTube 登录 退出 自动换源 账号", category: "accountSync", section: "sources" },
-        { title: "一起听", keywords: "房间 同步播放", category: "accountSync", section: "listenTogether" },
-        { title: "同步", keywords: "GitHub Token 仓库 自动同步", category: "accountSync", section: "sync" },
-        { title: "备份与同步", keywords: "备份 恢复 歌单 收藏 云端 backup sync", category: "backupSync", section: "backupSync" },
-        { title: "数据与缓存", keywords: "清理 缓存 历史 统计 下载记录", category: "downloadStorage", section: "dataCache" },
-        { title: "快捷键", keywords: "键盘 全局快捷键 录制", category: "general", section: "shortcuts" },
-        { title: "语言", keywords: "语言 Language 中文 英文 简体 切换 国际化 i18n", category: "general", section: "language" },
-        { title: "关于", keywords: "版本 开源 许可证", category: "about", section: "about" }
+        { title: I18n.tr("主题设置"), keywords: "深浅色 主题色 动态取色 调色 缩放", category: "appearance", section: "theme" },
+        { title: I18n.tr("应用字体"), keywords: "界面字体 字体 字族  font family 中文 预览", category: "appearance", section: "appFonts" },
+        { title: I18n.tr("程序背景"), keywords: "背景 图片 模糊 暗化 壁纸 background blur dim", category: "appearance", section: "appBackground" },
+        { title: I18n.tr("媒体库"), keywords: "音乐文件夹 扫描 封面", category: "downloadStorage", section: "library" },
+        { title: I18n.tr("播放"), keywords: "倍速 变调 响度 音效", category: "playback", section: "playback" },
+        { title: I18n.tr("淡入淡出"), keywords: "淡入 淡出 交叉淡入 渐变 crossfade fade 时长", category: "playback", section: "fade" },
+        { title: I18n.tr("均衡器"), keywords: "均衡器 EQ 频段 十段 预设 响度 音效 equalizer preset", category: "playback", section: "equalizer" },
+        { title: I18n.tr("播放页"), keywords: "封面 控制条 歌词对齐 背景", category: "appearance", section: "playerDesign" },
+        { title: I18n.tr("在线播放音质"), keywords: "音质 码率 hires 无损 quality", category: "playback", section: "quality" },
+        { title: I18n.tr("下载设置"), keywords: "下载目录 并发 通知", category: "downloadStorage", section: "downloads" },
+        { title: I18n.tr("悬浮歌词"), keywords: "桌面歌词 字体 颜色 透明度", category: "lyrics", section: "floatingLyrics" },
+        { title: I18n.tr("首页栏目"), keywords: "推荐 排行榜 歌单 私人FM 平铺 网格 homeGridMode", category: "general", section: "homeCards" },
+        { title: I18n.tr("后台与系统控制"), keywords: "托盘 MPRIS 通知 启动", category: "general", section: "background" },
+        { title: I18n.tr("音乐源"), keywords: "网易云 B站 bilibili YouTube 登录 退出 自动换源 账号", category: "accountSync", section: "sources" },
+        { title: I18n.tr("一起听"), keywords: "房间 同步播放", category: "accountSync", section: "listenTogether" },
+        { title: I18n.tr("同步"), keywords: "GitHub Token 仓库 自动同步", category: "accountSync", section: "sync" },
+        { title: I18n.tr("备份与同步"), keywords: "备份 恢复 歌单 收藏 云端 backup sync", category: "backupSync", section: "backupSync" },
+        { title: I18n.tr("数据与缓存"), keywords: "清理 缓存 历史 统计 下载记录", category: "downloadStorage", section: "dataCache" },
+        { title: I18n.tr("快捷键"), keywords: "键盘 全局快捷键 录制", category: "shortcuts", section: "shortcuts" },
+        { title: I18n.tr("语言"), keywords: "语言 Language 中文 英文 简体 切换 国际化 i18n", category: "general", section: "language" },
+        { title: I18n.tr("关于"), keywords: "版本 开源 许可证", category: "about", section: "about" }
     ]
 
     readonly property var searchResults: {
@@ -341,12 +349,12 @@ Item {
         return (index >= 0 && index + 1 < args.length) ? args[index + 1] : ""
     }
 
-    // 截图验证辅助：滚动到指定位置或快捷键卡片；分类视图下先切到含快捷键的分类。
+    // 截图验证辅助：滚动到指定位置或快捷键卡片；分类视图下先切到快捷键分类。
     function scrollToDebugTarget() {
         if (!flick)
             return
         if (page.__debugScrollTo < 0)
-            page.selectCategory("general")
+            page.selectCategory("shortcuts")
         const maxY = Math.max(0, flick.contentHeight - flick.height)
         const shortcutY = shortcutSection.mapToItem(contentColumn, 0, 0).y
         const target = page.__debugScrollTo >= 0 ? page.__debugScrollTo
@@ -1753,6 +1761,31 @@ Item {
                     externalValue: Number(page.sv("lyricsHighlightDuration", 220))
                     onCommitted: function(value) { page.setSetting("lyricsHighlightDuration", Math.round(value)) }
                 }
+
+                SettingsLabel {
+                    width: parent.width
+                    text: I18n.tr("歌词滚动吸附动画")
+                }
+                SegmentedOptions {
+                    width: parent.width
+                    options: [
+                        { value: "CUBIC", label: I18n.tr("三次曲线") },
+                        { value: "QUAD", label: I18n.tr("二次曲线") },
+                        { value: "SINE", label: I18n.tr("正弦") },
+                        { value: "LINEAR", label: I18n.tr("线性") }
+                    ]
+                    value: page.sv("lyricsScrollEasing", "CUBIC")
+                    onSelected: function(value) { page.setSetting("lyricsScrollEasing", value) }
+                }
+                SliderRow {
+                    width: parent.width
+                    label: I18n.tr("滚动动画时长 ") + Math.round(page.sv("lyricsScrollDuration", 420)) + "ms"
+                    from: 80
+                    to: 1200
+                    decimals: 0
+                    externalValue: Number(page.sv("lyricsScrollDuration", 420))
+                    onCommitted: function(value) { page.setSetting("lyricsScrollDuration", Math.round(value)) }
+                }
             }
 
                 }
@@ -2006,6 +2039,30 @@ Item {
                     onToggled: function(checked) {
                         page.setSetting("floatingLyricsShowTranslation", checked)
                     }
+                }
+
+                Item {
+                    width: 1
+                    height: 6
+                }
+
+                SettingsLabel {
+                    width: parent.width
+                    text: I18n.tr("窗口模式")
+                }
+
+                SegmentedOptions {
+                    width: parent.width
+                    options: page.floatingWindowModeOptions
+                    value: page.sv("floatingLyricsWindowMode", "LAYER")
+                    onSelected: function(value) {
+                        page.setSetting("floatingLyricsWindowMode", value)
+                    }
+                }
+
+                SettingsNote {
+                    width: parent.width
+                    text: I18n.tr("置顶覆盖层由桌面合成器直接托管，始终浮在最上层；普通窗口是常规窗口，可跨屏拖动但会进任务栏与窗口切换器。")
                 }
 
                 Item {
@@ -2530,6 +2587,16 @@ Item {
 
                 SettingsSwitchRow {
                     width: parent.width
+                    title: I18n.tr("控制面板常驻")
+                    description: I18n.tr("托盘控制面板失去焦点时不自动关闭，方便连续操作")
+                    checked: page.sb("trayPanelPersistent", false)
+                    onToggled: function(checked) {
+                        page.setSetting("trayPanelPersistent", checked)
+                    }
+                }
+
+                SettingsSwitchRow {
+                    width: parent.width
                     title: I18n.tr("切歌时发送系统通知")
                     description: I18n.tr("仅当窗口隐藏 / 最小化时提示，避免打扰")
                     checked: page.sb("notifyOnSongChange", true)
@@ -2569,21 +2636,6 @@ Item {
                 }
             }
 
-            // ============================================================ 快捷键
-            SettingsSection {
-                id: shortcutSection
-                width: parent.width - 24
-                x: 12
-                title: I18n.tr("快捷键")
-                description: I18n.tr("应用内与全局快捷键")
-                icon: "keyboard"
-
-                // 动作表、录制与保存都在 ShortcutEditor 内部完成（读取 Settings.values.shortcuts）。
-                ShortcutEditor {
-                    width: parent.width
-                }
-            }
-
             // ============================================================ 语言
             SettingsSection {
                 id: secLanguage
@@ -2614,6 +2666,37 @@ Item {
                 SettingsNote {
                     width: parent.width
                     text: I18n.tr("切换语言后立即刷新界面并保存到本地设置；部分翻译缺失处会回退显示中文原文。")
+                }
+            }
+
+                }
+            }
+
+            // ============================================================ 快捷键（独立分类：条目多、内容自成一屏）
+            Item {
+                id: catShortcuts
+                width: parent.width
+                height: visible ? innerShortcuts.height + 12 : 0
+                visible: page.currentCategory === "shortcuts"
+
+                Column {
+                    id: innerShortcuts
+                    width: parent.width
+                    spacing: 12
+
+            // ============================================================ 快捷键
+            SettingsSection {
+                id: shortcutSection
+                width: parent.width - 24
+                x: 12
+                title: I18n.tr("快捷键")
+                description: I18n.tr("应用内与全局快捷键")
+                icon: "keyboard"
+                expanded: true
+
+                // 动作表、录制与保存都在 ShortcutEditor 内部完成（读取 Settings.values.shortcuts）。
+                ShortcutEditor {
+                    width: parent.width
                 }
             }
 
@@ -2723,12 +2806,12 @@ Item {
 
                     SettingsButton {
                         text: I18n.tr("Linux 版仓库")
-                        onClicked: Qt.openUrlExternally("https://github.com/Asternent/NeriPlayerForLinux")
+                        onClicked: Qt.openUrlExternally("https://github.com/YangQwQ/NeriPlayerForLinux")
                     }
 
                     SettingsButton {
                         text: I18n.tr("问题反馈")
-                        onClicked: Qt.openUrlExternally("https://github.com/Asternent/NeriPlayerForLinux/issues")
+                        onClicked: Qt.openUrlExternally("https://github.com/YangQwQ/NeriPlayerForLinux/issues")
                     }
                 }
 
