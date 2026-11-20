@@ -102,16 +102,16 @@ Item {
 
     // ---------------------------------------------------------------- 分类导航与搜索
 
-    // 每个分类绑定一组既有设置卡片（只做前端归组，不改动任何后端协议）。
+    // 分类顺序参考上游：账号与同步（含音乐源登录）→ 常规与快捷键（含语言）→ 外观与主题
+    // → 播放与音频 → 歌词 → 下载与存储 → 备份与同步 → 关于。
     readonly property var categoryDefs: [
-        { id: "accountSync", title: I18n.tr("账号与同步"), description: I18n.tr("一起听 · GitHub 同步"), icon: "account_circle", sectionIds: ["listenTogether", "sync"] },
-        { id: "appearance", title: I18n.tr("外观与主题"), description: I18n.tr("深浅色 · 播放页外观"), icon: "palette", sectionIds: ["theme", "playerDesign"] },
-        { id: "playback", title: I18n.tr("播放与音频"), description: I18n.tr("倍速 · 音效 · 音质"), icon: "graphic_eq", sectionIds: ["playback", "equalizer", "quality"] },
-        { id: "lyrics", title: I18n.tr("歌词"), description: I18n.tr("桌面悬浮歌词样式"), icon: "lyrics", sectionIds: ["floatingLyrics"] },
+        { id: "accountSync", title: I18n.tr("账号与同步"), description: I18n.tr("音乐源登录 · 一起听 · 云端同步"), icon: "account_circle", sectionIds: ["sources", "listenTogether", "sync"] },
+        { id: "general", title: I18n.tr("常规与快捷键"), description: I18n.tr("首页 · 后台 · 语言 · 快捷键"), icon: "tune", sectionIds: ["homeCards", "background", "language", "shortcuts"] },
+        { id: "appearance", title: I18n.tr("外观与主题"), description: I18n.tr("深浅色 · 字体 · 背景 · 播放页"), icon: "palette", sectionIds: ["theme", "appFonts", "appBackground", "playerDesign"] },
+        { id: "playback", title: I18n.tr("播放与音频"), description: I18n.tr("倍速 · 淡入淡出 · 音效 · 音质"), icon: "graphic_eq", sectionIds: ["playback", "fade", "equalizer", "quality"] },
+        { id: "lyrics", title: I18n.tr("歌词"), description: I18n.tr("悬浮歌词样式 · 歌词字体"), icon: "lyrics", sectionIds: ["floatingLyrics"] },
         { id: "downloadStorage", title: I18n.tr("下载与存储"), description: I18n.tr("媒体库 · 下载 · 缓存清理"), icon: "download", sectionIds: ["library", "downloads", "dataCache"] },
-        { id: "sources", title: I18n.tr("音乐源"), description: I18n.tr("网易云 · B站 · YouTube"), icon: "cloud", sectionIds: ["sources"] },
-        { id: "general", title: I18n.tr("常规与快捷键"), description: I18n.tr("首页栏目 · 后台 · 快捷键"), icon: "tune", sectionIds: ["homeCards", "background", "shortcuts"] },
-        { id: "language", title: I18n.tr("语言"), description: I18n.tr("界面语言 · Language"), icon: "language", sectionIds: ["language"] },
+        { id: "backupSync", title: I18n.tr("备份与同步"), description: I18n.tr("歌单 / 收藏备份与恢复"), icon: "backup", sectionIds: ["backupSync"] },
         { id: "about", title: I18n.tr("关于"), description: I18n.tr("版本与开源信息"), icon: "info", sectionIds: ["about"] }
     ]
 
@@ -119,33 +119,40 @@ Item {
     property string searchQuery: ""
 
     readonly property var sectionIndex: ({
+        "sources": musicSourceSection,
         "listenTogether": secListenTogether, "sync": secSync,
-        "theme": secTheme, "playerDesign": secPlayerDesign,
-        "playback": secPlayback, "equalizer": secEqualizer, "quality": secQuality,
+        "theme": secTheme, "appFonts": secAppFonts, "appBackground": secAppBackground,
+        "playerDesign": secPlayerDesign,
+        "playback": secPlayback, "fade": secFade,
+        "equalizer": secEqualizer, "quality": secQuality,
         "floatingLyrics": secFloatingLyrics,
         "library": secLibrary, "downloads": secDownloads, "dataCache": secDataCache,
-        "sources": musicSourceSection,
+        "backupSync": secBackupSync,
         "homeCards": secHomeCards, "background": secBackground,
-        "shortcuts": shortcutSection, "language": secLanguage, "about": secAbout
+        "language": secLanguage, "shortcuts": shortcutSection, "about": secAbout
     })
 
     readonly property var _searchIndex: [
         { title: "主题设置", keywords: "深浅色 主题色 动态取色 调色 缩放", category: "appearance", section: "theme" },
+        { title: "应用字体", keywords: "界面字体 字体 字族  font family 中文 预览", category: "appearance", section: "appFonts" },
+        { title: "程序背景", keywords: "背景 图片 模糊 暗化 壁纸 background blur dim", category: "appearance", section: "appBackground" },
         { title: "媒体库", keywords: "音乐文件夹 扫描 封面", category: "downloadStorage", section: "library" },
         { title: "播放", keywords: "倍速 变调 响度 音效", category: "playback", section: "playback" },
+        { title: "淡入淡出", keywords: "淡入 淡出 交叉淡入 渐变 crossfade fade 时长", category: "playback", section: "fade" },
         { title: "均衡器", keywords: "均衡器 EQ 频段 十段 预设 响度 音效 equalizer preset", category: "playback", section: "equalizer" },
         { title: "播放页", keywords: "封面 控制条 歌词对齐 背景", category: "appearance", section: "playerDesign" },
         { title: "在线播放音质", keywords: "音质 码率 hires 无损 quality", category: "playback", section: "quality" },
         { title: "下载设置", keywords: "下载目录 并发 通知", category: "downloadStorage", section: "downloads" },
         { title: "悬浮歌词", keywords: "桌面歌词 字体 颜色 透明度", category: "lyrics", section: "floatingLyrics" },
-        { title: "首页栏目", keywords: "推荐 排行榜 歌单 私人FM", category: "general", section: "homeCards" },
+        { title: "首页栏目", keywords: "推荐 排行榜 歌单 私人FM 平铺 网格 homeGridMode", category: "general", section: "homeCards" },
         { title: "后台与系统控制", keywords: "托盘 MPRIS 通知 启动", category: "general", section: "background" },
-        { title: "音乐源", keywords: "网易云 B站 YouTube 登录 自动换源", category: "sources", section: "sources" },
+        { title: "音乐源", keywords: "网易云 B站 bilibili YouTube 登录 退出 自动换源 账号", category: "accountSync", section: "sources" },
         { title: "一起听", keywords: "房间 同步播放", category: "accountSync", section: "listenTogether" },
         { title: "同步", keywords: "GitHub Token 仓库 自动同步", category: "accountSync", section: "sync" },
+        { title: "备份与同步", keywords: "备份 恢复 歌单 收藏 云端 backup sync", category: "backupSync", section: "backupSync" },
         { title: "数据与缓存", keywords: "清理 缓存 历史 统计 下载记录", category: "downloadStorage", section: "dataCache" },
         { title: "快捷键", keywords: "键盘 全局快捷键 录制", category: "general", section: "shortcuts" },
-        { title: "语言", keywords: "语言 Language 中文 英文 简体 切换 国际化 i18n", category: "language", section: "language" },
+        { title: "语言", keywords: "语言 Language 中文 英文 简体 切换 国际化 i18n", category: "general", section: "language" },
         { title: "关于", keywords: "版本 开源 许可证", category: "about", section: "about" }
     ]
 
@@ -195,7 +202,7 @@ Item {
                 continue
             for (let j = 0; j < cat.sectionIds.length; j++) {
                 const sectionId = cat.sectionIds[j]
-                if (sectionId === "shortcuts" || sectionId === "about")
+                if (sectionId === "shortcuts" || sectionId === "about" || sectionId === "backupSync")
                     continue
                 const section = page.sectionIndex[sectionId]
                 if (section) {
@@ -257,6 +264,45 @@ Item {
     property bool syncBusy: false
     property string syncStatusMessage: ""
     property string appVersion: "1.4.7"
+
+    // 前端本地偏好（字体 / 背景）：后端 AppSettings 无对应字段，settings.set 会静默忽略未知键。
+    // 这里以内存态为准；Settings.set 仍按需求写入键名（若后续后端补齐字段即可自动持久化）。
+    FontPrefs { id: fontPrefs }
+
+    function frontendKeyWrite(key, value) {
+        Settings.set(key, value)
+    }
+
+    /** 淡入淡出：统一打包成 player.setFadeOptions 一次调用，失败只提示不影响 UI。 */
+    function applyFadeOptions(overrides) {
+        const changes = overrides || {}
+        function field(key, fallback) {
+            return changes[key] !== undefined ? changes[key] : page.sv(key, fallback)
+        }
+        function flag(key, fallback) {
+            return changes[key] !== undefined ? changes[key] === true : page.sb(key, fallback)
+        }
+        const payload = {
+            fadeEnabled: flag("fadeEnabled", true),
+            fadeInMs: Math.round(Number(field("fadeInMs", 300))),
+            fadeOutMs: Math.round(Number(field("fadeOutMs", 300))),
+            crossfadeEnabled: flag("crossfadeEnabled", false),
+            crossfadeMs: Math.round(Number(field("crossfadeMs", 2000)))
+        }
+        Api.call("player.setFadeOptions", payload).catch(function(error) {
+            console.warn("[settings] setFadeOptions failed:", error && error.message)
+            Toast.show(I18n.tr("设置淡入淡出失败（后端暂不支持）：")
+                       + (error && error.message ? error.message : I18n.tr("未知错误")), "error")
+        })
+    }
+
+    function chooseBackgroundImage() {
+        try {
+            backgroundFileDialog.open()
+        } catch (error) {
+            Toast.show(I18n.tr("无法打开文件选择器：") + error, "error")
+        }
+    }
 
     property int songCount: 0
     property bool scanning: false
@@ -874,6 +920,20 @@ Item {
         }
     }
 
+    FileDialog {
+        id: backgroundFileDialog
+        title: I18n.tr("选择程序背景图片")
+        nameFilters: [I18n.tr("图片文件 (*.jpg *.jpeg *.png *.webp *.gif)"), I18n.tr("所有文件 (*)")]
+        onAccepted: {
+            const path = page.pathFromUrl(selectedFile)
+            if (!path)
+                return
+            fontPrefs.setBackground(path, fontPrefs.appBackgroundBlur, fontPrefs.appBackgroundDim)
+            page.frontendKeyWrite("appBackgroundImage", path)
+            Toast.show(I18n.tr("背景图片已选择（仅本次会话）"), "info")
+        }
+    }
+
     // ---------------------------------------------------------------- 页面骨架
 
     SettingsSidebar {
@@ -946,6 +1006,67 @@ Item {
                     id: innerAccountSync
                     width: parent.width
                     spacing: 12
+
+            // ============================================================ 音乐源（紧凑卡片，账号统一管理）
+            SettingsSection {
+                id: musicSourceSection
+                width: parent.width - 24
+                x: 12
+                title: I18n.tr("音乐源")
+                description: I18n.tr("网易云 / 哔哩哔哩 / YouTube 的开关与账号登录")
+                icon: "cloud"
+
+                Column {
+                    width: parent.width
+                    spacing: Theme.spacingSm
+
+                    MusicSourceCard {
+                        displayName: I18n.tr("网易云音乐")
+                        iconName: "music_note"
+                        description: I18n.tr("未登录：扫码登录后可解锁每日推荐与私人 FM")
+                        loginButtonText: I18n.tr("扫码登录")
+                        settingValue: page.sb("neteaseEnabled", true)
+                        account: page.findAccount("NETEASE")
+                        onToggled: function(value) { page.setSetting("neteaseEnabled", value) }
+                        onLoginClicked: page.toggleSourceAccount("NETEASE")
+                    }
+
+                    MusicSourceCard {
+                        displayName: I18n.tr("哔哩哔哩")
+                        iconName: "smart_display"
+                        description: I18n.tr("未登录：可搜索视频音频轨，收藏夹需要登录")
+                        loginButtonText: I18n.tr("扫码登录")
+                        settingValue: page.sb("bilibiliEnabled", true)
+                        account: page.findAccount("BILIBILI")
+                        onToggled: function(value) { page.setSetting("bilibiliEnabled", value) }
+                        onLoginClicked: page.toggleSourceAccount("BILIBILI")
+                    }
+
+                    MusicSourceCard {
+                        displayName: "YouTube Music"
+                        iconName: "smart_display"
+                        description: I18n.tr("未登录：只能搜索公开内容，登录需从浏览器复制 Cookie")
+                        loginButtonText: I18n.tr("登录")
+                        settingValue: page.sb("youtubeEnabled", false)
+                        account: page.findAccount("YOUTUBE")
+                        onToggled: function(value) { page.setSetting("youtubeEnabled", value) }
+                        onLoginClicked: page.toggleSourceAccount("YOUTUBE")
+                    }
+
+                    SettingsSwitchRow {
+                        width: parent.width
+                        title: I18n.tr("自动换源")
+                        description: I18n.tr("网易云不可播放（VIP / 版权 / 接口限制）时，自动到 B 站搜索同名歌曲播放")
+                        checked: page.sb("neteaseAutoSourceSwitch", true)
+                        onToggled: function(checked) { page.setSetting("neteaseAutoSourceSwitch", checked) }
+                    }
+
+                    SettingsNote {
+                        width: parent.width
+                        text: I18n.tr("登录凭据（Cookie）仅保存在本机配置目录。关闭某个音源后，它的栏目与账号歌单会在首页 / 媒体库中隐藏。")
+                    }
+                }
+            }
 
             // ============================================================ 一起听
             SettingsSection {
@@ -1366,6 +1487,159 @@ Item {
                 }
             }
 
+            // ============================================================ 应用字体
+            SettingsSection {
+                id: secAppFonts
+                width: parent.width - 24
+                x: 12
+                title: I18n.tr("应用字体")
+                description: I18n.tr("界面与歌词的字体族（仅本次会话，全局应用待接线）")
+                icon: "text_fields"
+
+                SettingsLabel {
+                    width: parent.width
+                    text: I18n.tr("界面字体")
+                }
+                SegmentedOptions {
+                    width: parent.width
+                    options: fontPrefs.fontOptions
+                    value: fontPrefs.appFontFamily
+                    onSelected: function(value) {
+                        fontPrefs.setAppFont(value)
+                        page.frontendKeyWrite("appFontFamily", value)
+                    }
+                }
+                Text {
+                    width: parent.width
+                    text: I18n.tr("预览：") + I18n.tr("NeriPlayer 让音乐继续 ")
+                          + fontPrefs.fontLabel(fontPrefs.appFontFamily)
+                    color: Theme.onSurfaceVariantColor
+                    font.family: fontPrefs.appFontFamily !== "" ? fontPrefs.appFontFamily : Theme.fontFamily
+                    font.pixelSize: 15
+                    wrapMode: Text.Wrap
+                }
+
+                Item { width: 1; height: 10 }
+
+                SettingsLabel {
+                    width: parent.width
+                    text: I18n.tr("歌词字体")
+                }
+                SegmentedOptions {
+                    width: parent.width
+                    options: fontPrefs.fontOptions
+                    value: fontPrefs.lyricFontFamily
+                    onSelected: function(value) {
+                        fontPrefs.setLyricFont(value)
+                        page.frontendKeyWrite("lyricFontFamily", value)
+                    }
+                }
+                Text {
+                    width: parent.width
+                    text: I18n.tr("预览：") + I18n.tr("歌词字体示例 ♪ 让旋律与文字一起流动")
+                    color: Theme.onSurfaceVariantColor
+                    font.family: fontPrefs.lyricFontFamily !== "" ? fontPrefs.lyricFontFamily : Theme.fontFamily
+                    font.pixelSize: 17
+                    wrapMode: Text.Wrap
+                }
+
+                Item { width: 1; height: 6 }
+
+                SettingsNote {
+                    width: parent.width
+                    text: I18n.tr("字体选择会立即写入设置并在此处预览；后端暂未提供字体字段，重启后需重新选择，全局应用待后续接线。")
+                }
+            }
+
+            // ============================================================ 程序背景
+            SettingsSection {
+                id: secAppBackground
+                width: parent.width - 24
+                x: 12
+                title: I18n.tr("程序背景")
+                description: I18n.tr("自定义图片、模糊与暗化（仅本次会话，全局应用待接线）")
+                icon: "image"
+
+                SettingsRow {
+                    width: parent.width
+                    title: I18n.tr("背景图片")
+                    description: fontPrefs.appBackgroundImage !== ""
+                                 ? fontPrefs.appBackgroundImage
+                                 : I18n.tr("未选择（使用主题默认背景）")
+                    SettingsButton {
+                        text: I18n.tr("选择图片")
+                        icon: "image"
+                        onClicked: page.chooseBackgroundImage()
+                    }
+                    SettingsButton {
+                        text: I18n.tr("清除")
+                        enabled: fontPrefs.appBackgroundImage !== ""
+                        onClicked: {
+                            fontPrefs.clearBackground()
+                            page.frontendKeyWrite("appBackgroundImage", "")
+                            page.frontendKeyWrite("appBackgroundBlur", 0)
+                            page.frontendKeyWrite("appBackgroundDim", 0)
+                        }
+                    }
+                }
+
+                Item { width: 1; height: 8 }
+
+                // 背景预览：选中图片时显示，模糊/暗化只作为视觉近似（主窗口渲染待接线）。
+                Rectangle {
+                    width: parent.width
+                    height: 120
+                    radius: Theme.radiusMd
+                    color: Theme.surfaceContainerHighest
+                    clip: true
+                    Image {
+                        anchors.fill: parent
+                        source: fontPrefs.appBackgroundImage !== "" ? "file://" + fontPrefs.appBackgroundImage : ""
+                        fillMode: Image.PreserveAspectCrop
+                        opacity: 1 - fontPrefs.appBackgroundDim
+                        visible: fontPrefs.appBackgroundImage !== ""
+                    }
+                    NeriIcon {
+                        anchors.centerIn: parent
+                        name: "image"
+                        iconSize: 34
+                        color: Theme.onSurfaceVariantColor
+                        visible: fontPrefs.appBackgroundImage === ""
+                    }
+                }
+
+                Item { width: 1; height: 8 }
+
+                SliderRow {
+                    width: parent.width
+                    label: I18n.tr("背景模糊 ") + Math.round(fontPrefs.appBackgroundBlur)
+                    from: 0
+                    to: 20
+                    decimals: 0
+                    externalValue: fontPrefs.appBackgroundBlur
+                    onCommitted: function(value) {
+                        page.frontendKeyWrite("appBackgroundBlur", Math.round(value))
+                    }
+                }
+
+                SliderRow {
+                    width: parent.width
+                    label: I18n.tr("背景暗化 ") + Math.round(fontPrefs.appBackgroundDim * 100) + "%"
+                    from: 0
+                    to: 1
+                    decimals: 2
+                    externalValue: fontPrefs.appBackgroundDim
+                    onCommitted: function(value) {
+                        page.frontendKeyWrite("appBackgroundDim", value)
+                    }
+                }
+
+                SettingsNote {
+                    width: parent.width
+                    text: I18n.tr("图片路径、模糊与暗化会写入设置并在此预览；后端无对应字段且主窗口背景渲染尚未接线，全局效果待后续实现。")
+                }
+            }
+
             // ============================================================ 播放页
             SettingsSection {
                 id: secPlayerDesign
@@ -1535,6 +1809,92 @@ Item {
                 SettingsNote {
                     width: parent.width
                     text: I18n.tr("倍速与变调需要后端具备 ffmpeg 支持；不可用时设置仍会保存，下次具备条件时生效。")
+                }
+            }
+
+            // ============================================================ 淡入淡出
+            SettingsSection {
+                id: secFade
+                width: parent.width - 24
+                x: 12
+                title: I18n.tr("淡入淡出")
+                description: I18n.tr("播放开始/结束的渐变与切歌交叉淡入（需后端 player.setFadeOptions）")
+                icon: "graphic_eq"
+
+                SettingsSwitchRow {
+                    width: parent.width
+                    title: I18n.tr("启用淡入淡出")
+                    description: I18n.tr("播放与暂停时按下方时长渐变音量")
+                    checked: page.sb("fadeEnabled", true)
+                    onToggled: function(checked) {
+                        page.setSetting("fadeEnabled", checked)
+                        page.applyFadeOptions({ fadeEnabled: checked })
+                    }
+                }
+
+                Item { width: 1; height: 6 }
+
+                SliderRow {
+                    width: parent.width
+                    enabled: page.sb("fadeEnabled", true)
+                    label: I18n.tr("淡入时长 ") + Math.round(page.sv("fadeInMs", 300)) + "ms"
+                    from: 100
+                    to: 2000
+                    decimals: 0
+                    externalValue: Number(page.sv("fadeInMs", 300))
+                    formatValue: function(value) { return Math.round(value) + "ms" }
+                    onCommitted: function(value) {
+                        page.setSetting("fadeInMs", Math.round(value))
+                        page.applyFadeOptions({ fadeInMs: Math.round(value) })
+                    }
+                }
+
+                SliderRow {
+                    width: parent.width
+                    enabled: page.sb("fadeEnabled", true)
+                    label: I18n.tr("淡出时长 ") + Math.round(page.sv("fadeOutMs", 300)) + "ms"
+                    from: 100
+                    to: 2000
+                    decimals: 0
+                    externalValue: Number(page.sv("fadeOutMs", 300))
+                    formatValue: function(value) { return Math.round(value) + "ms" }
+                    onCommitted: function(value) {
+                        page.setSetting("fadeOutMs", Math.round(value))
+                        page.applyFadeOptions({ fadeOutMs: Math.round(value) })
+                    }
+                }
+
+                Item { width: 1; height: 6 }
+
+                SettingsSwitchRow {
+                    width: parent.width
+                    title: I18n.tr("交叉淡入")
+                    description: I18n.tr("切歌时前后歌曲音量交叉过渡")
+                    checked: page.sb("crossfadeEnabled", false)
+                    onToggled: function(checked) {
+                        page.setSetting("crossfadeEnabled", checked)
+                        page.applyFadeOptions({ crossfadeEnabled: checked })
+                    }
+                }
+
+                SliderRow {
+                    width: parent.width
+                    enabled: page.sb("crossfadeEnabled", false)
+                    label: I18n.tr("交叉淡入时长 ") + Math.round(page.sv("crossfadeMs", 2000)) + "ms"
+                    from: 500
+                    to: 8000
+                    decimals: 0
+                    externalValue: Number(page.sv("crossfadeMs", 2000))
+                    formatValue: function(value) { return Math.round(value) + "ms" }
+                    onCommitted: function(value) {
+                        page.setSetting("crossfadeMs", Math.round(value))
+                        page.applyFadeOptions({ crossfadeMs: Math.round(value) })
+                    }
+                }
+
+                SettingsNote {
+                    width: parent.width
+                    text: I18n.tr("时长设置会保存到设置并尝试同步给播放器；若后端尚未构建该命令会提示错误，设置本身仍保留。")
                 }
             }
 
@@ -2034,128 +2394,6 @@ Item {
                 }
             }
             Item {
-                id: catSources
-                width: parent.width
-                height: visible ? innerSources.height + 12 : 0
-                visible: page.currentCategory === "sources"
-
-                Column {
-                    id: innerSources
-                    width: parent.width
-                    spacing: 12
-
-            // ============================================================ 音乐源
-            SettingsSection {
-                id: musicSourceSection
-                width: parent.width - 24
-                x: 12
-                title: I18n.tr("音乐源")
-                description: I18n.tr("网易云 / 哔哩哔哩 / YouTube 的开关与账号登录")
-                icon: "cloud"
-
-                SettingsSwitchRow {
-                    width: parent.width
-                    title: I18n.tr("网易云音乐")
-                    description: I18n.tr("搜索、推荐、播放与歌词；未登录也可使用公开接口")
-                    checked: page.sb("neteaseEnabled", true)
-                    onToggled: function(checked) { page.setSetting("neteaseEnabled", checked) }
-                }
-
-                SettingsRow {
-                    width: parent.width
-                    title: page.findAccount("NETEASE") ? page.accountName(page.findAccount("NETEASE"))
-                                                        : I18n.tr("网易云：未登录")
-                    description: page.findAccount("NETEASE")
-                                 ? I18n.tr("已登录 · ") + page.accountDetail(page.findAccount("NETEASE"), "")
-                                 : I18n.tr("未登录：扫码登录后可解锁每日推荐、私人 FM 与每日推荐歌单")
-
-                    SettingsButton {
-                        text: page.findAccount("NETEASE") ? I18n.tr("退出登录") : I18n.tr("扫码登录")
-                        onClicked: page.toggleSourceAccount("NETEASE")
-                    }
-                }
-
-                Item {
-                    width: 1
-                    height: 6
-                }
-
-                SettingsSwitchRow {
-                    width: parent.width
-                    title: I18n.tr("哔哩哔哩")
-                    description: I18n.tr("视频搜索与音频轨道播放")
-                    checked: page.sb("bilibiliEnabled", true)
-                    onToggled: function(checked) { page.setSetting("bilibiliEnabled", checked) }
-                }
-
-                SettingsRow {
-                    width: parent.width
-                    title: page.findAccount("BILIBILI") ? page.accountName(page.findAccount("BILIBILI"))
-                                                        : I18n.tr("哔哩哔哩：未登录")
-                    description: page.findAccount("BILIBILI")
-                                 ? I18n.tr("已登录 · ") + page.accountDetail(page.findAccount("BILIBILI"), "")
-                                 : I18n.tr("未登录：可搜索与播放视频音频轨，收藏夹需要登录")
-
-                    SettingsButton {
-                        text: page.findAccount("BILIBILI") ? I18n.tr("退出登录") : I18n.tr("扫码登录")
-                        onClicked: page.toggleSourceAccount("BILIBILI")
-                    }
-                }
-
-                Item {
-                    width: 1
-                    height: 6
-                }
-
-                SettingsSwitchRow {
-                    width: parent.width
-                    title: "YouTube Music"
-                    description: I18n.tr("登录后可浏览与播放；未登录时仅能搜索公开内容")
-                    checked: page.sb("youtubeEnabled", false)
-                    onToggled: function(checked) { page.setSetting("youtubeEnabled", checked) }
-                }
-
-                SettingsRow {
-                    width: parent.width
-                    title: page.findAccount("YOUTUBE") ? page.accountName(page.findAccount("YOUTUBE"))
-                                                       : I18n.tr("YouTube：未登录")
-                    description: page.findAccount("YOUTUBE")
-                                 ? I18n.tr("已登录 · ") + page.accountDetail(page.findAccount("YOUTUBE"), "")
-                                 : I18n.tr("未登录：只能搜索公开内容，登录需从浏览器复制 Cookie")
-
-                    SettingsButton {
-                        text: page.findAccount("YOUTUBE") ? I18n.tr("退出登录") : I18n.tr("登录")
-                        onClicked: page.toggleSourceAccount("YOUTUBE")
-                    }
-                }
-
-                Item {
-                    width: 1
-                    height: 8
-                }
-
-                SettingsSwitchRow {
-                    width: parent.width
-                    title: I18n.tr("自动换源")
-                    description: I18n.tr("网易云不可播放（VIP / 版权 / 接口限制）时，自动到 B 站搜索同名歌曲播放")
-                    checked: page.sb("neteaseAutoSourceSwitch", true)
-                    onToggled: function(checked) { page.setSetting("neteaseAutoSourceSwitch", checked) }
-                }
-
-                Item {
-                    width: 1
-                    height: 4
-                }
-
-                SettingsNote {
-                    width: parent.width
-                    text: I18n.tr("登录凭据（Cookie）仅保存在本机配置目录。关闭某个音源后，它的栏目与账号歌单会在首页 / 媒体库中隐藏。")
-                }
-            }
-
-                }
-            }
-            Item {
                 id: catGeneral
                 width: parent.width
                 height: visible ? innerGeneral.height + 12 : 0
@@ -2174,6 +2412,19 @@ Item {
                 title: I18n.tr("首页栏目")
                 description: I18n.tr("选择首页展示哪些推荐栏目（未登录 / 音源禁用时对应栏目不会出现）")
                 icon: "dashboard"
+
+                SettingsSwitchRow {
+                    width: parent.width
+                    title: I18n.tr("首页使用平铺网格")
+                    description: I18n.tr("开启后首页推荐栏目以平铺网格展示，关闭时为纵向列表")
+                    checked: page.sb("homeGridMode", false)
+                    onToggled: function(checked) { page.setSetting("homeGridMode", checked) }
+                }
+
+                Item {
+                    width: 1
+                    height: 4
+                }
 
                 SettingsSwitchRow {
                     width: parent.width
@@ -2333,19 +2584,6 @@ Item {
                 }
             }
 
-                }
-            }
-            Item {
-                id: catLanguage
-                width: parent.width
-                height: visible ? innerLanguage.height + 12 : 0
-                visible: page.currentCategory === "language"
-
-                Column {
-                    id: innerLanguage
-                    width: parent.width
-                    spacing: 12
-
             // ============================================================ 语言
             SettingsSection {
                 id: secLanguage
@@ -2381,6 +2619,41 @@ Item {
 
                 }
             }
+
+            // ============================================================ 备份与同步（面板由另一 agent 提供）
+            Item {
+                id: catBackupSync
+                width: parent.width
+                height: visible ? innerBackupSync.height + 12 : 0
+                visible: page.currentCategory === "backupSync"
+
+                Column {
+                    id: innerBackupSync
+                    width: parent.width
+                    spacing: 12
+
+                    // SyncPanel 自包含标题与内容；外层只提供滚动定位用的 id，不再套 SettingsSection。
+                    Item {
+                        id: secBackupSync
+                        width: parent.width - 24
+                        x: 12
+                        height: backupLoader.height
+
+                        // SyncPanel 由同步 agent 提供；文件缺失时静默退化，不阻塞设置页。
+                        Loader {
+                            id: backupLoader
+                            width: parent.width
+                            source: Qt.resolvedUrl("../components/settings/SyncPanel.qml")
+                            active: true
+                            visible: status === Loader.Ready
+                            onStatusChanged: if (status === Loader.Error)
+                                                 console.warn("[settings] SyncPanel.qml 尚未就绪")
+                            height: status === Loader.Ready && item ? item.implicitHeight : 0
+                        }
+                    }
+                }
+            }
+
             Item {
                 id: catAbout
                 width: parent.width
