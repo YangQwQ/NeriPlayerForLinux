@@ -52,6 +52,11 @@ Item {
     readonly property bool showErrorCard: loadError !== "" || loadErrors.length > 0
     readonly property bool showLoginHint: !loggedIn && loginErrors.length > 0
     readonly property bool youtubeEnabled: Settings.values ? Settings.values.youtubeEnabled === true : false
+    /**
+     * 首页平铺网格模式。设置页写入 homeGridMode；后端 AppSettings 用宽松 JSON 解析，
+     * 这里仍做容错（undefined / 非 true 一律当 false），避免设置键缺失时误开启。
+     */
+    readonly property bool homeGridMode: Settings.get("homeGridMode", false) === true
 
     property var _eventHandlers: []
     /** 上次请求时的音源开关，用于在设置变化时强制重取。 */
@@ -680,22 +685,75 @@ Item {
             Repeater {
                 model: page.sections
 
-                delegate: HomeSectionRow {
+                // 网格模式只切换栏目内容的展示方式；数据加载、登录引导、错误处理不变。
+                delegate: Loader {
+                    id: sectionLoader
+
                     width: contentColumn.width
-                    height: implicitHeight
-                    title: modelData.title
-                    icon: modelData.icon
-                    kind: modelData.kind
-                    items: modelData.items
-                    groups: modelData.groups
-                    onActionClicked: function(kind, items) {
-                        page.handleSectionAction(kind, items)
+                    // 宽屏最多 6 列，窄屏降到 2~3 列（HomeGridSection 内部按宽度自适应）。
+                    property int maxCols: page.wide ? 6 : 3
+                    sourceComponent: page.homeGridMode ? gridSection : rowSection
+
+                    Binding {
+                        target: sectionLoader.item
+                        property: "width"
+                        value: contentColumn.width
+                        when: sectionLoader.item !== null
                     }
-                    onSongActivated: function(songs, index) {
-                        page.playSongs(songs, index)
+                    Binding {
+                        target: sectionLoader.item
+                        property: "title"
+                        value: modelData.title
+                        when: sectionLoader.item !== null
                     }
-                    onCollectionActivated: function(collection) {
-                        page.openCollection(collection)
+                    Binding {
+                        target: sectionLoader.item
+                        property: "icon"
+                        value: modelData.icon
+                        when: sectionLoader.item !== null
+                    }
+                    Binding {
+                        target: sectionLoader.item
+                        property: "kind"
+                        value: modelData.kind
+                        when: sectionLoader.item !== null
+                    }
+                    Binding {
+                        target: sectionLoader.item
+                        property: "items"
+                        value: modelData.items
+                        when: sectionLoader.item !== null
+                    }
+                    Binding {
+                        target: sectionLoader.item
+                        property: "groups"
+                        value: modelData.groups
+                        when: sectionLoader.item !== null
+                    }
+                    Binding {
+                        target: sectionLoader.item
+                        property: "maxColumns"
+                        value: maxCols
+                        when: sectionLoader.item !== null && sectionLoader.item.maxColumns !== undefined
+                    }
+                    height: sectionLoader.item ? sectionLoader.item.implicitHeight : 0
+
+                    Connections {
+                        target: sectionLoader.item
+                        enabled: sectionLoader.item !== null
+                        function onActionClicked(kind, items) { page.handleSectionAction(kind, items) }
+                        function onSongActivated(songs, index) { page.playSongs(songs, index) }
+                        function onCollectionActivated(collection) { page.openCollection(collection) }
+                    }
+
+                    Component {
+                        id: rowSection
+                        HomeSectionRow { }
+                    }
+
+                    Component {
+                        id: gridSection
+                        HomeGridSection { }
                     }
                 }
             }
