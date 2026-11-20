@@ -3,6 +3,8 @@
 #include <QGuiApplication>
 #include <QScreen>
 #include <QWindow>
+#include <type_traits>
+#include <utility>
 
 // 由构建系统决定是否具备 LayerShellQt（见 CMakeLists 的 NERIPLAYER_HAVE_LAYERSHELLQT）
 #ifdef NERIPLAYER_HAVE_LAYERSHELLQT
@@ -13,6 +15,23 @@
 #endif
 
 namespace {
+
+// 不同版本的 LayerShellQt API 差异：旧版有 setDesiredSize，新版移除后由 QWindow 自己决定尺寸。
+// 用 SFINAE 在编译期探测，保证两种版本都能构建。
+template <typename T, typename = void>
+struct has_set_desired_size : std::false_type {};
+template <typename T>
+struct has_set_desired_size<T, std::void_t<decltype(std::declval<T*>()->setDesiredSize(QSize()))>>
+    : std::true_type {};
+
+template <typename T>
+void setLayerSize(T *layer, QWindow *window, const QSize &size)
+{
+    if constexpr (has_set_desired_size<T>::value)
+        layer->setDesiredSize(size);
+    else if (window)
+        window->resize(size);
+}
 
 bool platformIsWayland()
 {
@@ -80,7 +99,7 @@ bool LayerShellHelper::attach(QObject *object, qreal ratioX, qreal ratioY,
     layer->setAnchors(LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop)
                       | LayerShellQt::Window::AnchorLeft);
     if (width > 0 && height > 0)
-        layer->setDesiredSize(QSize(width, height));
+        setLayerSize(layer, window, QSize(width, height));
 
     const QPoint offset = computeOffset(window, ratioX, ratioY, width, height);
     layer->setMargins(QMargins(offset.x(), offset.y(), 0, 0));
@@ -155,7 +174,7 @@ void LayerShellHelper::setDesiredSize(QObject *object, int width, int height)
     if (!window || !platformIsWayland())
         return;
     if (auto *layer = LayerShellQt::Window::get(window))
-        layer->setDesiredSize(QSize(qMax(1, width), qMax(1, height)));
+        setLayerSize(layer, window, QSize(qMax(1, width), qMax(1, height)));
 #else
     Q_UNUSED(object)
     Q_UNUSED(width)
