@@ -6,7 +6,7 @@ import "../"
 PanelScaffold {
     id: panel
 
-    title: "音量"
+    title: I18n.tr("音量")
     panelWidth: 380
 
     Item {
@@ -37,7 +37,7 @@ PanelScaffold {
                 }
 
                 Text {
-                    text: "音量"
+                    text: I18n.tr("音量")
                     color: Theme.onSurfaceVariantColor
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.textStyle("labelMedium").size
@@ -56,7 +56,7 @@ PanelScaffold {
             Text {
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter
-                text: "拖动滑块调节音量"
+                text: I18n.tr("拖动滑块调节音量")
                 color: Theme.withAlpha(Theme.onSurfaceVariantColor, 0.75)
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.textStyle("bodySmall").size

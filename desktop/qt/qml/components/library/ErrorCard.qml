@@ -70,7 +70,7 @@ Item {
                     id: retryText
 
                     anchors.centerIn: parent
-                    text: "重试"
+                    text: I18n.tr("重试")
                     color: Theme.onErrorContainerColor
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.textStyle("labelLarge").size

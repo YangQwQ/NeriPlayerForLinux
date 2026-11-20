@@ -15,7 +15,7 @@ Item {
 
     property string name: entry && entry.name !== undefined && entry.name !== null ? entry.name : ""
     property string subtitle: entry && entry.songCount !== undefined && entry.songCount !== null
-                              ? entry.songCount + " 首" : ""
+                              ? entry.songCount + I18n.tr(" 首") : ""
     property string coverPath: ""
     property string coverUrl: entry && entry.avatarUrl !== undefined && entry.avatarUrl !== null
                               ? entry.avatarUrl : ""

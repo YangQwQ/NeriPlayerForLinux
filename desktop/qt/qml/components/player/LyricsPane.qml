@@ -206,8 +206,8 @@ Item {
         anchors.centerIn: parent
         visible: pane.lines.length === 0 && !Player.lyricsLoading
         icon: "lyrics"
-        title: "暂无歌词"
-        hint: "本地歌曲可放置同名 .lrc 文件，在线歌曲会自动获取歌词"
+        title: I18n.tr("暂无歌词")
+        hint: I18n.tr("本地歌曲可放置同名 .lrc 文件，在线歌曲会自动获取歌词")
         contentWidth: Math.min(360, pane.width - 32)
         iconColor: Theme.withAlpha(np.foreground, 0.4)
         titleColor: np.foregroundDim

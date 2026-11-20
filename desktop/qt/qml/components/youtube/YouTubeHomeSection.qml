@@ -60,7 +60,7 @@ Item {
                 return
             root.loading = false
             root.sections = []
-            root.message = error && error.message ? String(error.message) : "YouTube 推荐加载失败"
+            root.message = error && error.message ? String(error.message) : I18n.tr("YouTube 推荐加载失败")
         })
     }
 
@@ -160,7 +160,7 @@ Item {
                          "startIndex": index < 0 ? 0 : index,
                          "autoPlay": true
                      }).catch(function(e) {
-                Toast.show(e && e.message ? e.message : "播放失败", "error")
+                Toast.show(e && e.message ? e.message : I18n.tr("播放失败"), "error")
             })
         }
     }
@@ -188,7 +188,7 @@ Item {
             Text {
                 anchors.verticalCenter: parent.verticalCenter
                 width: parent.width - 40
-                text: "YouTube Music 推荐"
+                text: I18n.tr("YouTube Music 推荐")
                 color: Theme.onSurfaceColor
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.textStyle("titleMedium").size

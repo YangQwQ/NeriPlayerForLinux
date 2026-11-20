@@ -32,11 +32,11 @@ PanelShell {
         return count
     }
 
-    title: "下载管理"
+    title: I18n.tr("下载管理")
     cardWidth: 420
 
     PanelButton {
-        text: "清空已完成"
+        text: I18n.tr("清空已完成")
         chip: true
         enabledButton: panel.finishedCount > 0
         onClicked: panel.clearFinished()
@@ -100,7 +100,7 @@ PanelShell {
             return String(error.message)
         if (typeof error === "string" && error !== "")
             return error
-        return "未知错误"
+        return I18n.tr("未知错误")
     }
 
     /** C++ 桥下发的数组是 QVariantList 包装对象（Array.isArray 为 false），统一转成 JS 数组。 */
@@ -147,12 +147,12 @@ PanelShell {
     }
 
     function summaryText() {
-        let text = "已下载 " + panel.items.length + " 首"
+        let text = I18n.tr("已下载 ") + panel.items.length + I18n.tr(" 首")
         const size = panel.totalDownloadedBytes()
         if (size > 0)
             text += " · " + panel.formatSize(size)
         if (panel.activeCount > 0)
-            text += " · 进行中 " + panel.activeCount
+            text += I18n.tr(" · 进行中 ") + panel.activeCount
         return text
     }
 
@@ -168,7 +168,7 @@ PanelShell {
         const directory = Settings.get("downloadDirectory", "")
         if (directory && String(directory) !== "")
             return String(directory)
-        return "~/Music/NeriPlayer（默认）"
+        return I18n.tr("~/Music/NeriPlayer（默认）")
     }
 
     // ---------------------------------------------------------------- 数据刷新
@@ -199,7 +199,7 @@ PanelShell {
             panel._refreshingTasks = false
             if (!panel.hasData) {
                 panel.loading = false
-                panel.loadError = "下载任务读取失败：" + panel.messageOf(error)
+                panel.loadError = I18n.tr("下载任务读取失败：") + panel.messageOf(error)
             }
         })
     }
@@ -215,7 +215,7 @@ PanelShell {
             panel._refreshingItems = false
             if (!panel.hasData) {
                 panel.loading = false
-                panel.loadError = "已下载列表读取失败：" + panel.messageOf(error)
+                panel.loadError = I18n.tr("已下载列表读取失败：") + panel.messageOf(error)
             }
         })
     }
@@ -229,7 +229,7 @@ PanelShell {
             panel.loading = false
         }).catch(function(error) {
             panel.loading = false
-            panel.loadError = "下载数据读取失败：" + panel.messageOf(error)
+            panel.loadError = I18n.tr("下载数据读取失败：") + panel.messageOf(error)
         })
     }
 
@@ -239,10 +239,10 @@ PanelShell {
         if (!task || !task.id)
             return
         Api.call("download.cancel", { id: task.id }).then(function() {
-            Toast.show("已取消下载", "info")
+            Toast.show(I18n.tr("已取消下载"), "info")
             panel.refreshTasks()
         }).catch(function(error) {
-            Toast.show("取消失败：" + panel.messageOf(error), "error")
+            Toast.show(I18n.tr("取消失败：") + panel.messageOf(error), "error")
         })
     }
 
@@ -250,20 +250,20 @@ PanelShell {
         if (!task || !task.id)
             return
         Api.call("download.retry", { id: task.id }).then(function() {
-            Toast.show("已重新加入下载队列", "info")
+            Toast.show(I18n.tr("已重新加入下载队列"), "info")
             panel.refreshTasks()
         }).catch(function(error) {
-            Toast.show("重试失败：" + panel.messageOf(error), "error")
+            Toast.show(I18n.tr("重试失败：") + panel.messageOf(error), "error")
         })
     }
 
     function clearFinished() {
         Api.call("download.clearFinished").then(function() {
-            Toast.show("已清空已完成的任务", "info")
+            Toast.show(I18n.tr("已清空已完成的任务"), "info")
             panel.refreshTasks()
             panel.refreshItems()
         }).catch(function(error) {
-            Toast.show("清空失败：" + panel.messageOf(error), "error")
+            Toast.show(I18n.tr("清空失败：") + panel.messageOf(error), "error")
         })
     }
 
@@ -271,9 +271,9 @@ PanelShell {
         const params = path && path !== "" ? { path: path } : {}
         Api.call("download.openDirectory", params).then(function(result) {
             if (!result || result.ok !== true)
-                Toast.show(result && result.message ? String(result.message) : "无法打开下载目录", "error")
+                Toast.show(result && result.message ? String(result.message) : I18n.tr("无法打开下载目录"), "error")
         }).catch(function(error) {
-            Toast.show("打开目录失败：" + panel.messageOf(error), "error")
+            Toast.show(I18n.tr("打开目录失败：") + panel.messageOf(error), "error")
         })
     }
 
@@ -344,7 +344,7 @@ PanelShell {
 
                     LoadingState {
                         anchors.centerIn: parent
-                        text: "正在读取下载任务…"
+                        text: I18n.tr("正在读取下载任务…")
                     }
                 }
 
@@ -384,7 +384,7 @@ PanelShell {
                 SectionHeader {
                     width: contentColumn.width
                     visible: panel.tasks.length > 0
-                    title: "下载任务（" + panel.tasks.length + "）"
+                    title: I18n.tr("下载任务（") + panel.tasks.length + "）"
                     icon: "download"
                 }
 
@@ -405,7 +405,7 @@ PanelShell {
                 SectionHeader {
                     width: contentColumn.width
                     visible: panel.items.length > 0
-                    title: "已下载（" + panel.items.length + "）"
+                    title: I18n.tr("已下载（") + panel.items.length + "）"
                     icon: "download_done"
                 }
 
@@ -417,9 +417,9 @@ PanelShell {
                         required property var modelData
 
                         readonly property string titleText: modelData && modelData.title
-                                                          ? String(modelData.title) : "未知歌曲"
+                                                          ? String(modelData.title) : I18n.tr("未知歌曲")
                         readonly property string subtitleText: {
-                            const artist = modelData && modelData.artist ? String(modelData.artist) : "未知艺术家"
+                            const artist = modelData && modelData.artist ? String(modelData.artist) : I18n.tr("未知艺术家")
                             const path = modelData && modelData.filePath ? String(modelData.filePath) : ""
                             return path !== "" ? artist + " · " + path : artist
                         }
@@ -479,7 +479,7 @@ PanelShell {
                             size: 32
                             iconSize: 17
                             icon: "folder_open"
-                            tooltip: "打开所在目录"
+                            tooltip: I18n.tr("打开所在目录")
                             onClicked: panel.openDirectory(panel.directoryOf(itemRow.modelData.filePath))
                         }
                     }
@@ -495,8 +495,8 @@ PanelShell {
                         anchors.centerIn: parent
                         width: parent.width - 48
                         icon: "download"
-                        title: "暂无下载任务"
-                        hint: "在歌曲或歌单的更多菜单中选择「下载」，任务会出现在这里"
+                        title: I18n.tr("暂无下载任务")
+                        hint: I18n.tr("在歌曲或歌单的更多菜单中选择「下载」，任务会出现在这里")
                     }
                 }
 
@@ -538,7 +538,7 @@ PanelShell {
                     spacing: 2
 
                     Text {
-                        text: "下载目录"
+                        text: I18n.tr("下载目录")
                         color: Theme.onSurfaceVariantColor
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.textStyle("labelSmall").size
@@ -561,14 +561,14 @@ PanelShell {
                     spacing: 8
 
                     PanelButton {
-                        text: "打开目录"
+                        text: I18n.tr("打开目录")
                         chip: true
                         outlined: true
                         onClicked: panel.openDirectory("")
                     }
 
                     PanelButton {
-                        text: "下载设置"
+                        text: I18n.tr("下载设置")
                         chip: true
                         filled: true
                         onClicked: panel.openDownloadSettings()

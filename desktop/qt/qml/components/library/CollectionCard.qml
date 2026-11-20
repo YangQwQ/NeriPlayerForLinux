@@ -24,9 +24,9 @@ Item {
         if (!entry)
             return ""
         if (entry.trackCount !== undefined && entry.trackCount !== null && entry.trackCount > 0)
-            return entry.trackCount + " 首"
+            return entry.trackCount + I18n.tr(" 首")
         if (entry.songs !== undefined && entry.songs !== null)
-            return entry.songs.length + " 首"
+            return entry.songs.length + I18n.tr(" 首")
         if (entry.creator !== undefined && entry.creator !== null && entry.creator !== "")
             return entry.creator
         return ""

@@ -139,7 +139,7 @@ Item {
                 icon: "close"
                 iconSize: 24
                 size: 48
-                tooltip: "关闭"
+                tooltip: I18n.tr("关闭")
                 onClicked: Nav.closePanel()
             }
         }

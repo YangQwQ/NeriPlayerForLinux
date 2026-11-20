@@ -120,7 +120,7 @@ Item {
         Api.get("shortcuts.catalog", {}, function(result, error) {
             if (error) {
                 root.loading = false
-                root.errorText = "快捷键列表加载失败：" + (error.message || "未知错误")
+                root.errorText = I18n.tr("快捷键列表加载失败：") + (error.message || I18n.tr("未知错误"))
                 return
             }
             root.catalog = (result && result.actions) ? result.actions : []
@@ -131,13 +131,13 @@ Item {
     function openGlobalSettings() {
         Api.call("shortcut.openGlobalSettings").then(function(result) {
             if (result && result.ok === false)
-                Toast.show("当前桌面环境不支持全局快捷键设置", "error")
+                Toast.show(I18n.tr("当前桌面环境不支持全局快捷键设置"), "error")
             // 系统配置窗口关闭后刷新一次（KDE 的 ConfigureShortcuts 是异步返回的）
             globalRefreshTimer.restart()
             Qt.callLater(root.refreshGlobalBindings)
             refreshDelayTimer.restart()
         }).catch(function(error) {
-            Toast.show("打开系统快捷键设置失败：" + (error && error.message ? error.message : error), "error")
+            Toast.show(I18n.tr("打开系统快捷键设置失败：") + (error && error.message ? error.message : error), "error")
         })
     }
 
@@ -162,20 +162,20 @@ Item {
         const stored = root.storedLocal(action.id)
         if (stored)
             return root.formatBinding(stored)
-        return action.localDefault ? action.localDefault : "未设置"
+        return action.localDefault ? action.localDefault : I18n.tr("未设置")
     }
 
     function globalText(action) {
         if (!root.showGlobalColumn)
             return "—"
         if (!root.globalLoaded)
-            return "读取中…"
+            return I18n.tr("读取中…")
         const map = root.globalBindings || ({})
         const raw = map[action.id]
         if (raw === undefined)
-            return "未设置"
+            return I18n.tr("未设置")
         const text = root.formatGlobalTrigger(String(raw))
-        return text === "" ? "未设置" : text
+        return text === "" ? I18n.tr("未设置") : text
     }
 
     /** KDE 返回的是本地化文案（如 "Ctrl+Shift+空格"），把常见中文键名换成界面统一写法。 */
@@ -199,7 +199,7 @@ Item {
     /** 当前动作的应用内键位是否与别的动作重复；返回被占用的动作名，无冲突返回空串。 */
     function localConflict(action) {
         const own = root.localText(action)
-        if (!own || own === "未设置" || own === "没有绑定")
+        if (!own || own === I18n.tr("未设置") || own === "没有绑定")
             return ""
         for (let i = 0; i < root.catalog.length; ++i) {
             const other = root.catalog[i]
@@ -233,12 +233,12 @@ Item {
         case "Down": return "↓"
         case "Left": return "←"
         case "Right": return "→"
-        case "XF86AudioPrev": return "媒体上一首"
-        case "XF86AudioNext": return "媒体下一首"
-        case "XF86AudioStop": return "媒体停止"
-        case "XF86AudioPlay": return "媒体播放"
-        case "XF86AudioPause": return "媒体暂停"
-        case "XF86AudioPlayPause": return "媒体播放/暂停"
+        case "XF86AudioPrev": return I18n.tr("媒体上一首")
+        case "XF86AudioNext": return I18n.tr("媒体下一首")
+        case "XF86AudioStop": return I18n.tr("媒体停止")
+        case "XF86AudioPlay": return I18n.tr("媒体播放")
+        case "XF86AudioPause": return I18n.tr("媒体暂停")
+        case "XF86AudioPlayPause": return I18n.tr("媒体播放/暂停")
         default: return key.length === 1 ? key.toUpperCase() : key
         }
     }
@@ -246,7 +246,7 @@ Item {
     // {key,ctrl,alt,shift,meta} → 「Ctrl+Shift+L」。
     function formatBinding(binding) {
         if (!binding || !binding.key)
-            return "未设置"
+            return I18n.tr("未设置")
         const parts = []
         if (binding.ctrl) parts.push("Ctrl")
         if (binding.alt) parts.push("Alt")
@@ -290,7 +290,7 @@ Item {
 
     function startRecording(action, scope) {
         if (action.systemKey) {
-            Toast.show("「" + action.label + "」是固定键，不能修改", "info")
+            Toast.show("「" + action.label + I18n.tr("」是固定键，不能修改"), "info")
             return
         }
         root.recordingActionId = action.id
@@ -318,7 +318,7 @@ Item {
         const xkbKey = root.qtKeyToXkb(event.key)
         if (!xkbKey) {
             event.accepted = true
-            Toast.show("暂不支持这个按键，请换一个", "info")
+            Toast.show(I18n.tr("暂不支持这个按键，请换一个"), "info")
             return
         }
         const binding = {
@@ -354,7 +354,7 @@ Item {
 
     function clearLocal(action) {
         if (action.systemKey) {
-            Toast.show("「" + action.label + "」是固定键，不能修改", "info")
+            Toast.show("「" + action.label + I18n.tr("」是固定键，不能修改"), "info")
             return
         }
         if (!root.storedLocal(action.id))
@@ -374,7 +374,7 @@ Item {
                 global[id] = current.global[id]
         }
         Settings.patch({ shortcuts: { local: {}, global: global } })
-        Toast.show("已恢复默认快捷键", "info")
+        Toast.show(I18n.tr("已恢复默认快捷键"), "info")
     }
 
     // ---------------------------------------------------------------- 内容
@@ -392,14 +392,14 @@ Item {
             SettingsButton {
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
-                text: "恢复默认"
+                text: I18n.tr("恢复默认")
                 onClicked: root.resetAllLocal()
             }
 
             SettingsButton {
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                text: "在系统设置中修改…"
+                text: I18n.tr("在系统设置中修改…")
                 icon: "settings"
                 onClicked: root.openGlobalSettings()
             }
@@ -408,14 +408,14 @@ Item {
         SettingsNote {
             width: content.width
             visible: root.showGlobalColumn
-            text: "「全局」列显示桌面系统当前实际生效的绑定（关闭后显示「未设置」）；"
-                  + "修改请点上方「在系统设置中修改…」。"
+            text: I18n.tr("「全局」列显示桌面系统当前实际生效的绑定（关闭后显示「未设置」）；")
+                  + I18n.tr("修改请点上方「在系统设置中修改…」。")
         }
 
         SettingsNote {
             width: content.width
             visible: !root.showGlobalColumn
-            text: "当前桌面环境无法读取全局快捷键，已隐藏该列；全局键位仍由桌面系统管理。"
+            text: I18n.tr("当前桌面环境无法读取全局快捷键，已隐藏该列；全局键位仍由桌面系统管理。")
         }
 
         // 表头
@@ -426,7 +426,7 @@ Item {
             Text {
                 x: 0
                 anchors.verticalCenter: parent.verticalCenter
-                text: "动作"
+                text: I18n.tr("动作")
                 color: Theme.onSurfaceVariantColor
                 font.family: Theme.fontFamily
                 font.pixelSize: 12
@@ -438,7 +438,7 @@ Item {
                 width: root.capsuleWidth
                 anchors.verticalCenter: parent.verticalCenter
                 horizontalAlignment: Text.AlignHCenter
-                text: "应用内"
+                text: I18n.tr("应用内")
                 color: Theme.onSurfaceVariantColor
                 font.family: Theme.fontFamily
                 font.pixelSize: 12
@@ -451,7 +451,7 @@ Item {
                 visible: root.showGlobalColumn
                 anchors.verticalCenter: parent.verticalCenter
                 horizontalAlignment: Text.AlignHCenter
-                text: "全局"
+                text: I18n.tr("全局")
                 color: Theme.onSurfaceVariantColor
                 font.family: Theme.fontFamily
                 font.pixelSize: 12
@@ -467,7 +467,7 @@ Item {
 
             Text {
                 anchors.verticalCenter: parent.verticalCenter
-                text: "正在加载快捷键…"
+                text: I18n.tr("正在加载快捷键…")
                 color: Theme.onSurfaceVariantColor
                 font.family: Theme.fontFamily
                 font.pixelSize: 12
@@ -487,7 +487,7 @@ Item {
             }
 
             SettingsButton {
-                text: "重试"
+                text: I18n.tr("重试")
                 onClicked: root.loadCatalog()
             }
         }
@@ -578,7 +578,7 @@ Item {
                                 visible: text !== ""
                                 text: {
                                     const conflict = root.localConflict(shortcutRow.action)
-                                    return conflict ? "应用内与「" + conflict + "」冲突" : ""
+                                    return conflict ? I18n.tr("应用内与「") + conflict + "」冲突" : ""
                                 }
                                 color: Theme.error
                                 font.family: Theme.fontFamily
@@ -611,7 +611,7 @@ Item {
                             Text {
                                 id: resetLabel
                                 anchors.centerIn: parent
-                                text: "默认"
+                                text: I18n.tr("默认")
                                 color: Theme.primary
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 11
@@ -656,7 +656,7 @@ Item {
                                 anchors.centerIn: parent
                                 width: parent.width - 16
                                 horizontalAlignment: Text.AlignHCenter
-                                text: shortcutRow.recording ? "按下新键…" : root.localText(shortcutRow.action)
+                                text: shortcutRow.recording ? I18n.tr("按下新键…") : root.localText(shortcutRow.action)
                                 elide: Text.ElideRight
                                 color: shortcutRow.recording
                                        ? Theme.onPrimaryContainerColor
@@ -740,7 +740,7 @@ Item {
 
             Text {
                 anchors.verticalCenter: parent.verticalCenter
-                text: "没有可用的快捷键动作"
+                text: I18n.tr("没有可用的快捷键动作")
                 color: Theme.onSurfaceVariantColor
                 font.family: Theme.fontFamily
                 font.pixelSize: 12

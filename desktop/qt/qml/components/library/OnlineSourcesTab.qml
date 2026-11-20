@@ -21,9 +21,9 @@ Item {
         const settings = Settings.values
         const list = []
         if (Settings.get("neteaseEnabled", true) !== false)
-            list.push({ "value": "NETEASE", "label": "网易云" })
+            list.push({ "value": "NETEASE", "label": I18n.tr("网易云") })
         if (Settings.get("bilibiliEnabled", true) !== false)
-            list.push({ "value": "BILIBILI", "label": "哔哩哔哩" })
+            list.push({ "value": "BILIBILI", "label": I18n.tr("哔哩哔哩") })
         if (Settings.get("youtubeEnabled", false) === true)
             list.push({ "value": "YOUTUBE", "label": "YouTube" })
         return list
@@ -59,7 +59,7 @@ Item {
             return String(account.nickname)
         if (account.userId && String(account.userId) !== "")
             return "UID " + String(account.userId)
-        return "已登录"
+        return I18n.tr("已登录")
     }
 
     // ---------------------------------------------------------------- 工具函数
@@ -91,7 +91,7 @@ Item {
             return null
         return {
             "id": id,
-            "name": item.name ? String(item.name) : "未命名歌单",
+            "name": item.name ? String(item.name) : I18n.tr("未命名歌单"),
             "creator": item.creator ? String(item.creator) : "",
             "coverUrl": item.coverUrl ? String(item.coverUrl) : "",
             "trackCount": Number(item.trackCount) || 0,
@@ -109,7 +109,7 @@ Item {
         if (collection.creator)
             parts.push(collection.creator)
         if (collection.trackCount > 0)
-            parts.push(collection.trackCount + " 首")
+            parts.push(collection.trackCount + I18n.tr(" 首"))
         return parts.join(" · ")
     }
 
@@ -157,7 +157,7 @@ Item {
             root.loading = false
             if (error) {
                 root.collections = []
-                root.errorMessage = error.message || "加载失败"
+                root.errorMessage = error.message || I18n.tr("加载失败")
                 return
             }
             const list = root.toArray(result && result.collections)
@@ -308,7 +308,7 @@ Item {
                 icon: "refresh"
                 iconSize: 20
                 size: 36
-                tooltip: "刷新"
+                tooltip: I18n.tr("刷新")
                 onClicked: root.refresh()
             }
         }
@@ -330,8 +330,8 @@ Item {
             anchors.fill: parent
             visible: root.sourcesEmpty
             icon: "cloud_off"
-            title: "在线音源已禁用"
-            hint: "在「设置 - 在线音源」中启用网易云 / 哔哩哔哩后，可以在媒体库这里浏览账号歌单"
+            title: I18n.tr("在线音源已禁用")
+            hint: I18n.tr("在「设置 - 在线音源」中启用网易云 / 哔哩哔哩后，可以在媒体库这里浏览账号歌单")
         }
 
         LoadingState {
@@ -339,7 +339,7 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             visible: !root.sourcesEmpty && !root.accountsLoaded
-            text: "正在读取账号状态…"
+            text: I18n.tr("正在读取账号状态…")
         }
 
         // 未登录：扫码登录引导（网易云 / 哔哩哔哩）
@@ -382,8 +382,8 @@ Item {
                 anchors.right: parent.right
                 visible: root.loading && root.collections.length === 0
                         && root.errorMessage === "" && !root.needLogin
-                text: "正在加载" + (root.source === "BILIBILI" ? "收藏夹…"
-                                    : root.youtube ? " YouTube 歌单…" : "我的歌单…")
+                text: I18n.tr("正在加载") + (root.source === "BILIBILI" ? I18n.tr("收藏夹…")
+                                    : root.youtube ? I18n.tr(" YouTube 歌单…") : I18n.tr("我的歌单…"))
             }
 
             ErrorCard {
@@ -391,7 +391,7 @@ Item {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 visible: root.errorMessage !== ""
-                message: "加载失败：" + root.errorMessage
+                message: I18n.tr("加载失败：") + root.errorMessage
                 onRetryClicked: root.reloadCollections()
             }
 
@@ -410,11 +410,11 @@ Item {
                         && root.collections.length === 0
                 icon: root.source === "BILIBILI" ? "bookmark_border"
                       : root.youtube ? "smart_display" : "queue_music"
-                title: root.source === "BILIBILI" ? "还没有收藏夹"
-                       : root.youtube ? "还没有 YouTube 歌单" : "还没有歌单"
+                title: root.source === "BILIBILI" ? I18n.tr("还没有收藏夹")
+                       : root.youtube ? I18n.tr("还没有 YouTube 歌单") : I18n.tr("还没有歌单")
                 hint: root.youtube
-                      ? "YouTube 未登录或账号下没有歌单曲库，登录后可浏览「我的歌单」"
-                      : "当前账号下暂无可浏览的内容，点击右上角刷新重试"
+                      ? I18n.tr("YouTube 未登录或账号下没有歌单曲库，登录后可浏览「我的歌单」")
+                      : I18n.tr("当前账号下暂无可浏览的内容，点击右上角刷新重试")
             }
 
             Flickable {

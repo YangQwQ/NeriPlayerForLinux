@@ -6,7 +6,7 @@ import ".."
 Item {
     id: root
 
-    property string title: "暂无内容"
+    property string title: I18n.tr("暂无内容")
     property string hint: ""
     property string icon: "album"
 

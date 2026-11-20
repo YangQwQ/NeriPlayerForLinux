@@ -56,7 +56,7 @@ PanelShell {
     readonly property bool shareAudioLinks: panel.settings !== null && panel.settings.shareAudioLinks === true
 
     readonly property string trackTitle: panel.track !== null && panel.track.name !== undefined
-                                         ? String(panel.track.name) : "暂无歌曲"
+                                         ? String(panel.track.name) : I18n.tr("暂无歌曲")
     readonly property string trackArtist: panel.track !== null && panel.track.artist !== undefined
                                           ? String(panel.track.artist) : ""
     readonly property string trackAlbum: panel.track !== null && panel.track.album !== undefined
@@ -91,7 +91,7 @@ PanelShell {
             return String(error.message)
         if (typeof error === "string" && error !== "")
             return error
-        return "未知错误"
+        return I18n.tr("未知错误")
     }
 
     function formatTime(ms) {
@@ -102,7 +102,7 @@ PanelShell {
     }
 
     function roleLabel(member) {
-        return member && String(member.role || "") === "controller" ? "控制者" : "听众"
+        return member && String(member.role || "") === "controller" ? I18n.tr("控制者") : I18n.tr("听众")
     }
 
     // ---------------------------------------------------------------- 命令调用
@@ -158,7 +158,7 @@ PanelShell {
     function joinRoom() {
         const target = joinField.text.trim()
         if (target === "") {
-            panel.commandError = "请先粘贴邀请链接或输入房间号"
+            panel.commandError = I18n.tr("请先粘贴邀请链接或输入房间号")
             return
         }
         panel.run("listenTogether.joinRoom", { "inviteOrRoomId": target })
@@ -219,10 +219,10 @@ PanelShell {
     function syncProgress() {
         if (panel.isController) {
             panel.run("listenTogether.sendControl", { "type": "HEARTBEAT" })
-            Toast.show("已把本地进度同步到房间", "info")
+            Toast.show(I18n.tr("已把本地进度同步到房间"), "info")
         } else {
             Player.seekTo(panel.roomPositionMs)
-            Toast.show("已对齐到房间进度", "info")
+            Toast.show(I18n.tr("已对齐到房间进度"), "info")
         }
     }
 
@@ -232,17 +232,17 @@ PanelShell {
         clipboardHelper.text = panel.inviteLink
         clipboardHelper.selectAll()
         clipboardHelper.copy()
-        Toast.show("邀请链接已复制", "info")
+        Toast.show(I18n.tr("邀请链接已复制"), "info")
     }
 
     // ---------------------------------------------------------------- 生命周期
 
-    title: "一起听"
+    title: I18n.tr("一起听")
     cardWidth: 440
 
     PanelButton {
         visible: panel.inRoom
-        text: "离开"
+        text: I18n.tr("离开")
         chip: true
         enabledButton: !panel.busy
         onClicked: panel.leaveRoom()
@@ -348,7 +348,7 @@ PanelShell {
                 visible: !panel.configured || panel.editingServer
 
                 Text {
-                    text: panel.configured ? "修改一起听服务端" : "连接一起听服务端"
+                    text: panel.configured ? I18n.tr("修改一起听服务端") : I18n.tr("连接一起听服务端")
                     color: Theme.onSurfaceColor
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.textStyle("titleSmall").size
@@ -357,8 +357,8 @@ PanelShell {
 
                 Text {
                     width: parent.width
-                    text: "一起听需要一个 LTW 服务端（可自建 NeriPlayer-LTW，或使用示例部署）。"
-                          + "桌面版与 Android 客户端共用同一套协议，可以进同一个房间。"
+                    text: I18n.tr("一起听需要一个 LTW 服务端（可自建 NeriPlayer-LTW，或使用示例部署）。")
+                          + I18n.tr("桌面版与 Android 客户端共用同一套协议，可以进同一个房间。")
                     color: Theme.onSurfaceVariantColor
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.textStyle("bodySmall").size
@@ -383,21 +383,21 @@ PanelShell {
 
                     width: parent.width
                     text: panel.status.nickname !== undefined ? String(panel.status.nickname || "") : ""
-                    placeholderText: "昵称（1-24 位中文/字母/数字，留空自动生成）"
+                    placeholderText: I18n.tr("昵称（1-24 位中文/字母/数字，留空自动生成）")
                 }
 
                 Row {
                     spacing: Theme.spacingSm
 
                     PanelButton {
-                        text: panel.busy ? "连接中…" : "保存并连接"
+                        text: panel.busy ? I18n.tr("连接中…") : I18n.tr("保存并连接")
                         filled: true
                         enabledButton: !panel.busy
                         onClicked: panel.saveServer()
                     }
 
                     PanelButton {
-                        text: "取消"
+                        text: I18n.tr("取消")
                         visible: panel.configured
                         enabledButton: !panel.busy
                         onClicked: panel.editingServer = false
@@ -406,7 +406,7 @@ PanelShell {
 
                 Text {
                     width: parent.width
-                    text: "示例服务端：" + panel.defaultServerUrl
+                    text: I18n.tr("示例服务端：") + panel.defaultServerUrl
                     color: Theme.onSurfaceVariantColor
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.textStyle("labelSmall").size
@@ -462,8 +462,8 @@ PanelShell {
                             Text {
                                 width: parent.width
                                 text: panel.inRoom
-                                      ? (panel.isController ? "当前身份：控制者" : "当前身份：听众")
-                                      : "未加入房间"
+                                      ? (panel.isController ? I18n.tr("当前身份：控制者") : I18n.tr("当前身份：听众"))
+                                      : I18n.tr("未加入房间")
                                 color: Theme.onSurfaceVariantColor
                                 font.family: Theme.fontFamily
                                 font.pixelSize: Theme.textStyle("labelSmall").size
@@ -473,7 +473,7 @@ PanelShell {
                         PanelButton {
                             id: editServerButton
 
-                            text: "修改"
+                            text: I18n.tr("修改")
                             chip: true
                             anchors.verticalCenter: parent.verticalCenter
                             onClicked: panel.editingServer = true
@@ -497,7 +497,7 @@ PanelShell {
                         spacing: Theme.spacingSm
 
                         Text {
-                            text: "创建房间"
+                            text: I18n.tr("创建房间")
                             color: Theme.onSurfaceColor
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.textStyle("titleSmall").size
@@ -506,8 +506,8 @@ PanelShell {
 
                         Text {
                             width: parent.width
-                            text: "以当前播放的在线歌曲和播放队列创建房间，你是控制者。"
-                                  + "本地歌曲不能进入房间。"
+                            text: I18n.tr("以当前播放的在线歌曲和播放队列创建房间，你是控制者。")
+                                  + I18n.tr("本地歌曲不能进入房间。")
                             color: Theme.onSurfaceVariantColor
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.textStyle("bodySmall").size
@@ -527,8 +527,8 @@ PanelShell {
                             Text {
                                 width: createColumn.width - 24
                                 text: Player.hasSong
-                                      ? ("当前歌曲：" + Player.title + " - " + Player.artist)
-                                      : "当前没有播放中的歌曲，请先播放一首在线歌曲"
+                                      ? (I18n.tr("当前歌曲：") + Player.title + " - " + Player.artist)
+                                      : I18n.tr("当前没有播放中的歌曲，请先播放一首在线歌曲")
                                 color: Player.hasSong ? Theme.onSurfaceColor
                                                       : Theme.onSurfaceVariantColor
                                 font.family: Theme.fontFamily
@@ -539,7 +539,7 @@ PanelShell {
                         }
 
                         PanelButton {
-                            text: panel.busy ? "创建中…" : "创建房间"
+                            text: panel.busy ? I18n.tr("创建中…") : I18n.tr("创建房间")
                             filled: true
                             enabledButton: !panel.busy
                             onClicked: panel.createRoom()
@@ -563,7 +563,7 @@ PanelShell {
                         spacing: Theme.spacingSm
 
                         Text {
-                            text: "加入房间"
+                            text: I18n.tr("加入房间")
                             color: Theme.onSurfaceColor
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.textStyle("titleSmall").size
@@ -572,8 +572,8 @@ PanelShell {
 
                         Text {
                             width: parent.width
-                            text: "粘贴对方分享的邀请链接，或输入 6 位房间号。"
-                                  + "首次加入需要邀请链接（链接里带有加入密钥），房间号适用于重连已加入的房间。"
+                            text: I18n.tr("粘贴对方分享的邀请链接，或输入 6 位房间号。")
+                                  + I18n.tr("首次加入需要邀请链接（链接里带有加入密钥），房间号适用于重连已加入的房间。")
                             color: Theme.onSurfaceVariantColor
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.textStyle("bodySmall").size
@@ -584,12 +584,12 @@ PanelShell {
                             id: joinField
 
                             width: parent.width
-                            placeholderText: "neriplayer://listen-together/join?… 或 6 位房间号"
+                            placeholderText: I18n.tr("neriplayer://listen-together/join?… 或 6 位房间号")
                             onAccepted: panel.joinRoom()
                         }
 
                         PanelButton {
-                            text: panel.busy ? "加入中…" : "加入房间"
+                            text: panel.busy ? I18n.tr("加入中…") : I18n.tr("加入房间")
                             filled: true
                             enabledButton: !panel.busy
                             onClicked: panel.joinRoom()
@@ -626,7 +626,7 @@ PanelShell {
                             Text {
                                 anchors.left: parent.left
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: "房间 " + panel.roomId
+                                text: I18n.tr("房间 ") + panel.roomId
                                 color: Theme.onSurfaceColor
                                 font.family: Theme.fontFamily
                                 font.pixelSize: Theme.textStyle("titleSmall").size
@@ -657,7 +657,7 @@ PanelShell {
                                     id: roleChipText
 
                                     anchors.centerIn: parent
-                                    text: panel.isController ? "控制者" : "听众"
+                                    text: panel.isController ? I18n.tr("控制者") : I18n.tr("听众")
                                     color: panel.isController ? Theme.tertiary : Theme.primary
                                     font.family: Theme.fontFamily
                                     font.pixelSize: Theme.textStyle("labelSmall").size
@@ -667,9 +667,9 @@ PanelShell {
 
                             Text {
                                 text: panel.roomStatus === "controller_offline"
-                                      ? "控制者离线，等待重连…"
-                                      : (panel.isController ? "你在控制整个房间的播放"
-                                                            : "跟随控制者同步播放")
+                                      ? I18n.tr("控制者离线，等待重连…")
+                                      : (panel.isController ? I18n.tr("你在控制整个房间的播放")
+                                                            : I18n.tr("跟随控制者同步播放"))
                                 color: Theme.onSurfaceVariantColor
                                 font.family: Theme.fontFamily
                                 font.pixelSize: Theme.textStyle("labelSmall").size
@@ -684,7 +684,7 @@ PanelShell {
                             visible: panel.isController && panel.inviteLink !== ""
 
                             Text {
-                                text: "邀请链接"
+                                text: I18n.tr("邀请链接")
                                 color: Theme.onSurfaceVariantColor
                                 font.family: Theme.fontFamily
                                 font.pixelSize: Theme.textStyle("labelSmall").size
@@ -719,7 +719,7 @@ PanelShell {
                                 PanelButton {
                                     id: copyButton
 
-                                    text: "复制"
+                                    text: I18n.tr("复制")
                                     chip: true
                                     anchors.verticalCenter: parent.verticalCenter
                                     onClicked: panel.copyInviteLink()
@@ -745,7 +745,7 @@ PanelShell {
                         spacing: 2
 
                         Text {
-                            text: "成员（" + panel.members.length + "）"
+                            text: I18n.tr("成员（") + panel.members.length + "）"
                             color: Theme.onSurfaceColor
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.textStyle("titleSmall").size
@@ -879,7 +879,7 @@ PanelShell {
                                     icon: "skip_previous"
                                     iconSize: 26
                                     size: 44
-                                    tooltip: panel.isController ? "上一首" : "请求上一首"
+                                    tooltip: panel.isController ? I18n.tr("上一首") : I18n.tr("请求上一首")
                                     enabled: panel.connection === "connected" && panel.roomQueue.length > 0
                                     onClicked: panel.skipPrevious()
                                 }
@@ -889,8 +889,8 @@ PanelShell {
                                     iconFilled: true
                                     iconSize: 32
                                     size: 56
-                                    tooltip: panel.isController ? (panel.roomPlaying ? "暂停" : "播放")
-                                                                : (panel.roomPlaying ? "请求暂停" : "请求播放")
+                                    tooltip: panel.isController ? (panel.roomPlaying ? I18n.tr("暂停") : I18n.tr("播放"))
+                                                                : (panel.roomPlaying ? I18n.tr("请求暂停") : I18n.tr("请求播放"))
                                     enabled: panel.connection === "connected" && panel.track !== null
                                              && (panel.isController || panel.allowMemberControl)
                                     onClicked: panel.togglePlay()
@@ -900,7 +900,7 @@ PanelShell {
                                     icon: "skip_next"
                                     iconSize: 26
                                     size: 44
-                                    tooltip: panel.isController ? "下一首" : "请求下一首"
+                                    tooltip: panel.isController ? I18n.tr("下一首") : I18n.tr("请求下一首")
                                     enabled: panel.connection === "connected" && panel.roomQueue.length > 0
                                     onClicked: panel.skipNext()
                                 }
@@ -909,7 +909,7 @@ PanelShell {
                                     icon: "sync"
                                     iconSize: 22
                                     size: 40
-                                    tooltip: panel.isController ? "把本地进度同步到房间" : "对齐到房间进度"
+                                    tooltip: panel.isController ? I18n.tr("把本地进度同步到房间") : I18n.tr("对齐到房间进度")
                                     enabled: panel.connection === "connected" && panel.track !== null
                                     onClicked: panel.syncProgress()
                                 }
@@ -920,8 +920,8 @@ PanelShell {
                             width: parent.width
                             visible: !panel.isController
                             text: panel.allowMemberControl
-                                  ? "听众控制已开启：播放/暂停/切歌按钮会向服务端发送请求，由服务端校验后生效"
-                                  : "控制者已关闭听众控制，当前只能跟随播放"
+                                  ? I18n.tr("听众控制已开启：播放/暂停/切歌按钮会向服务端发送请求，由服务端校验后生效")
+                                  : I18n.tr("控制者已关闭听众控制，当前只能跟随播放")
                             color: Theme.onSurfaceVariantColor
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.textStyle("labelSmall").size
@@ -947,7 +947,7 @@ PanelShell {
                         spacing: 4
 
                         Text {
-                            text: "房间队列（" + panel.roomQueue.length + "）"
+                            text: I18n.tr("房间队列（") + panel.roomQueue.length + "）"
                             color: Theme.onSurfaceColor
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.textStyle("titleSmall").size
@@ -981,7 +981,7 @@ PanelShell {
 
                         Text {
                             visible: panel.roomQueue.length > 5
-                            text: "…共 " + panel.roomQueue.length + " 首"
+                            text: I18n.tr("…共 ") + panel.roomQueue.length + I18n.tr(" 首")
                             color: Theme.onSurfaceVariantColor
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.textStyle("labelSmall").size
@@ -1006,7 +1006,7 @@ PanelShell {
                         spacing: Theme.spacingXs
 
                         Text {
-                            text: "房间设置"
+                            text: I18n.tr("房间设置")
                             color: Theme.onSurfaceColor
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.textStyle("titleSmall").size
@@ -1015,8 +1015,8 @@ PanelShell {
 
                         LtwSettingRow {
                             width: parent.width
-                            title: "允许听众控制"
-                            description: "听众可请求播放/暂停/跳转，服务端校验后直接生效"
+                            title: I18n.tr("允许听众控制")
+                            description: I18n.tr("听众可请求播放/暂停/跳转，服务端校验后直接生效")
                             checked: panel.allowMemberControl
                             enabledSwitch: panel.connection === "connected" && !panel.busy
                             onToggled: function(value) { panel.updateSetting("allowMemberControl", value) }
@@ -1024,8 +1024,8 @@ PanelShell {
 
                         LtwSettingRow {
                             width: parent.width
-                            title: "成员变化时自动暂停"
-                            description: "新成员加入或成员离开时暂停房间播放"
+                            title: I18n.tr("成员变化时自动暂停")
+                            description: I18n.tr("新成员加入或成员离开时暂停房间播放")
                             checked: panel.autoPauseOnMemberChange
                             enabledSwitch: panel.connection === "connected" && !panel.busy
                             onToggled: function(value) { panel.updateSetting("autoPauseOnMemberChange", value) }
@@ -1033,8 +1033,8 @@ PanelShell {
 
                         LtwSettingRow {
                             width: parent.width
-                            title: "共享音频直链"
-                            description: "桌面版未实现 LINK_READY/直链缓存，无法共享自己的播放地址；听众请使用本机音源解析"
+                            title: I18n.tr("共享音频直链")
+                            description: I18n.tr("桌面版未实现 LINK_READY/直链缓存，无法共享自己的播放地址；听众请使用本机音源解析")
                             checked: panel.shareAudioLinks
                             enabledSwitch: false
                         }
@@ -1043,7 +1043,7 @@ PanelShell {
 
                 // 离开房间
                 PanelButton {
-                    text: "离开房间"
+                    text: I18n.tr("离开房间")
                     outlined: true
                     enabledButton: !panel.busy
                     onClicked: panel.leaveRoom()

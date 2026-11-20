@@ -14,8 +14,8 @@ Item {
 
     signal activated()
 
-    readonly property string title: song && song.title ? song.title : "未知歌曲"
-    readonly property string artist: song && song.artist ? song.artist : "未知歌手"
+    readonly property string title: song && song.title ? song.title : I18n.tr("未知歌曲")
+    readonly property string artist: song && song.artist ? song.artist : I18n.tr("未知歌手")
     readonly property string artworkPath: song && song.artworkPath ? song.artworkPath : ""
     readonly property string artworkUrl: song && song.artworkUrl ? song.artworkUrl : ""
 

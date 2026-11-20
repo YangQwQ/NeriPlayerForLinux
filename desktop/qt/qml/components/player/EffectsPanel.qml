@@ -7,13 +7,13 @@ import "../"
 PanelScaffold {
     id: panel
 
-    title: "音效与倍速"
+    title: I18n.tr("音效与倍速")
     panelWidth: 420
 
     readonly property var frequencies: ["31Hz", "62Hz", "125Hz", "250Hz", "500Hz",
                                        "1kHz", "2kHz", "4kHz", "8kHz", "16kHz"]
-    readonly property var presetLabels: ["平直", "原声", "低音增强", "高频增强",
-                                         "人声增强", "摇滚", "爵士", "古典"]
+    readonly property var presetLabels: [I18n.tr("平直"), I18n.tr("原声"), I18n.tr("低音增强"), I18n.tr("高频增强"),
+                                         I18n.tr("人声增强"), I18n.tr("摇滚"), I18n.tr("爵士"), I18n.tr("古典")]
     readonly property var presetBands: ({
         "平直": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         "原声": [3, 2, 1, 0.5, 0.5, 1.5, 2, 2.5, 2, 1],
@@ -87,7 +87,7 @@ PanelScaffold {
 
                         Text {
                             Layout.fillWidth: true
-                            text: "当前环境未安装 ffmpeg，倍速、变调、响度与均衡器不可用。安装 ffmpeg 后重启应用即可启用。"
+                            text: I18n.tr("当前环境未安装 ffmpeg，倍速、变调、响度与均衡器不可用。安装 ffmpeg 后重启应用即可启用。")
                             wrapMode: Text.Wrap
                             color: Theme.onErrorContainerColor
                             font.family: Theme.fontFamily
@@ -103,7 +103,7 @@ PanelScaffold {
                 }
 
                 Text {
-                    text: "播放速度"
+                    text: I18n.tr("播放速度")
                     color: Theme.onSurfaceColor
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.textStyle("titleSmall").size
@@ -135,7 +135,7 @@ PanelScaffold {
                 }
 
                 Text {
-                    text: "音调"
+                    text: I18n.tr("音调")
                     color: Theme.onSurfaceColor
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.textStyle("titleSmall").size
@@ -153,7 +153,7 @@ PanelScaffold {
                 }
 
                 Text {
-                    text: Player.pitch.toFixed(1) + " 半音"
+                    text: Player.pitch.toFixed(1) + I18n.tr(" 半音")
                     color: Theme.onSurfaceVariantColor
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.textStyle("labelMedium").size
@@ -178,7 +178,7 @@ PanelScaffold {
 
                         Text {
                             width: parent.width
-                            text: "响度增强"
+                            text: I18n.tr("响度增强")
                             color: Theme.onSurfaceColor
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.textStyle("titleSmall").size
@@ -187,7 +187,7 @@ PanelScaffold {
 
                         Text {
                             width: parent.width
-                            text: "补一点厚度和能量，但不会改变音高"
+                            text: I18n.tr("补一点厚度和能量，但不会改变音高")
                             wrapMode: Text.Wrap
                             color: Theme.onSurfaceVariantColor
                             font.family: Theme.fontFamily
@@ -219,7 +219,7 @@ PanelScaffold {
                     Text {
                         anchors.left: parent.left
                         anchors.verticalCenter: parent.verticalCenter
-                        text: "均衡器"
+                        text: I18n.tr("均衡器")
                         color: Theme.onSurfaceColor
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.textStyle("titleSmall").size
@@ -292,7 +292,7 @@ PanelScaffold {
                 }
 
                 Text {
-                    text: "频段微调（dB）"
+                    text: I18n.tr("频段微调（dB）")
                     color: Theme.onSurfaceColor
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.textStyle("labelLarge").size
@@ -363,7 +363,7 @@ PanelScaffold {
                 }
 
                 PanelButton {
-                    text: "重置音效与倍速"
+                    text: I18n.tr("重置音效与倍速")
                     onClicked: Player.resetEffects()
                 }
 

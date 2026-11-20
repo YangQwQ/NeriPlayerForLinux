@@ -36,7 +36,7 @@ Dialog {
             root.loading = false
             if (error) {
                 root.playlists = []
-                Toast.show(error.message || "加载歌单失败", "error")
+                Toast.show(error.message || I18n.tr("加载歌单失败"), "error")
                 return
             }
             root.playlists = result.playlists || []
@@ -48,11 +48,11 @@ Dialog {
             return
         const song = root.song
         Api.call("collections.addSongs", { id: playlist.id, songs: [song] }).then(function() {
-            Toast.show("已添加到「" + playlist.name + "」")
+            Toast.show(I18n.tr("已添加到「") + playlist.name + "」")
             root.added(playlist.id, playlist.name)
             root.close()
         }).catch(function(error) {
-            Toast.show(error && error.message ? error.message : "添加到歌单失败", "error")
+            Toast.show(error && error.message ? error.message : I18n.tr("添加到歌单失败"), "error")
         })
     }
 
@@ -70,7 +70,7 @@ Dialog {
 
         Text {
             Layout.fillWidth: true
-            text: "添加到歌单"
+            text: I18n.tr("添加到歌单")
             color: Theme.onSurfaceColor
             font.family: Theme.fontFamily
             font.pixelSize: Theme.textStyle("titleMedium").size
@@ -80,7 +80,7 @@ Dialog {
         Text {
             Layout.fillWidth: true
             visible: root.loading || root.playlists.length === 0
-            text: root.loading ? "正在加载歌单…" : "还没有歌单，先新建一个吧"
+            text: root.loading ? I18n.tr("正在加载歌单…") : I18n.tr("还没有歌单，先新建一个吧")
             color: Theme.onSurfaceVariantColor
             font.family: Theme.fontFamily
             font.pixelSize: Theme.textStyle("bodyMedium").size
@@ -125,7 +125,7 @@ Dialog {
                     anchors.right: parent.right
                     anchors.rightMargin: Theme.spacingMd
                     anchors.verticalCenter: parent.verticalCenter
-                    text: (pickerRow.modelData.songs ? pickerRow.modelData.songs.length : 0) + " 首"
+                    text: (pickerRow.modelData.songs ? pickerRow.modelData.songs.length : 0) + I18n.tr(" 首")
                     color: Theme.onSurfaceVariantColor
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.textStyle("labelMedium").size
@@ -148,7 +148,7 @@ Dialog {
             spacing: Theme.spacingSm
 
             LibraryButton {
-                text: "新建歌单"
+                text: I18n.tr("新建歌单")
                 icon: "add"
                 onClicked: createDialog.openFor("")
             }
@@ -159,7 +159,7 @@ Dialog {
             }
 
             LibraryButton {
-                text: "取消"
+                text: I18n.tr("取消")
                 onClicked: root.close()
             }
         }

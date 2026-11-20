@@ -25,14 +25,14 @@ Item {
 
     /** 顶部：在线内容入口。 */
     readonly property var primaryTabs: [
-        { "name": "home", "label": "首页", "icon": "home", "kind": "tab" },
-        { "name": "explore", "label": "探索", "icon": "explore", "kind": "tab" }
+        { "name": "home", "label": I18n.tr("首页"), "icon": "home", "kind": "tab" },
+        { "name": "explore", "label": I18n.tr("探索"), "icon": "explore", "kind": "tab" }
     ]
     /** 底部：本地内容与管理入口（底对齐）。 */
     readonly property var secondaryTabs: [
-        { "name": "library", "label": "媒体库", "icon": "library_music", "kind": "tab" },
-        { "name": "downloads", "label": "下载管理", "icon": "download", "kind": "panel" },
-        { "name": "settings", "label": "设置", "icon": "settings", "kind": "tab" }
+        { "name": "library", "label": I18n.tr("媒体库"), "icon": "library_music", "kind": "tab" },
+        { "name": "downloads", "label": I18n.tr("下载管理"), "icon": "download", "kind": "panel" },
+        { "name": "settings", "label": I18n.tr("设置"), "icon": "settings", "kind": "tab" }
     ]
 
     // 收起/展开过程中内容会短暂超出侧栏宽度，裁剪掉以免画到右侧边界线外面

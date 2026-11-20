@@ -49,7 +49,7 @@ Item {
             icon: "arrow_back"
             iconSize: 24
             size: 48
-            tooltip: "返回"
+            tooltip: I18n.tr("返回")
             onClicked: {
                 if (root.backAction)
                     root.backAction()

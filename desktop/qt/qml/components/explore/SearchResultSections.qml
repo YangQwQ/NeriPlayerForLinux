@@ -10,7 +10,7 @@ Item {
     property var songs: []
     property var collections: []
     property var artists: []
-    property string sourceName: "网易云"
+    property string sourceName: I18n.tr("网易云")
 
     signal playAt(int index)
     signal songMore(var song)
@@ -35,7 +35,7 @@ Item {
         SectionHeader {
             width: column.width
             visible: (sections.songs || []).length > 0
-            title: sections.sourceName + "歌曲（" + sections.songs.length + "）"
+            title: sections.sourceName + I18n.tr("歌曲（") + sections.songs.length + "）"
             icon: "music_note"
         }
 
@@ -62,7 +62,7 @@ Item {
         SectionHeader {
             width: column.width
             visible: (sections.collections || []).length > 0
-            title: "歌单 / 专辑（" + sections.collections.length + "）"
+            title: I18n.tr("歌单 / 专辑（") + sections.collections.length + "）"
             icon: "album"
         }
 
@@ -76,7 +76,7 @@ Item {
         SectionHeader {
             width: column.width
             visible: (sections.artists || []).length > 0
-            title: "歌手（" + sections.artists.length + "）"
+            title: I18n.tr("歌手（") + sections.artists.length + "）"
             icon: "person"
         }
 

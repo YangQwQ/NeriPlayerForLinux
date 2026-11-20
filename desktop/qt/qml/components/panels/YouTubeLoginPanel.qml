@@ -10,7 +10,7 @@ import "../youtube"
 PanelShell {
     id: panel
 
-    title: "YouTube Music 账号"
+    title: I18n.tr("YouTube Music 账号")
     cardWidth: 460
     alignRight: false
     cardHeight: Math.max(360, Math.min(panel.height - panel.cardMargin * 2,

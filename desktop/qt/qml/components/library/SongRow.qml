@@ -252,7 +252,7 @@ Item {
 
                 Text {
                     visible: root.artistText === "" && !root.showAlbumText
-                    text: "未知艺术家"
+                    text: I18n.tr("未知艺术家")
                     color: Theme.onSurfaceVariantColor
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.textStyle("bodySmall").size
@@ -285,7 +285,7 @@ Item {
             icon: "more_vert"
             iconSize: 18
             size: 34
-            tooltip: "更多"
+            tooltip: I18n.tr("更多")
             onClicked: root.moreClicked(root.song)
         }
     }

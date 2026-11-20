@@ -53,7 +53,7 @@ Item {
 
                 Text {
                     width: parent.width
-                    text: "登录网易云音乐，解锁更多推荐"
+                    text: I18n.tr("登录网易云音乐，解锁更多推荐")
                     elide: Text.ElideRight
                     color: Theme.onSurfaceColor
                     font.family: Theme.fontFamily
@@ -63,7 +63,7 @@ Item {
 
                 Text {
                     width: parent.width
-                    text: root.message !== "" ? root.message : "每日推荐、私人 FM、每日推荐歌单需要登录后展示"
+                    text: root.message !== "" ? root.message : I18n.tr("每日推荐、私人 FM、每日推荐歌单需要登录后展示")
                     elide: Text.ElideRight
                     color: Theme.onSurfaceVariantColor
                     font.family: Theme.fontFamily
@@ -88,7 +88,7 @@ Item {
                     id: loginLabel
 
                     anchors.centerIn: parent
-                    text: "去登录"
+                    text: I18n.tr("去登录")
                     color: Theme.onSurfaceColor
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.textStyle("labelLarge").size

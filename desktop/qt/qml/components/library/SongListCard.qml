@@ -100,7 +100,7 @@ Item {
 
                     Text {
                         visible: root.maxRows >= 0 && root.songs.length > root.maxRows
-                        text: "共 " + root.songs.length + " 首"
+                        text: I18n.tr("共 ") + root.songs.length + I18n.tr(" 首")
                         color: Theme.onSurfaceVariantColor
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.textStyle("labelMedium").size
@@ -108,7 +108,7 @@ Item {
 
                     LibraryButton {
                         visible: root.showPlayAll
-                        text: "播放全部"
+                        text: I18n.tr("播放全部")
                         icon: "play_arrow"
                         onClicked: root.playAllClicked()
                     }

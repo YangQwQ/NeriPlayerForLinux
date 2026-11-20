@@ -11,8 +11,8 @@ Rectangle {
 
     signal activated()
 
-    readonly property string title: song && song.title ? song.title : "未知歌曲"
-    readonly property string artist: song && song.artist ? song.artist : "未知歌手"
+    readonly property string title: song && song.title ? song.title : I18n.tr("未知歌曲")
+    readonly property string artist: song && song.artist ? song.artist : I18n.tr("未知歌手")
     readonly property string artworkPath: song && song.artworkPath ? song.artworkPath : ""
     readonly property string artworkUrl: song && song.artworkUrl ? song.artworkUrl : ""
 
@@ -79,7 +79,7 @@ Rectangle {
             iconSize: 18
             icon: card.playing ? "graphic_eq" : "play_arrow"
             iconColor: Theme.primary
-            tooltip: "播放"
+            tooltip: I18n.tr("播放")
             onClicked: card.activated()
         }
 

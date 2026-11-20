@@ -42,14 +42,14 @@ Item {
         spacing: Theme.spacingSm
 
         SettingsLabel {
-            text: "封面形状"
+            text: I18n.tr("封面形状")
         }
 
         SegmentedOptions {
             options: [
-                { value: "CIRCLE", label: "圆形" },
-                { value: "ROUNDED", label: "圆角" },
-                { value: "SQUARE", label: "方形" }
+                { value: "CIRCLE", label: I18n.tr("圆形") },
+                { value: "ROUNDED", label: I18n.tr("圆角") },
+                { value: "SQUARE", label: I18n.tr("方形") }
             ]
             value: root.coverShape
             onSelected: function(value) {
@@ -63,14 +63,14 @@ Item {
         }
 
         SettingsLabel {
-            text: "背景样式"
+            text: I18n.tr("背景样式")
         }
 
         SegmentedOptions {
             options: [
-                { value: "BLUR", label: "封面模糊" },
-                { value: "GRADIENT", label: "渐变" },
-                { value: "SOLID", label: "纯色" }
+                { value: "BLUR", label: I18n.tr("封面模糊") },
+                { value: "GRADIENT", label: I18n.tr("渐变") },
+                { value: "SOLID", label: I18n.tr("纯色") }
             ]
             value: root.background
             onSelected: function(value) {
@@ -79,7 +79,7 @@ Item {
         }
 
         SettingsNote {
-            text: "封面模糊取自当前歌曲封面并叠加暗色；渐变与纯色使用封面主色/主题色生成。"
+            text: I18n.tr("封面模糊取自当前歌曲封面并叠加暗色；渐变与纯色使用封面主色/主题色生成。")
         }
 
         Item {
@@ -88,8 +88,8 @@ Item {
         }
 
         SettingsSwitchRow {
-            title: "自动隐藏控制条"
-            description: "鼠标静止一段时间后淡出底部控制条，只保留封面与歌词"
+            title: I18n.tr("自动隐藏控制条")
+            description: I18n.tr("鼠标静止一段时间后淡出底部控制条，只保留封面与歌词")
             checked: root.autoHide
             onToggled: function(checked) {
                 Settings.patch({ "nowPlayingAutoHideControls": checked })
@@ -97,13 +97,13 @@ Item {
         }
 
         SliderRow {
-            label: "自动隐藏延迟"
+            label: I18n.tr("自动隐藏延迟")
             enabled: root.autoHide
             from: 1000
             to: 8000
             externalValue: root.autoHideDelayMs
             formatValue: function(value) {
-                return (value / 1000).toFixed(1) + " 秒"
+                return (value / 1000).toFixed(1) + I18n.tr(" 秒")
             }
             onCommitted: function(value) {
                 Settings.patch({ "nowPlayingAutoHideDelayMs": Math.round(value) })
@@ -116,8 +116,8 @@ Item {
         }
 
         SettingsSwitchRow {
-            title: "圆形封面旋转"
-            description: "封面形状为圆形时缓慢旋转（约 20 秒一圈），暂停时停在当前角度"
+            title: I18n.tr("圆形封面旋转")
+            description: I18n.tr("封面形状为圆形时缓慢旋转（约 20 秒一圈），暂停时停在当前角度")
             checked: root.coverRotate
             onToggled: function(checked) {
                 Settings.patch({ "nowPlayingCoverRotate": checked })
@@ -130,14 +130,14 @@ Item {
         }
 
         SettingsLabel {
-            text: "歌曲信息对齐"
+            text: I18n.tr("歌曲信息对齐")
         }
 
         SegmentedOptions {
             options: [
-                { value: "LEFT", label: "左对齐" },
-                { value: "CENTER", label: "居中" },
-                { value: "RIGHT", label: "右对齐" }
+                { value: "LEFT", label: I18n.tr("左对齐") },
+                { value: "CENTER", label: I18n.tr("居中") },
+                { value: "RIGHT", label: I18n.tr("右对齐") }
             ]
             value: root.infoAlignment
             onSelected: function(value) {
@@ -151,8 +151,8 @@ Item {
         }
 
         SettingsSwitchRow {
-            title: "歌词辉光"
-            description: "当前歌词行加一层柔和光晕，关闭后可省一点 GPU"
+            title: I18n.tr("歌词辉光")
+            description: I18n.tr("当前歌词行加一层柔和光晕，关闭后可省一点 GPU")
             checked: root.lyricsGlow
             onToggled: function(checked) {
                 Settings.patch({ "nowPlayingLyricsGlow": checked })

@@ -52,7 +52,7 @@ PanelShell {
     readonly property bool supported: platformName === "NETEASE" || platformName === "BILIBILI"
     readonly property real loadedCount: panel.comments.length
 
-    title: "评论"
+    title: I18n.tr("评论")
     cardWidth: 480
 
     onSongKeyChanged: panel.reload()
@@ -96,7 +96,7 @@ PanelShell {
             return String(error.message)
         if (typeof error === "string" && error !== "")
             return error
-        return "未知错误"
+        return I18n.tr("未知错误")
     }
 
     /** C++ 桥下发的数组是 QVariantList 包装对象（Array.isArray 为 false），统一转成 JS 数组。 */
@@ -135,14 +135,14 @@ PanelShell {
     function unsupportedHint() {
         const song = Player.song
         if (!song || !song.key)
-            return "先播放一首歌再打开评论区"
+            return I18n.tr("先播放一首歌再打开评论区")
         switch (String(song.source)) {
         case "LOCAL":
-            return "本地歌曲没有评论区"
+            return I18n.tr("本地歌曲没有评论区")
         case "YOUTUBE":
-            return "YouTube 音源暂不支持评论"
+            return I18n.tr("YouTube 音源暂不支持评论")
         default:
-            return "该歌曲来源不支持评论（仅支持网易云音乐 / 哔哩哔哩）"
+            return I18n.tr("该歌曲来源不支持评论（仅支持网易云音乐 / 哔哩哔哩）")
         }
     }
 
@@ -170,8 +170,8 @@ PanelShell {
         panel._target = song && song.key ? song : null
         panel.platformName = panel._target ? panel.sourcePlatform(song) : "UNSUPPORTED"
         panel.platformLabel = panel.platformName === "BILIBILI"
-                               ? "哔哩哔哩"
-                               : (panel.platformName === "NETEASE" ? "网易云音乐" : "")
+                               ? I18n.tr("哔哩哔哩")
+                               : (panel.platformName === "NETEASE" ? I18n.tr("网易云音乐") : "")
         panel.lengthLimit = panel.platformName === "BILIBILI" ? 1000 : 140
         panel.loadAccounts()
         if (!panel._target || !panel.supported)
@@ -277,7 +277,7 @@ PanelShell {
     function promptLogin() {
         if (!panel.supported)
             return
-        Toast.show("请先登录" + panel.platformLabel + "账号", "info")
+        Toast.show(I18n.tr("请先登录") + panel.platformLabel + I18n.tr("账号"), "info")
     }
 
     // ---------------------------------------------------------------- 点赞
@@ -311,7 +311,7 @@ PanelShell {
                 panel.loadAccounts()
                 panel.promptLogin()
             } else {
-                Toast.show(result && result.error ? String(result.error) : "点赞失败", "error")
+                Toast.show(result && result.error ? String(result.error) : I18n.tr("点赞失败"), "error")
             }
         }).catch(function(error) {
             Toast.show(panel.messageOf(error), "error")
@@ -463,15 +463,15 @@ PanelShell {
         Api.call("comments.post", { song: panel._target, content: content }).then(function(result) {
             panel.posting = false
             if (result && result.ok === true) {
-                Toast.show("评论已发布", "info")
+                Toast.show(I18n.tr("评论已发布"), "info")
                 panel.composerResetToken += 1
                 panel.reload()
             } else if (result && result.requiresLogin === true) {
                 panel.loadAccounts()
                 panel.promptLogin()
-                Toast.show(result.error ? String(result.error) : "登录态已失效，请重新登录", "error")
+                Toast.show(result.error ? String(result.error) : I18n.tr("登录态已失效，请重新登录"), "error")
             } else {
-                Toast.show(result && result.error ? String(result.error) : "评论发布失败", "error")
+                Toast.show(result && result.error ? String(result.error) : I18n.tr("评论发布失败"), "error")
             }
         }).catch(function(error) {
             panel.posting = false
@@ -583,14 +583,14 @@ PanelShell {
                 spacing: 8
 
                 PanelButton {
-                    text: "热门"
+                    text: I18n.tr("热门")
                     chip: true
                     selected: panel.sort === "hot"
                     onClicked: panel.setSort("hot")
                 }
 
                 PanelButton {
-                    text: "最新"
+                    text: I18n.tr("最新")
                     chip: true
                     selected: panel.sort === "new"
                     onClicked: panel.setSort("new")
@@ -695,7 +695,7 @@ PanelShell {
                                 }
 
                                 Text {
-                                    text: "正在加载…"
+                                    text: I18n.tr("正在加载…")
                                     color: Theme.onSurfaceVariantColor
                                     font.family: Theme.fontFamily
                                     font.pixelSize: Theme.textStyle("labelMedium").size
@@ -712,7 +712,7 @@ PanelShell {
 
                             PanelButton {
                                 anchors.centerIn: parent
-                                text: "加载更多评论"
+                                text: I18n.tr("加载更多评论")
                                 onClicked: panel.loadMore()
                             }
                         }
@@ -723,8 +723,8 @@ PanelShell {
                             width: parent.width
                             horizontalAlignment: Text.AlignHCenter
                             text: panel.loggedIn
-                                  ? "登录后才能继续加载更多评论"
-                                  : ("仅显示部分评论，登录" + panel.platformLabel + "后可查看更多")
+                                  ? I18n.tr("登录后才能继续加载更多评论")
+                                  : (I18n.tr("仅显示部分评论，登录") + panel.platformLabel + I18n.tr("后可查看更多"))
                             wrapMode: Text.Wrap
                             color: Theme.withAlpha(Theme.onSurfaceVariantColor, 0.75)
                             font.family: Theme.fontFamily
@@ -738,8 +738,8 @@ PanelShell {
                             width: parent.width
                             horizontalAlignment: Text.AlignHCenter
                             text: panel.total >= 0
-                                  ? "已显示全部 " + panel.total + " 条评论"
-                                  : "没有更多评论了"
+                                  ? I18n.tr("已显示全部 ") + panel.total + I18n.tr(" 条评论")
+                                  : I18n.tr("没有更多评论了")
                             color: Theme.withAlpha(Theme.onSurfaceVariantColor, 0.6)
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.textStyle("labelSmall").size
@@ -752,7 +752,7 @@ PanelShell {
             LoadingState {
                 anchors.centerIn: parent
                 visible: panel.loading && panel.comments.length === 0
-                text: "正在加载评论…"
+                text: I18n.tr("正在加载评论…")
             }
 
             // 不支持评论 / 空数据
@@ -763,17 +763,17 @@ PanelShell {
                              || panel.errorCode === "not_found" || panel.errorCode === "closed")
                 icon: panel.supported ? "comment" : "comments_disabled"
                 title: !panel.hasSong
-                       ? "还没有播放歌曲"
+                       ? I18n.tr("还没有播放歌曲")
                        : (!panel.supported
-                          ? "该歌曲暂不支持评论"
+                          ? I18n.tr("该歌曲暂不支持评论")
                           : (panel.errorCode === "not_found" || panel.errorCode === "closed"
-                             ? "评论区不可用"
-                             : "暂无评论"))
+                             ? I18n.tr("评论区不可用")
+                             : I18n.tr("暂无评论")))
                 hint: !panel.hasSong
-                      ? "从媒体库或探索里播放一首歌后再来查看评论"
+                      ? I18n.tr("从媒体库或探索里播放一首歌后再来查看评论")
                       : (!panel.supported
                          ? panel.unsupportedHint()
-                         : (panel.loadError !== "" ? panel.loadError : "来发表第一条评论吧"))
+                         : (panel.loadError !== "" ? panel.loadError : I18n.tr("来发表第一条评论吧")))
             }
 
             // 加载失败（网络 / 权限等）
@@ -817,7 +817,7 @@ PanelShell {
         icon: "refresh"
         iconSize: 22
         size: 40
-        tooltip: "刷新评论"
+        tooltip: I18n.tr("刷新评论")
         onClicked: panel.retry()
     }
 }

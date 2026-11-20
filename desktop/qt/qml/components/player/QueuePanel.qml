@@ -7,7 +7,7 @@ import "../"
 PanelScaffold {
     id: panel
 
-    title: "播放队列（" + Player.queue.length + " 首）"
+    title: I18n.tr("播放队列（") + Player.queue.length + I18n.tr(" 首）")
     panelWidth: 420
 
     Item {
@@ -19,8 +19,8 @@ PanelScaffold {
             anchors.centerIn: parent
             visible: Player.queue.length === 0
             icon: "queue_music"
-            title: "播放队列是空的"
-            hint: "在媒体库或探索中选择歌曲后会自动加入队列"
+            title: I18n.tr("播放队列是空的")
+            hint: I18n.tr("在媒体库或探索中选择歌曲后会自动加入队列")
             contentWidth: Math.min(340, panel.width - 48)
         }
 
@@ -120,7 +120,7 @@ PanelScaffold {
 
                         Text {
                             Layout.fillWidth: true
-                            text: queueRow.modelData.title !== "" ? queueRow.modelData.title : "未知歌曲"
+                            text: queueRow.modelData.title !== "" ? queueRow.modelData.title : I18n.tr("未知歌曲")
                             elide: Text.ElideRight
                             color: queueRow.current ? Theme.primary : Theme.onSurfaceColor
                             font.family: Theme.fontFamily
@@ -129,7 +129,7 @@ PanelScaffold {
 
                         Text {
                             Layout.fillWidth: true
-                            text: queueRow.modelData.artist !== "" ? queueRow.modelData.artist : "未知艺术家"
+                            text: queueRow.modelData.artist !== "" ? queueRow.modelData.artist : I18n.tr("未知艺术家")
                             elide: Text.ElideRight
                             color: Theme.onSurfaceVariantColor
                             font.family: Theme.fontFamily
@@ -144,7 +144,7 @@ PanelScaffold {
                         size: 30
                         enabled: queueRow.index > 0
                         opacity: enabled ? 1 : 0.35
-                        tooltip: "上移"
+                        tooltip: I18n.tr("上移")
                         onClicked: Player.moveInQueue(queueRow.index, queueRow.index - 1)
                     }
 
@@ -155,7 +155,7 @@ PanelScaffold {
                         size: 30
                         enabled: queueRow.index < Player.queue.length - 1
                         opacity: enabled ? 1 : 0.35
-                        tooltip: "下移"
+                        tooltip: I18n.tr("下移")
                         onClicked: Player.moveInQueue(queueRow.index, queueRow.index + 1)
                     }
 
@@ -164,7 +164,7 @@ PanelScaffold {
                         icon: "delete"
                         iconSize: 16
                         size: 30
-                        tooltip: "从队列移除"
+                        tooltip: I18n.tr("从队列移除")
                         onClicked: Player.removeFromQueue(queueRow.index)
                     }
                 }
@@ -192,7 +192,7 @@ PanelScaffold {
                 anchors.right: parent.right
                 anchors.rightMargin: 16
                 anchors.verticalCenter: parent.verticalCenter
-                text: "清空队列"
+                text: I18n.tr("清空队列")
                 onClicked: Player.clearQueue()
             }
         }

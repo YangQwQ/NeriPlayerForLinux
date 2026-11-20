@@ -6,7 +6,7 @@ Item {
     id: root
 
     property alias text: input.text
-    property string placeholder: "搜索歌曲、歌单、歌手、专辑"
+    property string placeholder: I18n.tr("搜索歌曲、歌单、歌手、专辑")
 
     signal submitted(string keyword)
     signal cleared()
@@ -91,7 +91,7 @@ Item {
             icon: "close"
             iconSize: 18
             size: 36
-            tooltip: "清空"
+            tooltip: I18n.tr("清空")
             onClicked: root.clear()
         }
     }

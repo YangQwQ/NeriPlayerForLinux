@@ -155,7 +155,7 @@ Item {
                 icon: "person"
                 text: core.songArtist
                 clickable: core.artistClickable
-                clickTooltip: "查看歌手详情"
+                clickTooltip: I18n.tr("查看歌手详情")
                 fontPixelSize: 15
                 onClicked: core.openArtist()
                 onActivity: core.activity()
@@ -167,7 +167,7 @@ Item {
                 icon: "album"
                 text: core.songAlbum
                 clickable: core.albumClickable
-                clickTooltip: "查看专辑详情"
+                clickTooltip: I18n.tr("查看专辑详情")
                 textColor: Theme.withAlpha(np.foreground, 0.62)
                 hoverColor: np.foreground
                 fontPixelSize: 14
@@ -242,7 +242,7 @@ Item {
                     icon: "person"
                     text: core.songArtist
                     clickable: core.artistClickable
-                    clickTooltip: "查看歌手详情"
+                    clickTooltip: I18n.tr("查看歌手详情")
                     fontPixelSize: 14
                     iconSize: 16
                     onClicked: core.openArtist()
@@ -255,7 +255,7 @@ Item {
                     icon: "album"
                     text: core.songAlbum
                     clickable: core.albumClickable
-                    clickTooltip: "查看专辑详情"
+                    clickTooltip: I18n.tr("查看专辑详情")
                     textColor: Theme.withAlpha(np.foreground, 0.62)
                     hoverColor: np.foreground
                     fontPixelSize: 12

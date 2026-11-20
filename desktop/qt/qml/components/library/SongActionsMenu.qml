@@ -91,12 +91,12 @@ Menu {
             if (result && result.message) {
                 Toast.show(String(result.message), "error")
             } else if (queued > 0) {
-                Toast.show("已加入下载队列：" + (target.title || "歌曲"), "info")
+                Toast.show(I18n.tr("已加入下载队列：") + (target.title || I18n.tr("歌曲")), "info")
             } else {
-                Toast.show("未能加入下载队列", "error")
+                Toast.show(I18n.tr("未能加入下载队列"), "error")
             }
         }).catch(function(error) {
-            Toast.show("下载失败：" + (error && error.message ? error.message : "未知错误"), "error")
+            Toast.show(I18n.tr("下载失败：") + (error && error.message ? error.message : I18n.tr("未知错误")), "error")
         })
     }
 
@@ -129,10 +129,10 @@ Menu {
         const song = root.song
         Api.call("collections.toggleFavorite", { song: song }).then(function(result) {
             root.favorite = !!(result && result.favorite)
-            Toast.show(root.favorite ? "已收藏" : "已取消收藏")
+            Toast.show(root.favorite ? I18n.tr("已收藏") : I18n.tr("已取消收藏"))
             root.favoriteToggled(song, root.favorite)
         }).catch(function(error) {
-            Toast.show(error && error.message ? error.message : "操作失败", "error")
+            Toast.show(error && error.message ? error.message : I18n.tr("操作失败"), "error")
         })
     }
 
@@ -175,7 +175,7 @@ Menu {
     }
 
     ActionItem {
-        text: "下一首播放"
+        text: I18n.tr("下一首播放")
         onTriggered: {
             if (root.song)
                 Player.enqueueNext([root.song])
@@ -183,7 +183,7 @@ Menu {
     }
 
     ActionItem {
-        text: "添加到播放队列"
+        text: I18n.tr("添加到播放队列")
         onTriggered: {
             if (root.song)
                 Player.enqueue([root.song])
@@ -191,7 +191,7 @@ Menu {
     }
 
     ActionItem {
-        text: "添加到歌单…"
+        text: I18n.tr("添加到歌单…")
         onTriggered: {
             if (root.song)
                 playlistPicker.openFor(root.song)
@@ -199,12 +199,12 @@ Menu {
     }
 
     ActionItem {
-        text: root.favorite ? "取消收藏" : "收藏"
+        text: root.favorite ? I18n.tr("取消收藏") : I18n.tr("收藏")
         onTriggered: root.toggleFavorite()
     }
 
     ActionItem {
-        text: "下载"
+        text: I18n.tr("下载")
         onTriggered: root.enqueueDownload()
     }
 
@@ -214,13 +214,13 @@ Menu {
 
     ActionItem {
         visible: root.albumLinkAvailable
-        text: "查看专辑"
+        text: I18n.tr("查看专辑")
         onTriggered: root.openAlbum()
     }
 
     ActionItem {
         visible: root.artistLinkAvailable
-        text: "查看歌手"
+        text: I18n.tr("查看歌手")
         onTriggered: root.openArtist()
     }
 
@@ -230,7 +230,7 @@ Menu {
 
     ActionItem {
         visible: root.playlistId !== ""
-        text: "从当前列表移除"
+        text: I18n.tr("从当前列表移除")
         onTriggered: {
             if (root.song)
                 root.removeRequested(root.song)
@@ -239,7 +239,7 @@ Menu {
 
     ActionItem {
         visible: root.showMove
-        text: "上移"
+        text: I18n.tr("上移")
         onTriggered: {
             if (root.song)
                 root.moveRequested(root.song, -1)
@@ -248,7 +248,7 @@ Menu {
 
     ActionItem {
         visible: root.showMove
-        text: "下移"
+        text: I18n.tr("下移")
         onTriggered: {
             if (root.song)
                 root.moveRequested(root.song, 1)

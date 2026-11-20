@@ -63,8 +63,8 @@ Item {
     readonly property string effectiveAction: effectiveItems.length === 0
                                               ? ""
                                               : (effectiveKind === "collections"
-                                                 ? "更多"
-                                                 : (effectiveKind === "continue" ? "最近播放" : "播放全部"))
+                                                 ? I18n.tr("更多")
+                                                 : (effectiveKind === "continue" ? I18n.tr("最近播放") : I18n.tr("播放全部")))
 
     readonly property var tabOptions: {
         const result = []
@@ -213,7 +213,7 @@ Item {
                     width: 150
                     height: implicitHeight
                     name: modelData.name ? modelData.name : ""
-                    subtitle: modelData.trackCount > 0 ? modelData.trackCount + " 首"
+                    subtitle: modelData.trackCount > 0 ? modelData.trackCount + I18n.tr(" 首")
                                                        : (modelData.creator ? modelData.creator : "")
                     coverUrl: modelData.coverUrl ? modelData.coverUrl : ""
                     onClicked: root.collectionActivated(modelData)

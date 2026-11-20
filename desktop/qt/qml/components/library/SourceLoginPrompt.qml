@@ -15,14 +15,14 @@ Item {
     signal loginClicked()
 
     readonly property bool bili: root.source === "BILIBILI"
-    readonly property string sourceLabel: root.bili ? "哔哩哔哩" : "网易云音乐"
-    readonly property string promptText: root.bili ? "登录后可浏览收藏夹" : "登录后可浏览我的歌单"
+    readonly property string sourceLabel: root.bili ? I18n.tr("哔哩哔哩") : I18n.tr("网易云音乐")
+    readonly property string promptText: root.bili ? I18n.tr("登录后可浏览收藏夹") : I18n.tr("登录后可浏览我的歌单")
     readonly property string titleText: root.relogin
-                                       ? "登录状态已失效"
-                                       : "登录" + root.sourceLabel
+                                       ? I18n.tr("登录状态已失效")
+                                       : I18n.tr("登录") + root.sourceLabel
     readonly property string hintText: root.relogin
-                                      ? "账号信息已过期或无法读取，请重新扫码登录后再刷新"
-                                      : "使用手机 " + root.sourceLabel + " 扫码，登录后即可同步账号内容"
+                                      ? I18n.tr("账号信息已过期或无法读取，请重新扫码登录后再刷新")
+                                      : I18n.tr("使用手机 ") + root.sourceLabel + I18n.tr(" 扫码，登录后即可同步账号内容")
 
     Rectangle {
         id: card
@@ -99,7 +99,7 @@ Item {
                     id: loginButton
 
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: root.relogin ? "重新扫码登录" : "扫码登录"
+                    text: root.relogin ? I18n.tr("重新扫码登录") : I18n.tr("扫码登录")
                     icon: "login"
                     filled: true
                     onClicked: root.loginClicked()

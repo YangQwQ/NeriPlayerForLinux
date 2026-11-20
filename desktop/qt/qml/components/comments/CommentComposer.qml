@@ -73,7 +73,7 @@ Item {
                 id: loginButton
 
                 visible: root.available
-                text: "去登录"
+                text: I18n.tr("去登录")
                 icon: "login"
                 filled: true
                 anchors.right: parent.right
@@ -98,8 +98,8 @@ Item {
                 Text {
                     width: Math.max(0, parent.width - 28)
                     text: root.available
-                          ? "登录" + (root.sourceLabel !== "" ? root.sourceLabel : "") + "后参与评论"
-                          : "当前歌曲暂不支持评论"
+                          ? I18n.tr("登录") + (root.sourceLabel !== "" ? root.sourceLabel : "") + I18n.tr("后参与评论")
+                          : I18n.tr("当前歌曲暂不支持评论")
                     elide: Text.ElideRight
                     maximumLineCount: 1
                     color: Theme.onSurfaceVariantColor
@@ -129,7 +129,7 @@ Item {
                 anchors.bottom: parent.bottom
                 anchors.margins: 10
                 padding: 0
-                placeholderText: "说点什么…（Ctrl+Enter 发送）"
+                placeholderText: I18n.tr("说点什么…（Ctrl+Enter 发送）")
                 placeholderTextColor: Theme.withAlpha(Theme.onSurfaceVariantColor, 0.7)
                 color: Theme.onSurfaceColor
                 selectedTextColor: Theme.onPrimaryColor
@@ -160,7 +160,7 @@ Item {
                 anchors.left: input.left
                 anchors.right: input.right
                 anchors.top: input.top
-                text: "说点什么…（Ctrl+Enter 发送）"
+                text: I18n.tr("说点什么…（Ctrl+Enter 发送）")
                 elide: Text.ElideRight
                 maximumLineCount: 1
                 color: Theme.withAlpha(Theme.onSurfaceVariantColor, 0.7)
@@ -178,7 +178,7 @@ Item {
                 iconSize: 20
                 size: 38
                 iconColor: root.canSend ? Theme.primary : Theme.withAlpha(Theme.onSurfaceVariantColor, 0.5)
-                tooltip: root.posting ? "正在发布…" : "发表评论"
+                tooltip: root.posting ? I18n.tr("正在发布…") : I18n.tr("发表评论")
                 onClicked: root.submit()
             }
         }
@@ -191,7 +191,7 @@ Item {
 
             Text {
                 visible: root.posting
-                text: "正在发布…"
+                text: I18n.tr("正在发布…")
                 color: Theme.primary
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.textStyle("labelSmall").size

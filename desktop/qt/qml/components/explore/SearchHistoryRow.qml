@@ -19,9 +19,9 @@ Item {
 
         SectionHeader {
             width: column.width
-            title: "搜索历史"
+            title: I18n.tr("搜索历史")
             icon: "history"
-            actionText: "清空"
+            actionText: I18n.tr("清空")
             onActionClicked: root.clearRequested()
         }
 

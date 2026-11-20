@@ -55,7 +55,7 @@ Item {
             id: sidebarTitle
             visible: !root.compact
             width: parent.width
-            text: "设置"
+            text: I18n.tr("设置")
             color: Theme.onSurfaceColor
             font.family: Theme.fontFamily
             font.pixelSize: Theme.textStyle("headlineSmall").size
@@ -93,7 +93,7 @@ Item {
                 width: parent.width - x - Theme.spacingMd
                 height: parent.height
                 text: root.query
-                placeholderText: "搜索设置…"
+                placeholderText: I18n.tr("搜索设置…")
                 placeholderTextColor: Theme.onSurfaceVariantColor
                 color: Theme.onSurfaceColor
                 font.family: Theme.fontFamily
@@ -231,7 +231,7 @@ Item {
                     width: navFlick.width
                     padding: Theme.spacingLg
                     horizontalAlignment: Text.AlignHCenter
-                    text: "没有匹配的设置项"
+                    text: I18n.tr("没有匹配的设置项")
                     color: Theme.onSurfaceVariantColor
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.textStyle("bodySmall").size

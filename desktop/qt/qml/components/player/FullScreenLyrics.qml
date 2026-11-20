@@ -92,7 +92,7 @@ Item {
                 size: 44
                 iconColor: np.foreground
                 hoverColor: np.hoverFill
-                tooltip: "返回播放页"
+                tooltip: I18n.tr("返回播放页")
                 onClicked: root.closeRequested()
             }
 
@@ -117,7 +117,7 @@ Item {
                     size: 40
                     iconColor: np.foreground
                     hoverColor: np.hoverFill
-                    tooltip: "缩小歌词字号"
+                    tooltip: I18n.tr("缩小歌词字号")
                     onClicked: root.adjustScale(-0.1)
                 }
 
@@ -128,7 +128,7 @@ Item {
                     size: 40
                     iconColor: np.foreground
                     hoverColor: np.hoverFill
-                    tooltip: "放大歌词字号"
+                    tooltip: I18n.tr("放大歌词字号")
                     onClicked: root.adjustScale(0.1)
                 }
             }

@@ -63,7 +63,7 @@ Item {
                 wrapMode: Text.Wrap
                 text: root.placeholderText !== ""
                       ? root.placeholderText
-                      : (root.loading ? "正在生成二维码…" : "二维码不可用")
+                      : (root.loading ? I18n.tr("正在生成二维码…") : I18n.tr("二维码不可用"))
                 color: root.loading ? "#757575" : "#C62828"
                 font.family: Theme.fontFamily
                 font.pixelSize: 12
@@ -85,7 +85,7 @@ Item {
 
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: "二维码已过期"
+                text: I18n.tr("二维码已过期")
                 color: "#424242"
                 font.family: Theme.fontFamily
                 font.pixelSize: 13

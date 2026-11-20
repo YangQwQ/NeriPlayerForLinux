@@ -256,12 +256,12 @@ Item {
                      "target": targetPath
                  }).then(function(result) {
             if (result && result.ok) {
-                Toast.show("封面已保存：" + result.path, "info")
+                Toast.show(I18n.tr("封面已保存：") + result.path, "info")
             } else {
-                Toast.show(result && result.error ? result.error : "封面保存失败", "error")
+                Toast.show(result && result.error ? result.error : I18n.tr("封面保存失败"), "error")
             }
         }).catch(function(error) {
-            Toast.show(error && error.message ? error.message : "封面保存失败", "error")
+            Toast.show(error && error.message ? error.message : I18n.tr("封面保存失败"), "error")
         })
     }
 
@@ -331,17 +331,17 @@ Item {
         }
 
         ContextItem {
-            text: "复制封面链接"
+            text: I18n.tr("复制封面链接")
             iconName: "link"
             enabled: root.canCopyArtworkLink
             onTriggered: {
                 root.copyToClipboard(root.artworkUrl)
-                Toast.show("已复制封面链接", "info")
+                Toast.show(I18n.tr("已复制封面链接"), "info")
             }
         }
 
         ContextItem {
-            text: "保存封面…"
+            text: I18n.tr("保存封面…")
             iconName: "save_alt"
             enabled: root.canSaveArtwork
             onTriggered: saveDialog.open()
@@ -351,10 +351,10 @@ Item {
     FileDialog {
         id: saveDialog
 
-        title: "保存封面"
+        title: I18n.tr("保存封面")
         fileMode: FileDialog.SaveFile
         defaultSuffix: root.coverFileExtension()
-        nameFilters: ["图片文件 (*.jpg *.jpeg *.png *.webp *.gif)", "所有文件 (*)"]
+        nameFilters: [I18n.tr("图片文件 (*.jpg *.jpeg *.png *.webp *.gif)"), I18n.tr("所有文件 (*)")]
         onAccepted: root.saveArtwork(root.urlToLocalPath(selectedFile))
     }
 }

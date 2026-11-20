@@ -22,7 +22,7 @@ QtObject {
             // 回落到底层命令（见文件头说明）
         }
         Api.call("player.setQueue", { "songs": list, "startIndex": start, "autoPlay": true }).catch(function(e) {
-            Toast.show(e && e.message ? e.message : "播放失败", "error")
+            Toast.show(e && e.message ? e.message : I18n.tr("播放失败"), "error")
         })
     }
 
@@ -33,15 +33,15 @@ QtObject {
             return
         try {
             Player.enqueueNext(list)
-            Toast.show("已添加到下一首")
+            Toast.show(I18n.tr("已添加到下一首"))
             return
         } catch (error) {
             // 回落到底层命令（见文件头说明）
         }
         Api.call("player.enqueueNext", { "songs": list }).then(function() {
-            Toast.show("已添加到下一首")
+            Toast.show(I18n.tr("已添加到下一首"))
         }).catch(function(e) {
-            Toast.show(e && e.message ? e.message : "添加失败", "error")
+            Toast.show(e && e.message ? e.message : I18n.tr("添加失败"), "error")
         })
     }
 
@@ -59,7 +59,7 @@ QtObject {
             if (result && result.settings)
                 Settings.values = result.settings
         }).catch(function(e) {
-            Toast.show(e && e.message ? e.message : "保存设置失败", "error")
+            Toast.show(e && e.message ? e.message : I18n.tr("保存设置失败"), "error")
         })
     }
 }

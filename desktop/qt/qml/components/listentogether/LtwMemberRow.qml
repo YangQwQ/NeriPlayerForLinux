@@ -9,7 +9,7 @@ Item {
     property bool isSelf: false
 
     readonly property string nickname: member && member.nickname !== undefined && member.nickname !== null
-                                      ? String(member.nickname) : "未知成员"
+                                      ? String(member.nickname) : I18n.tr("未知成员")
     readonly property bool controllerMember: member && String(member.role || "") === "controller"
     readonly property string initial: nickname.length > 0 ? nickname.substring(0, 1).toUpperCase() : "?"
 
@@ -57,7 +57,7 @@ Item {
 
                 Text {
                     visible: root.isSelf
-                    text: "（我）"
+                    text: I18n.tr("（我）")
                     color: Theme.onSurfaceVariantColor
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.textStyle("labelSmall").size
@@ -67,7 +67,7 @@ Item {
 
             Text {
                 width: parent.width
-                text: root.controllerMember ? "控制播放与房间设置" : "跟随控制者同步播放"
+                text: root.controllerMember ? I18n.tr("控制播放与房间设置") : I18n.tr("跟随控制者同步播放")
                 color: Theme.onSurfaceVariantColor
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.textStyle("labelSmall").size
@@ -89,7 +89,7 @@ Item {
             }
 
             Text {
-                text: root.controllerMember ? "控制者" : "听众"
+                text: root.controllerMember ? I18n.tr("控制者") : I18n.tr("听众")
                 color: root.controllerMember ? Theme.tertiary : Theme.onSurfaceVariantColor
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.textStyle("labelSmall").size

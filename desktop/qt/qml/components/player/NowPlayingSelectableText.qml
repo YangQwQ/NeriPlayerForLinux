@@ -128,7 +128,7 @@ Item {
         clipboard.text = content
         clipboard.selectAll()
         clipboard.copy()
-        Toast.show("已复制", "info")
+        Toast.show(I18n.tr("已复制"), "info")
     }
 
     /** 歌名 - 歌手 - 专辑，空字段自动跳过。 */
@@ -190,28 +190,28 @@ Item {
         }
 
         ContextItem {
-            text: "复制歌曲信息"
+            text: I18n.tr("复制歌曲信息")
             iconName: "content_copy"
             enabled: root.songInfoText() !== ""
             onTriggered: root.copyText(root.songInfoText())
         }
 
         ContextItem {
-            text: "复制歌名"
+            text: I18n.tr("复制歌名")
             iconName: "music_note"
             enabled: Player.title !== ""
             onTriggered: root.copyText(Player.title)
         }
 
         ContextItem {
-            text: "复制歌手"
+            text: I18n.tr("复制歌手")
             iconName: "person"
             enabled: Player.artist !== ""
             onTriggered: root.copyText(Player.artist)
         }
 
         ContextItem {
-            text: "复制专辑"
+            text: I18n.tr("复制专辑")
             iconName: "album"
             enabled: Player.album !== ""
             onTriggered: root.copyText(Player.album)

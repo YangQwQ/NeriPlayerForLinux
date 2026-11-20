@@ -46,10 +46,10 @@ Item {
                                            && (root.replyCount > 0 || root.previewReplies.length > 0)
     readonly property string replyActionText: {
         if (root.expanded)
-            return "收起回复"
+            return I18n.tr("收起回复")
         if (root.replyCount > 0)
-            return Format.formatCount(root.replyCount) + "条回复"
-        return "查看回复"
+            return Format.formatCount(root.replyCount) + I18n.tr("条回复")
+        return I18n.tr("查看回复")
     }
 
     width: parent ? parent.width : 320
@@ -105,7 +105,7 @@ Item {
 
                         width: Math.max(30, parent.width - timeText.implicitWidth - levelText.implicitWidth - 24)
                         text: root.comment && root.comment.nickname
-                              ? String(root.comment.nickname) : "匿名用户"
+                              ? String(root.comment.nickname) : I18n.tr("匿名用户")
                         elide: Text.ElideRight
                         maximumLineCount: 1
                         color: Theme.onSurfaceColor
@@ -180,8 +180,8 @@ Item {
                                 anchors.verticalCenter: parent.verticalCenter
                                 anchors.leftMargin: 10
                                 anchors.rightMargin: 10
-                                text: "@" + (modelData.nickname ? String(modelData.nickname) : "用户") + "："
-                                      + (modelData.content ? String(modelData.content) : "评论已删除")
+                                text: "@" + (modelData.nickname ? String(modelData.nickname) : I18n.tr("用户")) + "："
+                                      + (modelData.content ? String(modelData.content) : I18n.tr("评论已删除"))
                                 wrapMode: Text.Wrap
                                 maximumLineCount: 2
                                 elide: Text.ElideRight
@@ -360,7 +360,7 @@ Item {
                                 }
 
                                 Text {
-                                    text: modelData && modelData.nickname ? String(modelData.nickname) : "匿名用户"
+                                    text: modelData && modelData.nickname ? String(modelData.nickname) : I18n.tr("匿名用户")
                                     elide: Text.ElideRight
                                     maximumLineCount: 1
                                     color: Theme.onSurfaceVariantColor
@@ -460,7 +460,7 @@ Item {
                         }
 
                         Text {
-                            text: "正在加载回复…"
+                            text: I18n.tr("正在加载回复…")
                             color: Theme.onSurfaceVariantColor
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.textStyle("labelSmall").size
@@ -487,7 +487,7 @@ Item {
                     height: visible ? 30 : 0
 
                     Text {
-                        text: "查看更多回复"
+                        text: I18n.tr("查看更多回复")
                         color: Theme.primary
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.textStyle("labelMedium").size

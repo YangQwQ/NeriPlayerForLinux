@@ -6,7 +6,7 @@ import "../"
 PanelScaffold {
     id: panel
 
-    title: "睡眠定时器"
+    title: I18n.tr("睡眠定时器")
     panelWidth: 380
 
     readonly property bool timerActive: Player.sleepTimer !== null && Player.sleepTimer !== undefined
@@ -48,7 +48,7 @@ PanelScaffold {
 
                 Text {
                     width: parent.width
-                    text: "剩余 " + panel.formatRemaining(Player.sleepTimer.remainingSeconds)
+                    text: I18n.tr("剩余 ") + panel.formatRemaining(Player.sleepTimer.remainingSeconds)
                     color: Theme.primary
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.textStyle("headlineSmall").size
@@ -57,7 +57,7 @@ PanelScaffold {
 
                 Text {
                     width: parent.width
-                    text: "倒计时结束后暂停播放"
+                    text: I18n.tr("倒计时结束后暂停播放")
                     color: Theme.onSurfaceVariantColor
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.textStyle("bodyMedium").size
@@ -65,7 +65,7 @@ PanelScaffold {
 
                 PanelButton {
                     width: content.width
-                    text: "取消定时器"
+                    text: I18n.tr("取消定时器")
                     filled: true
                     onClicked: Player.cancelSleepTimer()
                 }
@@ -79,7 +79,7 @@ PanelScaffold {
 
                 Text {
                     width: parent.width
-                    text: "播完当前歌曲后停止"
+                    text: I18n.tr("播完当前歌曲后停止")
                     color: Theme.onSurfaceColor
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.textStyle("titleMedium").size
@@ -88,7 +88,7 @@ PanelScaffold {
 
                 Text {
                     width: parent.width
-                    text: "当前歌曲播放结束后将暂停播放"
+                    text: I18n.tr("当前歌曲播放结束后将暂停播放")
                     color: Theme.onSurfaceVariantColor
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.textStyle("bodySmall").size
@@ -96,7 +96,7 @@ PanelScaffold {
 
                 PanelButton {
                     width: content.width
-                    text: "取消定时器"
+                    text: I18n.tr("取消定时器")
                     filled: true
                     onClicked: Player.cancelSleepTimer()
                 }
@@ -110,7 +110,7 @@ PanelScaffold {
 
                 Text {
                     width: parent.width
-                    text: "倒计时结束后暂停播放"
+                    text: I18n.tr("倒计时结束后暂停播放")
                     color: Theme.onSurfaceColor
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.textStyle("bodyMedium").size
@@ -129,7 +129,7 @@ PanelScaffold {
                             required property var modelData
 
                             width: (minutesRow.width - 24) / 4
-                            text: modelData + " 分"
+                            text: modelData + I18n.tr(" 分")
                             outlined: true
                             onClicked: Player.startSleepTimer(modelData)
                         }
@@ -138,7 +138,7 @@ PanelScaffold {
 
                 Text {
                     width: parent.width
-                    text: "默认时长：" + panel.defaultMinutes + " 分钟"
+                    text: I18n.tr("默认时长：") + panel.defaultMinutes + I18n.tr(" 分钟")
                     color: Theme.withAlpha(Theme.onSurfaceVariantColor, 0.75)
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.textStyle("labelSmall").size
@@ -146,7 +146,7 @@ PanelScaffold {
 
                 PanelButton {
                     width: content.width
-                    text: "播放完当前歌曲后停止"
+                    text: I18n.tr("播放完当前歌曲后停止")
                     outlined: true
                     onClicked: Player.stopAfterCurrentSong()
                 }

@@ -5,7 +5,7 @@ import ".."
 Item {
     id: root
 
-    property string text: "正在加载…"
+    property string text: I18n.tr("正在加载…")
     property bool running: true
 
     implicitWidth: parent ? parent.width : 320

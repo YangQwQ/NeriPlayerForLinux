@@ -47,8 +47,8 @@ Item {
             Layout.alignment: Qt.AlignHCenter
             Layout.fillWidth: true
             text: Backend.connected
-                  ? ("后端已连接 · " + (Player.hasSong ? "正在播放 " + Player.title : "当前无播放"))
-                  : "正在等待播放后端启动…"
+                  ? (I18n.tr("后端已连接 · ") + (Player.hasSong ? I18n.tr("正在播放 ") + Player.title : I18n.tr("当前无播放")))
+                  : I18n.tr("正在等待播放后端启动…")
             horizontalAlignment: Text.AlignHCenter
             color: Backend.connected ? Theme.primary : Theme.error
             font.family: Theme.fontFamily

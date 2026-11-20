@@ -51,7 +51,7 @@ Item {
                     id: removeButton
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
-                    text: "移除"
+                    text: I18n.tr("移除")
                     onClicked: root.removeRequested(folderRow.modelData)
                 }
             }
@@ -64,7 +64,7 @@ Item {
 
             Text {
                 anchors.verticalCenter: parent.verticalCenter
-                text: "还没有添加音乐文件夹"
+                text: I18n.tr("还没有添加音乐文件夹")
                 color: Theme.onSurfaceVariantColor
                 font.family: Theme.fontFamily
                 font.pixelSize: 12
@@ -80,13 +80,13 @@ Item {
             spacing: Theme.spacingSm
 
             SettingsButton {
-                text: "添加文件夹"
+                text: I18n.tr("添加文件夹")
                 icon: "add"
                 onClicked: root.addRequested()
             }
 
             SettingsButton {
-                text: "重新扫描"
+                text: I18n.tr("重新扫描")
                 icon: "refresh"
                 onClicked: root.rescanRequested()
             }

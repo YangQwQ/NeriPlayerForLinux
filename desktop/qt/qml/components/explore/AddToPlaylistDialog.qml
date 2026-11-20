@@ -40,7 +40,7 @@ Popup {
             loading = false
         }).catch(function(error) {
             loading = false
-            Toast.show("读取本地歌单失败：" + (error && error.message ? error.message : "未知错误"), "error")
+            Toast.show(I18n.tr("读取本地歌单失败：") + (error && error.message ? error.message : I18n.tr("未知错误")), "error")
         })
     }
 
@@ -53,21 +53,21 @@ Popup {
         }
         submitting = true
         Api.call("collections.addSongs", { id: playlistId, songs: songs }).then(function() {
-            const message = "已添加到「" + playlistName + "」（" + songs.length + " 首）"
+            const message = I18n.tr("已添加到「") + playlistName + "」（" + songs.length + I18n.tr(" 首）")
             submitting = false
             Toast.show(message)
             dialog.finished(message)
             dialog.close()
         }).catch(function(error) {
             submitting = false
-            Toast.show(error && error.message ? error.message : "收藏失败", "error")
+            Toast.show(error && error.message ? error.message : I18n.tr("收藏失败"), "error")
         })
     }
 
     function createAndAdd() {
         const name = newName.trim()
         if (name === "") {
-            Toast.show("请输入歌单名称", "error")
+            Toast.show(I18n.tr("请输入歌单名称"), "error")
             return
         }
         if (submitting)
@@ -78,10 +78,10 @@ Popup {
             if (result && result.playlist)
                 dialog.addTo(result.playlist.id, result.playlist.name)
             else
-                Toast.show("创建歌单失败", "error")
+                Toast.show(I18n.tr("创建歌单失败"), "error")
         }).catch(function(error) {
             submitting = false
-            Toast.show(error && error.message ? error.message : "创建歌单失败", "error")
+            Toast.show(error && error.message ? error.message : I18n.tr("创建歌单失败"), "error")
         })
     }
 
@@ -109,7 +109,7 @@ Popup {
 
         Text {
             width: parent.width
-            text: "收藏到本地歌单"
+            text: I18n.tr("收藏到本地歌单")
             color: Theme.onSurfaceColor
             font.family: Theme.fontFamily
             font.pixelSize: 18
@@ -118,7 +118,7 @@ Popup {
 
         Text {
             width: parent.width
-            text: "共 " + dialog.songs.length + " 首歌曲"
+            text: I18n.tr("共 ") + dialog.songs.length + I18n.tr(" 首歌曲")
             color: Theme.onSurfaceVariantColor
             font.family: Theme.fontFamily
             font.pixelSize: 12
@@ -156,7 +156,7 @@ Popup {
                     anchors.leftMargin: 14
                     anchors.verticalCenter: parent.verticalCenter
                     visible: nameInput.text === ""
-                    text: "新歌单名称"
+                    text: I18n.tr("新歌单名称")
                     color: Theme.onSurfaceVariantColor
                     font.family: Theme.fontFamily
                     font.pixelSize: 13
@@ -173,7 +173,7 @@ Popup {
 
                 Text {
                     anchors.centerIn: parent
-                    text: "新建并添加"
+                    text: I18n.tr("新建并添加")
                     color: Theme.onPrimaryColor
                     font.family: Theme.fontFamily
                     font.pixelSize: 12
@@ -193,7 +193,7 @@ Popup {
         Text {
             width: parent.width
             visible: !dialog.loading
-            text: "选择已有歌单"
+            text: I18n.tr("选择已有歌单")
             color: Theme.onSurfaceVariantColor
             font.family: Theme.fontFamily
             font.pixelSize: 12
@@ -202,7 +202,7 @@ Popup {
         LoadingState {
             width: parent.width
             visible: dialog.loading
-            text: "正在读取歌单…"
+            text: I18n.tr("正在读取歌单…")
         }
 
         Flickable {
@@ -258,7 +258,7 @@ Popup {
                             anchors.right: parent.right
                             anchors.rightMargin: 10
                             anchors.verticalCenter: parent.verticalCenter
-                            text: (modelData.songs ? modelData.songs.length : 0) + " 首"
+                            text: (modelData.songs ? modelData.songs.length : 0) + I18n.tr(" 首")
                             color: Theme.onSurfaceVariantColor
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
@@ -279,7 +279,7 @@ Popup {
         Text {
             width: parent.width
             visible: !dialog.loading && dialog.allPlaylists.length === 0
-            text: "还没有本地歌单，输入名称新建一个。"
+            text: I18n.tr("还没有本地歌单，输入名称新建一个。")
             color: Theme.onSurfaceVariantColor
             font.family: Theme.fontFamily
             font.pixelSize: 12
@@ -292,7 +292,7 @@ Popup {
             Text {
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                text: "取消"
+                text: I18n.tr("取消")
                 color: Theme.primary
                 font.family: Theme.fontFamily
                 font.pixelSize: 13

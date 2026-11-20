@@ -27,20 +27,20 @@ Item {
     }
     readonly property bool showProgress: active
 
-    readonly property string titleText: song && song.title ? String(song.title) : "未知歌曲"
-    readonly property string artistText: song && song.artist ? String(song.artist) : "未知艺术家"
+    readonly property string titleText: song && song.title ? String(song.title) : I18n.tr("未知歌曲")
+    readonly property string artistText: song && song.artist ? String(song.artist) : I18n.tr("未知艺术家")
     readonly property string statusText: {
         switch (taskState) {
         case "QUEUED":
-            return "排队中"
+            return I18n.tr("排队中")
         case "RUNNING":
-            return knownSize ? ("下载中 " + Math.round(progressValue * 100) + "%") : "下载中…"
+            return knownSize ? (I18n.tr("下载中 ") + Math.round(progressValue * 100) + "%") : I18n.tr("下载中…")
         case "DONE":
-            return "已完成"
+            return I18n.tr("已完成")
         case "FAILED":
-            return task && task.error ? String(task.error) : "下载失败"
+            return task && task.error ? String(task.error) : I18n.tr("下载失败")
         case "CANCELED":
-            return "已取消"
+            return I18n.tr("已取消")
         }
         return taskState
     }
@@ -63,12 +63,12 @@ Item {
         switch (taskState) {
         case "QUEUED":
         case "RUNNING":
-            return "取消下载"
+            return I18n.tr("取消下载")
         case "FAILED":
         case "CANCELED":
-            return "重试"
+            return I18n.tr("重试")
         case "DONE":
-            return "打开所在目录"
+            return I18n.tr("打开所在目录")
         }
         return ""
     }

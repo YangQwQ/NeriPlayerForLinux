@@ -10,10 +10,10 @@ import ".."
 Dialog {
     id: root
 
-    property string titleText: "确认操作"
+    property string titleText: I18n.tr("确认操作")
     property string message: ""
-    property string confirmText: "确定"
-    property string cancelText: "取消"
+    property string confirmText: I18n.tr("确定")
+    property string cancelText: I18n.tr("取消")
     property bool busy: false
 
     signal confirmed()
@@ -26,7 +26,7 @@ Dialog {
     closePolicy: Popup.CloseOnEscape
 
     function openFor(title, message, confirmText) {
-        root.titleText = title !== undefined && title !== null && title !== "" ? title : "确认操作"
+        root.titleText = title !== undefined && title !== null && title !== "" ? title : I18n.tr("确认操作")
         root.message = message || ""
         if (confirmText)
             root.confirmText = confirmText

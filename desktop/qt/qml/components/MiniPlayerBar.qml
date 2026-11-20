@@ -151,7 +151,7 @@ Item {
 
                         Text {
                             width: parent.width
-                            text: Player.hasSong ? Player.title : "未在播放"
+                            text: Player.hasSong ? Player.title : I18n.tr("未在播放")
                             color: Theme.onSurfaceColor
                             elide: Text.ElideRight
                             maximumLineCount: 1
@@ -162,7 +162,7 @@ Item {
 
                         Text {
                             width: parent.width
-                            text: Player.hasSong ? Player.artist : "选择一首歌开始播放"
+                            text: Player.hasSong ? Player.artist : I18n.tr("选择一首歌开始播放")
                             color: Theme.onSurfaceVariantColor
                             elide: Text.ElideRight
                             maximumLineCount: 1
@@ -240,7 +240,7 @@ Item {
                             icon: "volume_up"
                             iconSize: 19
                             size: 34
-                            tooltip: "音量"
+                            tooltip: I18n.tr("音量")
                             onClicked: volumePopup.opened ? volumePopup.close() : volumePopup.open()
                         }
 
@@ -296,14 +296,14 @@ Item {
                         icon: "graphic_eq"
                         iconSize: 19
                         size: 34
-                        tooltip: "音效"
+                        tooltip: I18n.tr("音效")
                         onClicked: Nav.openEffectsPanel()
                     }
                     IconButton {
                         icon: "bedtime"
                         iconSize: 19
                         size: 34
-                        tooltip: "睡眠定时"
+                        tooltip: I18n.tr("睡眠定时")
                         onClicked: Nav.openSleepPanel()
                     }
                     IconButton {
@@ -312,7 +312,7 @@ Item {
                         size: 34
                         iconColor: Settings.get("floatingLyricsEnabled", false) === true
                                    ? Theme.primary : Theme.onSurfaceVariantColor
-                        tooltip: "悬浮歌词"
+                        tooltip: I18n.tr("悬浮歌词")
                         onClicked: Settings.set("floatingLyricsEnabled",
                                                 !(Settings.get("floatingLyricsEnabled", false) === true))
                     }
@@ -320,7 +320,7 @@ Item {
                         icon: "queue_music"
                         iconSize: 19
                         size: 34
-                        tooltip: "播放队列"
+                        tooltip: I18n.tr("播放队列")
                         onClicked: Nav.openQueuePanel()
                     }
                 }

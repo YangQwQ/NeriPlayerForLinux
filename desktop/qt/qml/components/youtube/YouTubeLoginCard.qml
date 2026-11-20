@@ -35,7 +35,7 @@ Item {
             return String(card.account.nickname)
         if (card.account.userId && String(card.account.userId) !== "")
             return String(card.account.userId)
-        return "已登录"
+        return I18n.tr("已登录")
     }
 
     function messageOf(error) {
@@ -43,7 +43,7 @@ Item {
             return String(error.message)
         if (typeof error === "string" && error !== "")
             return error
-        return "未知错误"
+        return I18n.tr("未知错误")
     }
 
     function refresh() {
@@ -60,14 +60,14 @@ Item {
             if (seq !== card._statusSeq)
                 return
             card.statusLoaded = true
-            card.errorMessage = "读取 YouTube 登录状态失败：" + card.messageOf(error)
+            card.errorMessage = I18n.tr("读取 YouTube 登录状态失败：") + card.messageOf(error)
         })
     }
 
     function login() {
         const raw = cookieField.text ? String(cookieField.text).trim() : ""
         if (raw === "") {
-            card.errorMessage = "请先粘贴浏览器里 youtube.com 的 Cookie"
+            card.errorMessage = I18n.tr("请先粘贴浏览器里 youtube.com 的 Cookie")
             return
         }
         if (card.busy)
@@ -79,11 +79,11 @@ Item {
             cookieField.text = ""
             card.loggedIn = true
             card.account = result && result.account ? result.account : null
-            Toast.show("已登录 YouTube Music", "info")
+            Toast.show(I18n.tr("已登录 YouTube Music"), "info")
             card.loginStateChanged()
         }).catch(function(error) {
             card.busy = false
-            card.errorMessage = "登录失败：" + card.messageOf(error)
+            card.errorMessage = I18n.tr("登录失败：") + card.messageOf(error)
         })
     }
 
@@ -95,11 +95,11 @@ Item {
             card.busy = false
             card.loggedIn = false
             card.account = null
-            Toast.show("已退出 YouTube Music 登录", "info")
+            Toast.show(I18n.tr("已退出 YouTube Music 登录"), "info")
             card.loginStateChanged()
         }).catch(function(error) {
             card.busy = false
-            card.errorMessage = "退出登录失败：" + card.messageOf(error)
+            card.errorMessage = I18n.tr("退出登录失败：") + card.messageOf(error)
         })
     }
 
@@ -169,7 +169,7 @@ Item {
 
                     Text {
                         width: parent.width
-                        text: card.loggedIn ? "已登录账号" : "桌面版通过粘贴浏览器 Cookie 登录"
+                        text: card.loggedIn ? I18n.tr("已登录账号") : I18n.tr("桌面版通过粘贴浏览器 Cookie 登录")
                         color: Theme.onSurfaceVariantColor
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.textStyle("bodySmall").size
@@ -214,7 +214,7 @@ Item {
 
                     LibraryButton {
                         anchors.verticalCenter: parent.verticalCenter
-                        text: card.busy ? "退出中…" : "退出登录"
+                        text: card.busy ? I18n.tr("退出中…") : I18n.tr("退出登录")
                         onClicked: card.logout()
                     }
                 }
@@ -228,8 +228,8 @@ Item {
 
                 Text {
                     width: parent.width
-                    text: "从浏览器登录 music.youtube.com 后，按 F12 → Network（网络）→ 任选一个请求，" +
-                          "复制请求头里的 Cookie 整行粘贴到下面。桌面版不会打开网页，因此不支持扫码 / 账号密码登录。"
+                    text: I18n.tr("从浏览器登录 music.youtube.com 后，按 F12 → Network（网络）→ 任选一个请求，") +
+                          I18n.tr("复制请求头里的 Cookie 整行粘贴到下面。桌面版不会打开网页，因此不支持扫码 / 账号密码登录。")
                     wrapMode: Text.Wrap
                     color: Theme.onSurfaceVariantColor
                     font.family: Theme.fontFamily
@@ -270,14 +270,14 @@ Item {
                     spacing: 10
 
                     LibraryButton {
-                        text: card.busy ? "登录中…" : "粘贴并登录"
+                        text: card.busy ? I18n.tr("登录中…") : I18n.tr("粘贴并登录")
                         icon: "login"
                         filled: true
                         onClicked: card.login()
                     }
 
                     LibraryButton {
-                        text: "从剪贴板粘贴"
+                        text: I18n.tr("从剪贴板粘贴")
                         icon: "content_paste"
                         onClicked: {
                             cookieField.forceActiveFocus()
@@ -301,8 +301,8 @@ Item {
             Text {
                 width: parent.width
                 visible: !card.loggedIn
-                text: "Cookie 仅保存在本机配置目录（accounts.json，权限 600）。" +
-                      "登录后可使用「我的歌单」、个性化首页与播放直链；未登录时只能匿名搜索与浏览。"
+                text: I18n.tr("Cookie 仅保存在本机配置目录（accounts.json，权限 600）。") +
+                      I18n.tr("登录后可使用「我的歌单」、个性化首页与播放直链；未登录时只能匿名搜索与浏览。")
                 wrapMode: Text.Wrap
                 color: Theme.withAlpha(Theme.onSurfaceVariantColor, 0.85)
                 font.family: Theme.fontFamily

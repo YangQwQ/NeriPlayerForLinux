@@ -44,23 +44,23 @@ Dialog {
             const playlistId = root.renameId
             Api.call("collections.rename", { id: playlistId, name: name }).then(function() {
                 root.busy = false
-                Toast.show("已重命名为「" + name + "」")
+                Toast.show(I18n.tr("已重命名为「") + name + "」")
                 root.renamed(playlistId, name)
                 root.close()
             }).catch(function(error) {
                 root.busy = false
-                Toast.show(error && error.message ? error.message : "重命名失败", "error")
+                Toast.show(error && error.message ? error.message : I18n.tr("重命名失败"), "error")
             })
             return
         }
         Api.call("collections.create", { name: name }).then(function(result) {
             root.busy = false
-            Toast.show("已创建歌单「" + result.playlist.name + "」")
+            Toast.show(I18n.tr("已创建歌单「") + result.playlist.name + "」")
             root.created(result.playlist)
             root.close()
         }).catch(function(error) {
             root.busy = false
-            Toast.show(error && error.message ? error.message : "创建歌单失败", "error")
+            Toast.show(error && error.message ? error.message : I18n.tr("创建歌单失败"), "error")
         })
     }
 
@@ -78,7 +78,7 @@ Dialog {
 
         Text {
             Layout.fillWidth: true
-            text: root.renameId !== "" ? "重命名歌单" : "新建歌单"
+            text: root.renameId !== "" ? I18n.tr("重命名歌单") : I18n.tr("新建歌单")
             color: Theme.onSurfaceColor
             font.family: Theme.fontFamily
             font.pixelSize: Theme.textStyle("titleMedium").size
@@ -89,7 +89,7 @@ Dialog {
             id: nameField
 
             Layout.fillWidth: true
-            placeholderText: "歌单名称"
+            placeholderText: I18n.tr("歌单名称")
             selectByMouse: true
             color: Theme.onSurfaceColor
             placeholderTextColor: Theme.onSurfaceVariantColor
@@ -120,12 +120,12 @@ Dialog {
             }
 
             LibraryButton {
-                text: "取消"
+                text: I18n.tr("取消")
                 onClicked: root.close()
             }
 
             LibraryButton {
-                text: root.renameId !== "" ? "保存" : "创建"
+                text: root.renameId !== "" ? I18n.tr("保存") : I18n.tr("创建")
                 filled: true
                 enabled: nameField.text.trim() !== "" && !root.busy
                 onClicked: root.submit()

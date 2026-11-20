@@ -37,9 +37,9 @@ PanelShell {
         return null
     }
     readonly property bool loggedIn: panel.currentAccount !== null
-    readonly property string sourceLabel: panel.source === "BILIBILI" ? "哔哩哔哩" : "网易云音乐"
+    readonly property string sourceLabel: panel.source === "BILIBILI" ? I18n.tr("哔哩哔哩") : I18n.tr("网易云音乐")
 
-    title: "登录"
+    title: I18n.tr("登录")
     cardWidth: 380
     alignRight: false
     cardHeight: Math.max(320, Math.min(panel.height - panel.cardMargin * 2,
@@ -97,7 +97,7 @@ PanelShell {
             return String(error.message)
         if (typeof error === "string" && error !== "")
             return error
-        return "未知错误"
+        return I18n.tr("未知错误")
     }
 
     /** C++ 桥下发的数组是 QVariantList 包装对象（Array.isArray 为 false），统一转成 JS 数组。 */
@@ -140,12 +140,12 @@ PanelShell {
     function accountName() {
         const account = panel.currentAccount
         if (!account)
-            return "未登录"
+            return I18n.tr("未登录")
         if (account.nickname && String(account.nickname) !== "")
             return String(account.nickname)
         if (account.userId && String(account.userId) !== "")
             return "UID " + String(account.userId)
-        return "已登录"
+        return I18n.tr("已登录")
     }
 
     function accountUid() {
@@ -165,13 +165,13 @@ PanelShell {
     function hintText() {
         switch (panel.qrState) {
         case "loading":
-            return "正在向" + panel.sourceLabel + "申请二维码…"
+            return I18n.tr("正在向") + panel.sourceLabel + I18n.tr("申请二维码…")
         case "waiting":
-            return "请使用「" + panel.sourceLabel + "」App 扫码"
+            return I18n.tr("请使用「") + panel.sourceLabel + I18n.tr("」App 扫码")
         case "scanned":
-            return "在手机端确认后即可完成登录"
+            return I18n.tr("在手机端确认后即可完成登录")
         case "expired":
-            return "二维码有效期约 2 分钟，请刷新后重试"
+            return I18n.tr("二维码有效期约 2 分钟，请刷新后重试")
         }
         return ""
     }
@@ -185,7 +185,7 @@ PanelShell {
             panel.accountsError = ""
         }).catch(function(error) {
             panel.accountsLoaded = true
-            panel.accountsError = "账号信息加载失败：" + panel.messageOf(error)
+            panel.accountsError = I18n.tr("账号信息加载失败：") + panel.messageOf(error)
         })
     }
 
@@ -211,7 +211,7 @@ PanelShell {
         Api.call("login.logout", { source: target }).then(function() {
             panel._loggingOut = false
             panel.confirmLogout = false
-            Toast.show("已退出" + (target === "BILIBILI" ? "哔哩哔哩" : "网易云音乐") + "登录", "info")
+            Toast.show(I18n.tr("已退出") + (target === "BILIBILI" ? I18n.tr("哔哩哔哩") : I18n.tr("网易云音乐")) + I18n.tr("登录"), "info")
             panel.accounts = panel.accounts.filter(function(item) {
                 return !item || item.source !== target
             })
@@ -220,7 +220,7 @@ PanelShell {
         }).catch(function(error) {
             panel._loggingOut = false
             panel.confirmLogout = false
-            Toast.show("退出登录失败：" + panel.messageOf(error), "error")
+            Toast.show(I18n.tr("退出登录失败：") + panel.messageOf(error), "error")
         })
     }
 
@@ -231,9 +231,9 @@ PanelShell {
             if (result && result.account)
                 panel.upsertAccount(result.account)
             panel.loadAccounts()
-            Toast.show("账号信息已刷新", "info")
+            Toast.show(I18n.tr("账号信息已刷新"), "info")
         }).catch(function(error) {
-            Toast.show("刷新失败：" + panel.messageOf(error), "error")
+            Toast.show(I18n.tr("刷新失败：") + panel.messageOf(error), "error")
         })
     }
 
@@ -269,7 +269,7 @@ PanelShell {
         panel.qrState = "loading"
         panel.qrError = ""
         panel.qrImageSource = ""
-        panel.statusText = "正在生成二维码…"
+        panel.statusText = I18n.tr("正在生成二维码…")
 
         Api.call("login.qrStart", { source: panel.source }).then(function(result) {
             panel._qrStarting = false
@@ -277,21 +277,21 @@ PanelShell {
                 return
             if (!result || !result.qrImageDataUrl) {
                 panel.qrState = "error"
-                panel.qrError = "二维码获取失败，请重试"
+                panel.qrError = I18n.tr("二维码获取失败，请重试")
                 panel.statusText = ""
                 return
             }
             panel.qrKey = result.key ? String(result.key) : ""
             panel.qrImageSource = String(result.qrImageDataUrl)
             panel.qrState = "waiting"
-            panel.statusText = "等待扫码…"
+            panel.statusText = I18n.tr("等待扫码…")
             pollTimer.start()
         }).catch(function(error) {
             panel._qrStarting = false
             if (token !== panel._sessionToken)
                 return
             panel.qrState = "error"
-            panel.qrError = "二维码获取失败：" + panel.messageOf(error)
+            panel.qrError = I18n.tr("二维码获取失败：") + panel.messageOf(error)
             panel.statusText = ""
         })
     }
@@ -314,18 +314,18 @@ PanelShell {
                 panel.handleLoginSuccess(result.account)
             } else if (status === "SCANNED") {
                 panel.qrState = "scanned"
-                panel.statusText = "已扫码，请在手机上确认"
+                panel.statusText = I18n.tr("已扫码，请在手机上确认")
             } else if (status === "WAITING") {
                 panel.qrState = "waiting"
-                panel.statusText = "等待扫码…"
+                panel.statusText = I18n.tr("等待扫码…")
             } else if (status === "EXPIRED") {
                 panel.stopPolling()
                 panel.qrState = "expired"
-                panel.statusText = "二维码已过期"
+                panel.statusText = I18n.tr("二维码已过期")
             } else {
                 panel.stopPolling()
                 panel.qrState = "error"
-                panel.qrError = result && result.message ? String(result.message) : "登录失败，请重试"
+                panel.qrError = result && result.message ? String(result.message) : I18n.tr("登录失败，请重试")
                 panel.statusText = ""
             }
         }).catch(function(error) {
@@ -334,7 +334,7 @@ PanelShell {
                 return
             panel.stopPolling()
             panel.qrState = "error"
-            panel.qrError = "轮询登录状态失败：" + panel.messageOf(error)
+            panel.qrError = I18n.tr("轮询登录状态失败：") + panel.messageOf(error)
             panel.statusText = ""
         })
     }
@@ -342,16 +342,16 @@ PanelShell {
     function handleLoginSuccess(account) {
         panel.stopPolling()
         panel.qrState = "success"
-        panel.statusText = "登录成功"
+        panel.statusText = I18n.tr("登录成功")
         if (account && account.source)
             panel.source = account.source
         Nav.loginSource = panel.source
         panel.upsertAccount(account)
         const label = panel.sourceLabel
         if (account && account.nickname && String(account.nickname) !== "")
-            Toast.show("已登录" + label + "：" + String(account.nickname), "info")
+            Toast.show(I18n.tr("已登录") + label + "：" + String(account.nickname), "info")
         else
-            Toast.show("已登录" + label, "info")
+            Toast.show(I18n.tr("已登录") + label, "info")
         panel.loadAccounts()
         successCloseTimer.start()
     }
@@ -401,14 +401,14 @@ PanelShell {
                 spacing: 8
 
                 PanelButton {
-                    text: "网易云音乐"
+                    text: I18n.tr("网易云音乐")
                     chip: true
                     selected: panel.source === "NETEASE"
                     onClicked: panel.switchSource("NETEASE")
                 }
 
                 PanelButton {
-                    text: "哔哩哔哩"
+                    text: I18n.tr("哔哩哔哩")
                     chip: true
                     selected: panel.source === "BILIBILI"
                     onClicked: panel.switchSource("BILIBILI")
@@ -440,7 +440,7 @@ PanelShell {
                         loading: panel.qrState === "loading"
                         dimmed: panel.qrState === "expired"
                         imageSource: panel.qrImageSource
-                        placeholderText: panel.qrState === "error" ? "二维码生成失败" : ""
+                        placeholderText: panel.qrState === "error" ? I18n.tr("二维码生成失败") : ""
                     }
                 }
 
@@ -483,7 +483,7 @@ PanelShell {
                     PanelButton {
                         anchors.centerIn: parent
                         visible: panel.qrState === "expired"
-                        text: "刷新二维码"
+                        text: I18n.tr("刷新二维码")
                         filled: true
                         onClicked: panel.startQr()
                     }
@@ -493,7 +493,7 @@ PanelShell {
                     width: parent.width
                     horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.Wrap
-                    text: "登录后可访问你的歌单 / 收藏夹，并使用更高音质；账号凭据仅保存在本机配置目录。"
+                    text: I18n.tr("登录后可访问你的歌单 / 收藏夹，并使用更高音质；账号凭据仅保存在本机配置目录。")
                     color: Theme.withAlpha(Theme.onSurfaceVariantColor, 0.85)
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.textStyle("labelSmall").size
@@ -582,13 +582,13 @@ PanelShell {
                     visible: !panel.confirmLogout
 
                     PanelButton {
-                        text: "刷新账号信息"
+                        text: I18n.tr("刷新账号信息")
                         outlined: true
                         onClicked: panel.refreshProfile()
                     }
 
                     PanelButton {
-                        text: "退出登录"
+                        text: I18n.tr("退出登录")
                         outlined: true
                         onClicked: panel.confirmLogout = true
                     }
@@ -605,7 +605,7 @@ PanelShell {
 
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            text: "确定退出 " + panel.accountName() + " 吗？"
+                            text: I18n.tr("确定退出 ") + panel.accountName() + I18n.tr(" 吗？")
                             color: Theme.onSurfaceVariantColor
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.textStyle("bodySmall").size
@@ -615,13 +615,13 @@ PanelShell {
                             spacing: 8
 
                             PanelButton {
-                                text: "确认退出"
+                                text: I18n.tr("确认退出")
                                 filled: true
                                 onClicked: panel.logout()
                             }
 
                             PanelButton {
-                                text: "取消"
+                                text: I18n.tr("取消")
                                 outlined: true
                                 onClicked: panel.confirmLogout = false
                             }

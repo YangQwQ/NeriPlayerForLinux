@@ -14,8 +14,8 @@ Item {
     property string description: ""
     property bool showPlayAll: true
     property bool showCollect: false
-    property string playAllText: "播放全部"
-    property string collectText: "收藏到本地歌单"
+    property string playAllText: I18n.tr("播放全部")
+    property string collectText: I18n.tr("收藏到本地歌单")
 
     signal playAllClicked()
     signal collectClicked()

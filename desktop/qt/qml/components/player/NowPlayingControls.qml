@@ -173,7 +173,7 @@ Item {
             size: 44
             iconColor: Player.favorite ? root.favoriteColor : np.foregroundDim
             hoverColor: np.hoverFill
-            tooltip: Player.favorite ? "取消收藏" : "加入我喜欢的音乐"
+            tooltip: Player.favorite ? I18n.tr("取消收藏") : I18n.tr("加入我喜欢的音乐")
             onClicked: Player.toggleFavorite()
         }
 
@@ -207,7 +207,7 @@ Item {
                 size: 38
                 iconColor: Player.shuffle ? np.accent : np.foregroundDim
                 hoverColor: np.hoverFill
-                tooltip: Player.shuffle ? "随机播放：开" : "随机播放：关"
+                tooltip: Player.shuffle ? I18n.tr("随机播放：开") : I18n.tr("随机播放：关")
                 onClicked: Player.toggleShuffle()
             }
 
@@ -217,7 +217,7 @@ Item {
                 size: 38
                 iconColor: np.foregroundDim
                 hoverColor: np.hoverFill
-                tooltip: "播放队列"
+                tooltip: I18n.tr("播放队列")
                 onClicked: Nav.openQueuePanel()
             }
 
@@ -227,7 +227,7 @@ Item {
                 size: 38
                 iconColor: Player.equalizerEnabled ? np.accent : np.foregroundDim
                 hoverColor: np.hoverFill
-                tooltip: "音效与倍速"
+                tooltip: I18n.tr("音效与倍速")
                 onClicked: Nav.openEffectsPanel()
             }
 
@@ -237,7 +237,7 @@ Item {
                 size: 38
                 iconColor: np.foregroundDim
                 hoverColor: np.hoverFill
-                tooltip: "音量"
+                tooltip: I18n.tr("音量")
                 onClicked: Nav.openVolumePanel()
             }
         }
@@ -257,7 +257,7 @@ Item {
                 size: 38
                 iconColor: Player.sleepTimer && Player.sleepTimer.active ? np.accent : np.foregroundDim
                 hoverColor: np.hoverFill
-                tooltip: "睡眠定时器"
+                tooltip: I18n.tr("睡眠定时器")
                 onClicked: Nav.openSleepPanel()
             }
 
@@ -267,7 +267,7 @@ Item {
                 size: 38
                 iconColor: np.foregroundDim
                 hoverColor: np.hoverFill
-                tooltip: "下载"
+                tooltip: I18n.tr("下载")
                 onClicked: Nav.openDownloadsPanel()
             }
 
@@ -277,7 +277,7 @@ Item {
                 size: 38
                 iconColor: np.foregroundDim
                 hoverColor: np.hoverFill
-                tooltip: "全屏歌词"
+                tooltip: I18n.tr("全屏歌词")
                 onClicked: root.lyricsRequested()
             }
 
@@ -288,8 +288,8 @@ Item {
                 size: 38
                 iconColor: Player.repeatMode === "OFF" ? np.foregroundDim : np.accent
                 hoverColor: np.hoverFill
-                tooltip: Player.repeatMode === "ONE" ? "单曲循环"
-                       : (Player.repeatMode === "ALL" ? "列表循环" : "不循环")
+                tooltip: Player.repeatMode === "ONE" ? I18n.tr("单曲循环")
+                       : (Player.repeatMode === "ALL" ? I18n.tr("列表循环") : I18n.tr("不循环"))
                 onClicked: Player.cycleRepeatMode()
             }
         }
@@ -307,7 +307,7 @@ Item {
                 size: 48
                 iconColor: np.foreground
                 hoverColor: np.hoverFill
-                tooltip: "上一首"
+                tooltip: I18n.tr("上一首")
                 onClicked: Player.previous()
             }
 
@@ -357,7 +357,7 @@ Item {
                 size: 48
                 iconColor: np.foreground
                 hoverColor: np.hoverFill
-                tooltip: "下一首"
+                tooltip: I18n.tr("下一首")
                 onClicked: Player.next()
             }
         }

@@ -15,18 +15,18 @@ Item {
         if (root.overrideText !== "")
             return root.overrideText
         if (root.roomStatus === "controller_offline")
-            return "控制者离线"
+            return I18n.tr("控制者离线")
         switch (root.connection) {
         case "connected":
-            return root.inRoom ? "已连接" : "服务端可用"
+            return root.inRoom ? I18n.tr("已连接") : I18n.tr("服务端可用")
         case "connecting":
-            return "连接中"
+            return I18n.tr("连接中")
         case "reconnecting":
-            return "重连中"
+            return I18n.tr("重连中")
         case "error":
-            return "连接错误"
+            return I18n.tr("连接错误")
         default:
-            return root.inRoom ? "已断开" : "未连接"
+            return root.inRoom ? I18n.tr("已断开") : I18n.tr("未连接")
         }
     }
 

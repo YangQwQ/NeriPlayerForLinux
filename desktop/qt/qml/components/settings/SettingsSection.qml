@@ -104,7 +104,7 @@ Item {
 
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
-                        text: root.expanded ? "收起" : "展开"
+                        text: root.expanded ? I18n.tr("收起") : I18n.tr("展开")
                         color: Theme.onSurfaceVariantColor
                         font.family: Theme.fontFamily
                         font.pixelSize: 12
