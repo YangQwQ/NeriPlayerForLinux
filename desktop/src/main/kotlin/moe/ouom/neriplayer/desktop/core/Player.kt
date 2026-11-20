@@ -5,8 +5,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -17,6 +20,7 @@ import moe.ouom.neriplayer.desktop.net.OnlineRepository
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicReference
 import javax.imageio.ImageIO
 import kotlin.math.abs
 import kotlin.math.pow
@@ -44,7 +48,14 @@ class PlayerManager(
     private val downloads: DownloadCatalog,
 ) {
 
-    val engine: AudioEngine = createAudioEngine()
+    private val _activeEngine = MutableStateFlow(createAudioEngine())
+    /** 当前输出引擎；交叉淡入时会临时切换到新引擎。 */
+    val engine: AudioEngine get() = _activeEngine.value
+
+    /** 交叉淡入期间仍在淡出的旧引擎；结束后释放。 */
+    @Volatile private var outgoingEngine: AudioEngine? = null
+    private var crossfadeJob: Job? = null
+    private var crossfadeGeneration = 0
 
     private val _queue = MutableStateFlow<List<Song>>(emptyList())
     val queue: StateFlow<List<Song>> = _queue.asStateFlow()
@@ -114,13 +125,15 @@ class PlayerManager(
     val supportsEffects: Boolean get() = engine.supportsEffects
 
     init {
-        engine.onCompleted = { scope.launch { handleTrackCompleted() } }
-        engine.onError = { message ->
-            _state.value = PlaybackState.ERROR
-            _buffering.value = false
-            scope.launch { _messages.emit(message) }
-            maybeRetryWithAutoSource()
-        }
+        val saved = settings.current
+        FadeSettings.apply(
+            saved.fadeEnabled,
+            saved.fadeInMs,
+            saved.fadeOutMs,
+            saved.crossfadeEnabled,
+            saved.crossfadeMs,
+        )
+        bindEngineCallbacks(engine)
         engine.setVolume(_volume.value)
         if (engine.supportsEffects) {
             engine.setSpeed(_speed.value)
@@ -141,35 +154,58 @@ class PlayerManager(
 
     fun attachSnapshotFlow() {
         scope.launch {
-            engine.snapshot.collect { snapshot ->
-                _buffering.value = snapshot.buffering
-                if (snapshot.playing != (_state.value == PlaybackState.PLAYING)) {
-                    _state.value = when {
-                        snapshot.error != null -> PlaybackState.ERROR
-                        snapshot.playing -> PlaybackState.PLAYING
-                        _state.value == PlaybackState.PLAYING -> PlaybackState.PAUSED
-                        else -> _state.value
+            _activeEngine.collectLatest { target ->
+                target.snapshot.collect { snapshot ->
+                    _buffering.value = snapshot.buffering
+                    if (snapshot.playing != (_state.value == PlaybackState.PLAYING)) {
+                        _state.value = when {
+                            snapshot.error != null -> PlaybackState.ERROR
+                            snapshot.playing -> PlaybackState.PLAYING
+                            _state.value == PlaybackState.PLAYING -> PlaybackState.PAUSED
+                            else -> _state.value
+                        }
                     }
                 }
             }
         }
     }
 
-    val positionMs: StateFlow<Long> = engine.snapshot.let { snapshot ->
-        derivedState(snapshot) { it.positionMs }
+    /** 引擎快照流：切换引擎后自动跟随新的 snapshot。 */
+    private val engineSnapshots: Flow<EngineSnapshot> = _activeEngine.flatMapLatest { it.snapshot }
+
+    val positionMs: StateFlow<Long> = derivedState(engineSnapshots) { it.positionMs }
+    val durationMs: StateFlow<Long> = derivedState(engineSnapshots) { it.durationMs }
+
+    private fun bindEngineCallbacks(target: AudioEngine) {
+        target.onCompleted = { scope.launch { handleTrackCompleted() } }
+        target.onError = { message ->
+            _state.value = PlaybackState.ERROR
+            _buffering.value = false
+            scope.launch { _messages.emit(message) }
+            maybeRetryWithAutoSource()
+        }
+        target.setVolume(_volume.value)
+        if (target.supportsEffects) {
+            target.setSpeed(_speed.value)
+            target.setPitch(_pitch.value)
+            target.setLoudness(_loudness.value)
+            target.setEqualizer(if (_equalizerEnabled.value) _equalizerBands.value else null)
+        }
     }
 
-    val durationMs: StateFlow<Long> = engine.snapshot.let { snapshot ->
-        derivedState(snapshot) { it.durationMs }
+    /** 切到新引擎并同步应用当前设置；旧引擎由调用方决定是否继续淡出。 */
+    private fun switchEngine(next: AudioEngine) {
+        _activeEngine.value = next
+        bindEngineCallbacks(next)
     }
 
     private fun <T> derivedState(
-        source: StateFlow<EngineSnapshot>,
+        source: Flow<EngineSnapshot>,
         selector: (EngineSnapshot) -> T,
     ): StateFlow<T> {
-        val holder = MutableStateFlow(selector(source.value))
+        val holder = MutableStateFlow(selector(engine.snapshot.value))
         scope.launch {
-            source.collect { holder.value = selector(it) }
+            source.collectLatest { holder.value = selector(it) }
         }
         return holder.asStateFlow()
     }
@@ -319,6 +355,7 @@ class PlayerManager(
     }
 
     fun seekTo(positionMs: Long) {
+        engine.fadeReset(if (_state.value == PlaybackState.PLAYING) 1f else 0f)
         engine.seekTo(positionMs)
     }
 
@@ -415,9 +452,11 @@ class PlayerManager(
         val index = _currentIndex.value
         if (index !in queue.indices) return
         val song = queue[index]
+        val switchingTrack = currentPlayingKey != null && currentPlayingKey != song.key
         _currentSong.value = song
         _state.value = PlaybackState.PREPARING
         _buffering.value = true
+        beginCrossfadeIfNeeded(switchingTrack)
         engine.prepare(song.durationMs)
         _lyrics.value = lyricsRepository.cached(song) ?: Lyrics()
         scope.launch { loadLyricsFor(song) }
@@ -450,8 +489,44 @@ class PlayerManager(
         }
     }
 
+    /**
+     * 交叉淡入：切歌时把当前引擎降级为「旧曲」，仅做淡出；为新曲创建独立引擎，
+     * 两路 PCM 由系统混音器（PipeWire/PulseAudio）按互补增益叠加，实现真正的重叠渐变。
+     * 无交叉淡入或首曲播放时不做任何切换，保持原有手感。
+     */
+    private fun beginCrossfadeIfNeeded(switchingTrack: Boolean) {
+        if (!switchingTrack || !FadeSettings.crossfadeEnabled) return
+        if (_state.value != PlaybackState.PLAYING) return
+        val previous = engine
+        val duration = FadeSettings.crossfadeMs
+        // 旧曲的完成回调不应触发再次切歌；淡出结束后它会被 release。
+        previous.onCompleted = null
+        previous.fadeTo(0f, 48_000, duration)
+        outgoingEngine = previous
+        switchEngine(createAudioEngine())
+        crossfadeJob?.cancel()
+        val generation = ++crossfadeGeneration
+        crossfadeJob = scope.launch {
+            delay(duration.toLong() + 200L)
+            finishCrossfade(generation)
+        }
+    }
+
+    /** 交叉淡入窗口结束后释放旧引擎；若期间又发生切歌，旧的 cleanup 会被 generation 拦下。 */
+    private fun finishCrossfade(generation: Int? = null) {
+        if (generation != null && generation != crossfadeGeneration) return
+        outgoingEngine?.let { old ->
+            old.setPcmTap(null)
+            old.release()
+        }
+        outgoingEngine = null
+        crossfadeJob = null
+    }
+
     private fun stopPlaybackInternal() {
         flushListeningTime()
+        crossfadeJob?.cancel()
+        finishCrossfade()
         engine.release()
         currentPlayingKey = null
         playbackStartedAt = 0L
@@ -622,21 +697,22 @@ class PlayerManager(
         val clamped = value.coerceIn(0f, 1f)
         _volume.value = clamped
         engine.setVolume(clamped)
-        settings.update { it.copy(volume = clamped) }
+        outgoingEngine?.setVolume(clamped)
+        settings.updateDeferred { it.copy(volume = clamped) }
     }
 
     fun setSpeed(value: Float) {
         val clamped = value.coerceIn(0.5f, 3f)
         _speed.value = clamped
         engine.setSpeed(clamped)
-        settings.update { it.copy(playbackSpeed = clamped) }
+        settings.updateDeferred { it.copy(playbackSpeed = clamped) }
     }
 
     fun setPitch(semitones: Float) {
         val clamped = semitones.coerceIn(-12f, 12f)
         _pitch.value = clamped
         engine.setPitch(clamped)
-        settings.update { it.copy(pitchSemitone = clamped) }
+        settings.updateDeferred { it.copy(pitchSemitone = clamped) }
     }
 
     fun setLoudness(enabled: Boolean) {
@@ -665,6 +741,29 @@ class PlayerManager(
         _equalizerBands.value = bands
         engine.setEqualizer(bands)
         settings.update { it.copy(equalizerBands = bands, equalizerPreset = "自定义") }
+    }
+
+    /** 更新淡入淡出 / 交叉淡入设置；内存与引擎立即生效，写盘延迟合并。 */
+    fun setFadeOptions(
+        fadeEnabled: Boolean,
+        fadeInMs: Int,
+        fadeOutMs: Int,
+        crossfadeEnabled: Boolean,
+        crossfadeMs: Int,
+    ) {
+        val inMs = fadeInMs.coerceAtLeast(0)
+        val outMs = fadeOutMs.coerceAtLeast(0)
+        val crossMs = crossfadeMs.coerceAtLeast(0)
+        FadeSettings.apply(fadeEnabled, inMs, outMs, crossfadeEnabled, crossMs)
+        settings.updateDeferred {
+            it.copy(
+                fadeEnabled = fadeEnabled,
+                fadeInMs = inMs,
+                fadeOutMs = outMs,
+                crossfadeEnabled = crossfadeEnabled,
+                crossfadeMs = crossMs,
+            )
+        }
     }
 
     fun resetEffects() {

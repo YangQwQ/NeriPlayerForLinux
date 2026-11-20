@@ -80,6 +80,17 @@ object PlayerApi {
         }
         server.on("player.resetEffects") { player.resetEffects(); ok() }
 
+        // 淡入淡出 / 交叉淡入：一次性传全部字段，与 AppSettings 字段名保持一致。
+        server.on("player.setFadeOptions") {
+            val fadeEnabled = it.boolOrNull("fadeEnabled") ?: badRequest("缺少 fadeEnabled")
+            val fadeInMs = it.intOrNull("fadeInMs") ?: badRequest("缺少 fadeInMs")
+            val fadeOutMs = it.intOrNull("fadeOutMs") ?: badRequest("缺少 fadeOutMs")
+            val crossfadeEnabled = it.boolOrNull("crossfadeEnabled") ?: badRequest("缺少 crossfadeEnabled")
+            val crossfadeMs = it.intOrNull("crossfadeMs") ?: badRequest("缺少 crossfadeMs")
+            player.setFadeOptions(fadeEnabled, fadeInMs, fadeOutMs, crossfadeEnabled, crossfadeMs)
+            ok()
+        }
+
         server.on("player.setQueue") { params ->
             val songs = songsOf(params)
             val startIndex = params.intOrNull("startIndex") ?: 0

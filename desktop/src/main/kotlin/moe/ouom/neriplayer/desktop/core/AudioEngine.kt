@@ -7,6 +7,7 @@ import java.io.BufferedInputStream
 import java.io.File
 import java.io.InputStream
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import javax.sound.sampled.AudioFormat
 import javax.sound.sampled.AudioSystem
 import javax.sound.sampled.DataLine
@@ -51,6 +52,21 @@ interface AudioEngine {
     fun setPitch(semitones: Float)
     fun setLoudness(enabled: Boolean)
     fun setEqualizer(bands: List<Float>?)
+
+    /** 渐变目标：target=1f 淡入、0f 淡出；durationMs<=0 时立即跳变。 */
+    fun fadeTo(target: Float, sampleRate: Int, durationMs: Int) = Unit
+
+    /** 立即把渐变增益设为 value（seek / 起播时清除残留渐变）。 */
+    fun fadeReset(value: Float) = Unit
+
+    /** 交叉淡入：新引擎写入前与旧引擎 PCM 叠加；传 null 取消。 */
+    fun setMixFrom(source: (() -> Pair<ByteArray, Int>)?) = Unit
+
+    /**
+     * 交叉淡入：把本引擎的输出 PCM 推给新引擎（在应用自身增益之后）。
+     * 传 null 关闭 tap。回调参数 (PCM, 有效字节数)。
+     */
+    fun setPcmTap(tap: ((ByteArray, Int) -> Unit)?) = Unit
 }
 
 private const val SAMPLE_RATE = 48_000
@@ -123,6 +139,9 @@ class FfmpegAudioEngine : AudioEngine {
     private var restarting = false
     private var generation = 0
     private val pauseGate = Object()
+    private val fadeGain = FadeGain()
+    private val mixSource = MixSource()
+    @Volatile private var pcmTap: ((ByteArray, Int) -> Unit)? = null
 
     @Volatile
     private var paused = false
@@ -135,6 +154,8 @@ class FfmpegAudioEngine : AudioEngine {
             this.durationMs = durationMs
             playRequested = false
             paused = false
+            fadeGain.reset(1f)
+            mixSource.set(null)
             _snapshot.value = EngineSnapshot(
                 positionMs = this.offsetMs,
                 durationMs = durationMs,
@@ -164,6 +185,12 @@ class FfmpegAudioEngine : AudioEngine {
             paused = false
             line
         }
+        if (FadeSettings.fadeEnabled) {
+            fadeGain.reset(0f)
+            fadeGain.retarget(1f, SAMPLE_RATE, FadeSettings.fadeInMs)
+        } else {
+            fadeGain.reset(1f)
+        }
         synchronized(pauseGate) { pauseGate.notifyAll() }
         if (current == null) {
             startPipeline(startMs = synchronized(lock) { offsetMs }, autoPlay = true)
@@ -174,13 +201,30 @@ class FfmpegAudioEngine : AudioEngine {
     }
 
     override fun pause() {
-        val current = synchronized(lock) {
+        synchronized(lock) {
             playRequested = false
             paused = true
-            line
         }
-        runCatching { current?.stop() }
+        if (FadeSettings.fadeEnabled) {
+            // 淡出期间保持 line 运行，由读取线程写完渐变采样后再停。
+            fadeGain.retarget(0f, SAMPLE_RATE, FadeSettings.fadeOutMs)
+        } else {
+            fadeGain.reset(0f)
+            synchronized(lock) { line }?.let { runCatching { it.stop() } }
+        }
+        synchronized(pauseGate) { pauseGate.notifyAll() }
         _snapshot.value = _snapshot.value.copy(playing = false)
+    }
+
+    override fun fadeTo(target: Float, sampleRate: Int, durationMs: Int) =
+        fadeGain.retarget(target, sampleRate, durationMs)
+
+    override fun fadeReset(value: Float) = fadeGain.reset(value)
+
+    override fun setMixFrom(source: (() -> Pair<ByteArray, Int>)?) = mixSource.set(source)
+
+    override fun setPcmTap(tap: ((ByteArray, Int) -> Unit)?) {
+        pcmTap = tap
     }
 
     override fun release() {
@@ -378,13 +422,13 @@ class FfmpegAudioEngine : AudioEngine {
         try {
             while (true) {
                 if (synchronized(lock) { generation != myGeneration || restarting }) break
-                // 暂停时在此等待，避免继续消费解码数据（否则会一路读到文件尾并误判为播放结束）
-                awaitResume(myGeneration)
+                // 暂停时等淡出写完再阻塞读取线程（避免读到文件尾误判为播放结束）。
+                if (!awaitPauseGate(myGeneration, line)) break
                 if (synchronized(lock) { generation != myGeneration || restarting }) break
                 val read = inputStream.read(buffer)
                 if (read < 0) {
                     // 处于暂停状态读到结尾时不立即切歌，等恢复播放后再结算
-                    awaitResume(myGeneration)
+                    if (!awaitPauseGate(myGeneration, line)) return
                     if (synchronized(lock) { generation != myGeneration }) return
                     finishedNormally = true
                     break
@@ -424,16 +468,12 @@ class FfmpegAudioEngine : AudioEngine {
     }
 
     private fun applyVolume(buffer: ByteArray, length: Int) {
-        val gain = volume
+        val frames = length / BYTES_PER_FRAME
+        val gain = volume * fadeGain.gainAndAdvance(frames)
+        mixSource.drain().let { (other, otherLength) -> mixPcm(buffer, length, other, otherLength, BYTES_PER_FRAME) }
         if (abs(gain - 1f) < 0.001f) return
-        var index = 0
-        while (index + 1 < length) {
-            val sample = ((buffer[index].toInt() and 0xFF) or (buffer[index + 1].toInt() shl 8)).toShort()
-            val scaled = (sample * gain).toInt().coerceIn(-32768, 32767)
-            buffer[index] = (scaled and 0xFF).toByte()
-            buffer[index + 1] = ((scaled shr 8) and 0xFF).toByte()
-            index += 2
-        }
+        scalePcm(buffer, length, gain, BYTES_PER_FRAME)
+        pcmTap?.invoke(buffer, length)
     }
 
     private fun tickLoop() {
@@ -454,14 +494,20 @@ class FfmpegAudioEngine : AudioEngine {
         }
     }
 
-    /** 暂停期间阻塞读取线程，直到恢复播放、切换歌曲或释放引擎。 */
-    private fun awaitResume(myGeneration: Int) {
-        if (!paused) return
-        synchronized(pauseGate) {
-            while (paused && synchronized(lock) { generation == myGeneration }) {
-                runCatching { pauseGate.wait(200L) }
+    /**
+     * 暂停时先让主循环继续消费 PCM 直到淡出增益归零（增益在 applyVolume 中推进），
+     * 之后停 line 并阻塞等待恢复；返回 false 表示 generation 已失效，调用方应退出循环。
+     */
+    private fun awaitPauseGate(myGeneration: Int, line: SourceDataLine): Boolean {
+        if (paused && fadeGain.gainAndAdvance(0) <= 0f) {
+            runCatching { line.stop() }
+            synchronized(pauseGate) {
+                while (paused && synchronized(lock) { generation == myGeneration }) {
+                    runCatching { pauseGate.wait(200L) }
+                }
             }
         }
+        return synchronized(lock) { generation == myGeneration }
     }
 
     private fun stopPipelineLocked() {
@@ -494,10 +540,15 @@ class JavaSoundAudioEngine : AudioEngine {
     private var offsetMs = 0L
     private var durationMs = 0L
     private var volume = 0.85f
+    @Volatile private var frameBytes = 4
+    @Volatile private var sampleRate = SAMPLE_RATE
     private var playRequested = false
     private var generation = 0
     private val closing = AtomicBoolean(false)
     private val pauseGate = Object()
+    private val fadeGain = FadeGain()
+    private val mixSource = MixSource()
+    @Volatile private var pcmTap: ((ByteArray, Int) -> Unit)? = null
 
     @Volatile
     private var paused = false
@@ -511,6 +562,8 @@ class JavaSoundAudioEngine : AudioEngine {
             generation += 1
             playRequested = false
             paused = false
+            fadeGain.reset(1f)
+            mixSource.set(null)
         }
         synchronized(pauseGate) { pauseGate.notifyAll() }
         _snapshot.value = EngineSnapshot(positionMs = startMs, durationMs = durationMs, buffering = true)
@@ -535,6 +588,12 @@ class JavaSoundAudioEngine : AudioEngine {
             paused = false
             thread == null
         }
+        if (FadeSettings.fadeEnabled) {
+            fadeGain.reset(0f)
+            fadeGain.retarget(1f, sampleRate, FadeSettings.fadeInMs)
+        } else {
+            fadeGain.reset(1f)
+        }
         synchronized(pauseGate) { pauseGate.notifyAll() }
         if (shouldStart) {
             startStream()
@@ -549,8 +608,25 @@ class JavaSoundAudioEngine : AudioEngine {
             playRequested = false
             paused = true
         }
-        synchronized(lock) { line }?.let { runCatching { it.stop() } }
+        if (FadeSettings.fadeEnabled) {
+            fadeGain.retarget(0f, sampleRate, FadeSettings.fadeOutMs)
+        } else {
+            fadeGain.reset(0f)
+            synchronized(lock) { line }?.let { runCatching { it.stop() } }
+        }
+        synchronized(pauseGate) { pauseGate.notifyAll() }
         _snapshot.value = _snapshot.value.copy(playing = false)
+    }
+
+    override fun fadeTo(target: Float, sampleRate: Int, durationMs: Int) =
+        fadeGain.retarget(target, sampleRate, durationMs)
+
+    override fun fadeReset(value: Float) = fadeGain.reset(value)
+
+    override fun setMixFrom(source: (() -> Pair<ByteArray, Int>)?) = mixSource.set(source)
+
+    override fun setPcmTap(tap: ((ByteArray, Int) -> Unit)?) {
+        pcmTap = tap
     }
 
     override fun release() {
@@ -608,6 +684,8 @@ class JavaSoundAudioEngine : AudioEngine {
         val decoded = runCatching { AudioSystem.getAudioInputStream(AudioFormat.Encoding.PCM_SIGNED, raw) }
             .getOrElse { raw }
         val format = decoded.format
+        frameBytes = (format.sampleSizeInBits / 8).coerceAtLeast(1) * format.channels.coerceAtLeast(1)
+        sampleRate = format.frameRate.toInt().coerceAtLeast(1)
         val info = DataLine.Info(SourceDataLine::class.java, format)
         val newLine = runCatching { (AudioSystem.getLine(info) as SourceDataLine).apply { open(format) } }
             .getOrElse { error ->
@@ -639,11 +717,11 @@ class JavaSoundAudioEngine : AudioEngine {
             try {
                 while (true) {
                     if (synchronized(lock) { generation != myGeneration }) return@Thread
-                    awaitResume(myGeneration)
+                    if (!awaitPauseGate(myGeneration, newLine)) return@Thread
                     if (synchronized(lock) { generation != myGeneration }) return@Thread
                     val read = decoded.read(buffer)
                     if (read < 0) {
-                        awaitResume(myGeneration)
+                        if (!awaitPauseGate(myGeneration, newLine)) return@Thread
                         if (synchronized(lock) { generation != myGeneration }) return@Thread
                         finished = true
                         break
@@ -674,26 +752,29 @@ class JavaSoundAudioEngine : AudioEngine {
     }
 
     private fun applyVolume(buffer: ByteArray, length: Int) {
-        val gain = volume
+        val frames = length / frameBytes
+        val gain = volume * fadeGain.gainAndAdvance(frames)
+        mixSource.drain().let { (other, otherLength) -> mixPcm(buffer, length, other, otherLength, frameBytes) }
         if (abs(gain - 1f) < 0.001f) return
-        var index = 0
-        while (index + 1 < length) {
-            val sample = ((buffer[index].toInt() and 0xFF) or (buffer[index + 1].toInt() shl 8)).toShort()
-            val scaled = (sample * gain).toInt().coerceIn(-32768, 32767)
-            buffer[index] = (scaled and 0xFF).toByte()
-            buffer[index + 1] = ((scaled shr 8) and 0xFF).toByte()
-            index += 2
-        }
+        scalePcm(buffer, length, gain, frameBytes)
+        pcmTap?.invoke(buffer, length)
     }
 
-    /** 暂停期间阻塞读取线程，直到恢复播放或释放引擎。 */
-    private fun awaitResume(myGeneration: Int) {
-        if (!paused) return
-        synchronized(pauseGate) {
-            while (paused && synchronized(lock) { generation == myGeneration }) {
-                runCatching { pauseGate.wait(200L) }
+    /** 暂停时等待淡出完成并停 line，随后阻塞直到恢复播放或释放引擎。 */
+    /**
+     * 暂停时先让主循环继续消费 PCM 直到淡出增益归零（增益在 applyVolume 中推进），
+     * 之后停 line 并阻塞等待恢复；返回 false 表示 generation 已失效，调用方应退出循环。
+     */
+    private fun awaitPauseGate(myGeneration: Int, line: SourceDataLine): Boolean {
+        if (paused && fadeGain.gainAndAdvance(0) <= 0f) {
+            runCatching { line.stop() }
+            synchronized(pauseGate) {
+                while (paused && synchronized(lock) { generation == myGeneration }) {
+                    runCatching { pauseGate.wait(200L) }
+                }
             }
         }
+        return synchronized(lock) { generation == myGeneration }
     }
 
     private fun closeLocked() {
@@ -702,6 +783,82 @@ class JavaSoundAudioEngine : AudioEngine {
         line = null
         thread = null
         synchronized(pauseGate) { pauseGate.notifyAll() }
+    }
+}
+
+/**
+ * 淡入淡出参数的进程内镜像。PlayerManager 更新 AppSettings 时同步到这里，
+ * 引擎无需持有 SettingsRepository；@Volatile 保证命令线程与 PCM 写入线程的可见性。
+ */
+object FadeSettings {
+    @Volatile var fadeEnabled: Boolean = true
+    @Volatile var fadeInMs: Int = 300
+    @Volatile var fadeOutMs: Int = 300
+    @Volatile var crossfadeEnabled: Boolean = false
+    @Volatile var crossfadeMs: Int = 2000
+
+    fun apply(enabled: Boolean, inMs: Int, outMs: Int, crossEnabled: Boolean, crossMs: Int) {
+        fadeEnabled = enabled
+        fadeInMs = inMs.coerceAtLeast(0)
+        fadeOutMs = outMs.coerceAtLeast(0)
+        crossfadeEnabled = crossEnabled
+        crossfadeMs = crossMs.coerceAtLeast(0)
+    }
+}
+
+/** 交叉淡入时旧曲 PCM 的提供者；新曲每写入一批前取走并叠加。 */
+private class MixSource {
+    private val provider = AtomicReference<(() -> Pair<ByteArray, Int>)?>(null)
+
+    fun set(source: (() -> Pair<ByteArray, Int>)?) = provider.set(source)
+
+    fun drain(): Pair<ByteArray, Int> = provider.get()?.invoke() ?: (EMPTY to 0)
+
+    companion object {
+        private val EMPTY = ByteArray(0)
+    }
+}
+
+/** 交叉淡入时保存旧曲最近一批输出 PCM 的槽位，供新曲读取并叠加。 */
+class PcmTapSlot {
+    private val ref = AtomicReference<Pair<ByteArray, Int>>(ByteArray(0) to 0)
+
+    fun publish(buffer: ByteArray, length: Int) {
+        ref.set(buffer.copyOf(length) to length)
+    }
+
+    fun drain(): Pair<ByteArray, Int> = ref.getAndSet(ByteArray(0) to 0)
+
+    fun clear() {
+        ref.set(ByteArray(0) to 0)
+    }
+}
+
+/** 16bit PCM 原地缩放；frameBytes 为每帧字节数（采样宽度 × 声道数）。 */
+private fun scalePcm(buffer: ByteArray, length: Int, gain: Float, frameBytes: Int) {
+    var index = 0
+    val step = frameBytes.coerceAtLeast(2)
+    while (index + 1 < length) {
+        val sample = ((buffer[index].toInt() and 0xFF) or (buffer[index + 1].toInt() shl 8)).toShort()
+        val scaled = (sample * gain).toInt().coerceIn(-32768, 32767)
+        buffer[index] = (scaled and 0xFF).toByte()
+        buffer[index + 1] = ((scaled shr 8) and 0xFF).toByte()
+        index += step
+    }
+}
+
+/** 16bit PCM 叠加：按较短的一侧混合，防止越界。 */
+private fun mixPcm(target: ByteArray, targetLength: Int, source: ByteArray, sourceLength: Int, frameBytes: Int) {
+    val step = frameBytes.coerceAtLeast(2)
+    val limit = (minOf(targetLength, sourceLength) / step) * step
+    var index = 0
+    while (index + 1 < limit) {
+        val a = ((target[index].toInt() and 0xFF) or (target[index + 1].toInt() shl 8)).toShort()
+        val b = ((source[index].toInt() and 0xFF) or (source[index + 1].toInt() shl 8)).toShort()
+        val mixed = (a.toInt() + b.toInt()).coerceIn(-32768, 32767)
+        target[index] = (mixed and 0xFF).toByte()
+        target[index + 1] = ((mixed shr 8) and 0xFF).toByte()
+        index += step
     }
 }
 

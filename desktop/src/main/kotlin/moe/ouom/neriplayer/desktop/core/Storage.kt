@@ -1,6 +1,12 @@
 package moe.ouom.neriplayer.desktop.core
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.KSerializer
@@ -100,6 +106,17 @@ data class AppSettings(
     val volume: Float = 0.85f,
     val playbackSpeed: Float = 1.0f,
     val pitchSemitone: Float = 0.0f,
+    // ---------------------------------------------------------------- 淡入淡出 / 交叉淡入
+    /** 淡入淡出总开关：播放开始、暂停恢复时按下面的时长渐变音量。 */
+    val fadeEnabled: Boolean = true,
+    /** 播放开始 / 恢复播放时的淡入时长（毫秒）。 */
+    val fadeInMs: Int = 300,
+    /** 暂停时的淡出时长（毫秒）；淡出完成后才真正停止输出。 */
+    val fadeOutMs: Int = 300,
+    /** 交叉淡入总开关：关闭时切歌沿用原来的直接切换。 */
+    val crossfadeEnabled: Boolean = false,
+    /** 切歌时新旧两首歌重叠渐变的总时长（毫秒）。 */
+    val crossfadeMs: Int = 2000,
     val loudnessEnhancer: Boolean = false,
     val equalizerEnabled: Boolean = false,
     val equalizerPreset: String = "平直",
@@ -144,6 +161,8 @@ data class AppSettings(
     val lastQueueIndex: Int = 0,
     val lastPositionMs: Long = 0L,
     val homeCards: HomeCardSettings = HomeCardSettings(),
+    /** 首页栏目使用平铺网格而非横向滚动容器。 */
+    val homeGridMode: Boolean = false,
     val libraryViewMode: String = "list",
     val cacheLimitMb: Int = 1024,
     val onboardingAccepted: Boolean = false,
@@ -151,6 +170,18 @@ data class AppSettings(
 
     /** 界面语言：zh-CN 跟随中文原文，en 使用英文翻译。 */
     val language: String = "zh-CN",
+
+    // ---------------------------------------------------------------- 字体与程序背景
+    /** 界面字体族，空串表示使用默认（Noto Sans CJK SC）。 */
+    val appFontFamily: String = "",
+    /** 歌词字体族，空串表示跟随界面字体。 */
+    val lyricFontFamily: String = "",
+    /** 程序背景图片路径，空串表示无自定义背景。 */
+    val appBackgroundImage: String = "",
+    /** 背景模糊半径（像素）。 */
+    val appBackgroundBlur: Int = 0,
+    /** 背景暗化程度（0..1）。 */
+    val appBackgroundDim: Float = 0f,
 
     // ---------------------------------------------------------------- 悬浮歌词
     val floatingLyricsEnabled: Boolean = false,
@@ -212,6 +243,10 @@ class SettingsRepository {
     private val _state = MutableStateFlow(loadDefaults())
     val state: StateFlow<AppSettings> = _state.asStateFlow()
 
+    /** 高频设置（音量等）专用写盘作用域：单线程保证同一时刻只有一次延迟写入。 */
+    private val deferredScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private var deferredJob: Job? = null
+
     private fun loadDefaults(): AppSettings {
         val loaded = store.load()
         val defaultMusic = File(System.getProperty("user.home"), "Music")
@@ -228,6 +263,20 @@ class SettingsRepository {
         val next = transform(_state.value)
         _state.value = next
         store.save(next)
+    }
+
+    /**
+     * 内存状态立即生效、磁盘写入延迟合并：400ms 内的多次更新只写最后一次。
+     * 音量滑块每帧触发，若走 update() 会每帧序列化并原子替换整个 settings.json，
+     * 造成明显卡顿；replace()（settings.set 整体替换）仍保持立即写盘语义。
+     */
+    fun updateDeferred(transform: (AppSettings) -> AppSettings) {
+        _state.value = transform(_state.value)
+        deferredJob?.cancel()
+        deferredJob = deferredScope.launch {
+            delay(400L)
+            store.save(_state.value)
+        }
     }
 
     fun replace(next: AppSettings) {
