@@ -234,8 +234,14 @@ APPRUN
 # 三种格式共用同一份 stage，这里统一构建一次。
 stage_payload
 
+# 无参数时构建全部三种；单一格式失败（如 CI 缺少 rpmbuild/appimagetool）不影响其它格式。
 case "$only" in
-    ""|deb)   build_deb ;;
+    "")
+        build_deb
+        build_rpm       || echo "==> 跳过 .rpm（缺少 rpmbuild 或打包失败）"
+        build_appimage  || echo "==> 跳过 .AppImage（缺少 appimagetool 或打包失败）"
+        ;;
+    deb)      build_deb ;;
     rpm)      build_rpm ;;
     appimage) build_appimage ;;
 esac
