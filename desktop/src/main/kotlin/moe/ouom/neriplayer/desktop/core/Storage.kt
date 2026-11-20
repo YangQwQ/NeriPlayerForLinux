@@ -129,6 +129,10 @@ data class AppSettings(
     val lyricsHighlight: String = "LINE",
     /** 当前歌词高亮动画时长（毫秒）。 */
     val lyricsHighlightDuration: Int = 220,
+    /** 歌词滚动吸附动画缓动：LINEAR / SINE / QUAD / CUBIC。 */
+    val lyricsScrollEasing: String = "CUBIC",
+    /** 歌词滚动吸附动画基准时长（毫秒）。 */
+    val lyricsScrollDuration: Int = 420,
     val coverShowsLyrics: Boolean = true,
     val showNowPlayingTitle: Boolean = true,
     val songTitleMarquee: Boolean = true,
@@ -207,6 +211,8 @@ data class AppSettings(
     val floatingLyricsMaxWidthDp: Float = 900f,
     /** LEFT / CENTER / RIGHT */
     val floatingLyricsAlignment: String = "CENTER",
+    /** 悬浮窗形态：LAYER=layer-shell 置顶覆盖层，NORMAL=普通窗口（可跨屏拖动）。 */
+    val floatingLyricsWindowMode: String = "LAYER",
     /** 位置用屏幕比例表示，支持多分辨率与多屏。 */
     val floatingLyricsPositionX: Float = 0.5f,
     val floatingLyricsPositionY: Float = 0.85f,
@@ -223,6 +229,8 @@ data class AppSettings(
     val closeToTray: Boolean = true,
     /** 最小化时隐藏到托盘。 */
     val minimizeToTray: Boolean = true,
+    /** 托盘控制面板失去焦点时不自动关闭。 */
+    val trayPanelPersistent: Boolean = false,
     /** 歌曲变化时发送系统通知（窗口隐藏时）。 */
     val notifyOnSongChange: Boolean = true,
     /** 注册 MPRIS，使系统媒体键 / 桌面媒体组件可以控制播放。 */
