@@ -150,7 +150,8 @@ Item {
         anchors.top: tabsArea.bottom
         anchors.topMargin: root.isGroups ? 0 : Theme.spacingXs
         anchors.horizontalCenter: parent.horizontalCenter
-        width: root.width
+        // 宽度取实际列数所需，而不是铺满父项——否则 Grid 内容靠左排、右侧留白，左右边距不等。
+        width: Math.min(root.width, root.columns * root.cardWidth + (root.columns - 1) * root.gridSpacing)
         columns: root.columns
         spacing: root.gridSpacing
         visible: root.count > 0
