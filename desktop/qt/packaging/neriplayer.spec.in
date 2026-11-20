@@ -52,6 +52,7 @@ cp -a @RPM_BUILDROOT@/. %{buildroot}/
 /usr/bin/neriplayer
 /usr/lib/neriplayer/neriplayer
 /usr/lib/neriplayer/neriplayer-core.jar
+/usr/lib/neriplayer/lib_neri.so
 /usr/lib/neriplayer/runtime
 /usr/share/applications/neriplayer.desktop
 /usr/share/icons/hicolor/128x128/apps/neriplayer.png
