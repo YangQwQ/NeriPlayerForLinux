@@ -52,12 +52,15 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
+          # Ubuntu 22.04 上 Qt6 SVG 开发包名是 libqt6svg6-dev（不是 qt6-svg-dev）。
           sudo apt-get install -y --no-install-recommends \
             build-essential cmake ninja-build \
             qt6-base-dev qt6-base-dev-tools qt6-declarative-dev \
-            qt6-svg-dev qt6-tools-dev \
+            libqt6svg6-dev \
             openjdk-17-jdk-headless rpm \
             libfuse2 desktop-file-utils
+          # qt6-tools-dev 不是构建必需，装不到也不影响（CMake 只用 Qt6 Core/Gui/Quick/Qml/Network/Svg/DBus）。
+          sudo apt-get install -y --no-install-recommends qt6-tools-dev || true
           # LayerShellQt 只用于 Wayland 悬浮窗；CMake 里是 QUIET 可回退，装不到也能构建。
           sudo apt-get install -y --no-install-recommends liblayershellqtinterface-dev \
             || echo "LayerShellQt 开发包不可用，悬浮窗将回退为普通窗口"
