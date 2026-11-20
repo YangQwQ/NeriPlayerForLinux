@@ -35,6 +35,11 @@ NeriPlayer 音理音理是一款多源在线 / 本地音乐播放器（Qt 原生
 托盘常驻与 MPRIS 系统媒体控制。
 
 %global debug_package %{nil}
+# jlink 生成的精简 JRE 二进制没有 GNU build-id，rpm 的 brp-build-id 检查会失败；
+# 这是打包产物而非系统编译包，跳过 build-id 与 unpackaged 严格检查。
+%global _build_id_links none
+%global __debug_install_post %{nil}
+%global _unpackaged_files_terminate_build 0
 
 %install
 # staging 目录已由 build-packages.sh 填好，rpmbuild 仅把它复制进 buildroot。
