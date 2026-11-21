@@ -27,7 +27,8 @@
 | 跨 source 收藏歌单/专辑 | 🔜 | 需后端新增收藏命令，覆盖网易云/B站等多来源 |
 | 关注歌手（平台子切换+远端拉取） | 🔜 | 需后端新增关注/取关注列表命令 |
 | 周/月热点歌单预览 | 🔜 | 需后端新增热点歌单榜命令 |
-| 网易云云盘、歌单/专辑二级分类 | 🔜 | 需后端新增对应分类查询命令 |
+| 网易云云盘 | ✅ | 已接入 `online.neteaseCloudSongs`（明文 /api + 登录 Cookie），网易云 Tab 右上角云图标进入，支持分页/播放全部 |
+| 网易云歌单/专辑二级分类 | 🔜 | 需后端新增对应分类查询命令 |
 | B站收藏夹分类（创建/订阅/合集/系列） | 🔜 | 需后端新增 B站收藏夹分类命令 |
 | 音乐服务器（Subsonic/Navidrome） | 🔜 | 桌面零实现，需后端接入 Subsonic 协议栈 |
 
@@ -92,7 +93,7 @@
 | 3 | 跨 source 收藏歌单/专辑 | `collection.favorite*`（扩展 `protocol-collections.md`） | `pages/LibraryPage.qml`、`components/library/` |
 | 4 | 关注歌手 | `artist.follow` / `artist.following`（新） | 收藏页歌手子页、`components/library/` |
 | 5 | 热点歌单榜（周/月） | `online.hotPlaylists`（新） | `pages/FavoritePage.qml`、`components/library/` |
-| 6 | 网易云云盘/二级分类 | `netease.cloudDisk` / `netease.playlistCategory`（新） | `pages/NeteasePage.qml` |
+| 6 | 网易云歌单/专辑二级分类 | `netease.playlistCategory`（新；云盘已完成） | `components/library/OnlineSourcesTab.qml` |
 | 7 | B站收藏夹分类 | `bili.favoriteCategories`（新） | `pages/BiliPage.qml` |
 | 8 | 探索链接识别 / B站分 P | `parse.link` / `bili.videoParts`（新） | `pages/ExplorePage.qml`、`components/panels/` |
 | 9 | 播放页：音质切换/百科/字幕/歌手选择器 | `audio.quality*`、`song.info`、`bili.subtitle*`、`artist.list`（新） | `components/player/`、`components/panels/` |
@@ -100,3 +101,15 @@
 
 > 备注：路径为相对 `desktop/qt/qml/` 的简写；后端命令以 `desktop/docs/protocol-*.md` 实际注册名为准。
 > 每次对齐完成后请同步更新本文档状态标记与核对日期。
+
+## 2026-11-21 更新记录（第二轮对齐）
+
+| 改动 | 状态 | 说明 |
+| --- | --- | --- |
+| 媒体库在线音源平铺 | ✅ | 一级 Tab 改为 本地/收藏/网易云/哔哩哔哩/YouTube（按开关），取消二级选源层 |
+| Tab 顺序统一 | ✅ | 与探索页/设置页一致：网易云 → 哔哩哔哩 → YouTube |
+| B站收藏夹封面 | ✅ | `favoriteFolders` 对无封面收藏夹补调 `/x/v3/fav/folder/info` 取 cover，内存缓存 |
+| YouTube「空白」 | ✅ | 前端登录态改用 `ytmusic.status`（账号记录 + Cookie 罐），失效时回落到粘贴 Cookie 登录卡；地区限制导致的公开内容为空属外部限制 |
+| 各 Tab 搜索 | ✅ | 纯前端过滤已加载列表：网易云/B站/YouTube 歌单按名称/创建者/ID 过滤，收藏歌曲按标题/歌手/专辑过滤（Android 同款本地过滤语义） |
+| 网易云云盘 | ✅ | 新增 `online.neteaseCloudSongs`，右上角云图标进入，分页加载 + 播放全部 |
+| 歌曲卡片右键菜单 | ✅ | 首页/探索的歌曲卡右键弹出统一菜单（下一首播放、查看信息、收藏、下载等），左键播放行为不变；新增纯前端「歌曲信息」对话框 |
