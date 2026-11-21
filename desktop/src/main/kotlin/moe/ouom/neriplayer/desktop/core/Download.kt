@@ -10,6 +10,8 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import moe.ouom.neriplayer.desktop.net.OnlineRepository
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.UUID
 
 /** 已下载到本地的歌曲记录。 */
@@ -239,14 +241,18 @@ class DownloadManager(
         val input = runCatching {
             online.resolvePlayback(song, settings.current.downloadQuality)
         }.getOrNull()
-        if (input?.url.isNullOrBlank()) {
+        val downloadUrl = input?.url
+        if (downloadUrl.isNullOrBlank()) {
             fail(task.id, "无法获取播放地址")
             return
         }
-        val target = buildTargetFile(song, input!!.url)
+        val target = buildTargetFile(song, downloadUrl)
+        // 先下载到缓存目录里的 .part 临时文件，成功后再原子移动到下载目录，
+        // 避免半成品文件出现在下载目录、被误当成已完成的下载。
+        val part = File(AppDirs.musicCacheDir, "${UUID.randomUUID()}.part")
         var lastError: String? = null
         val ok = runCatching {
-            online.httpService.downloadToFile(input.url!!, input.headers, target) { downloaded, total ->
+            online.httpService.downloadToFile(downloadUrl, input.headers, part) { downloaded, total ->
                 if (canceled.contains(task.id)) throw DownloadCanceledException()
                 _tasks.value = _tasks.value.map { item ->
                     if (item.id == task.id) {
@@ -264,7 +270,7 @@ class DownloadManager(
             false
         }
         if (canceled.contains(task.id)) {
-            runCatching { target.delete() }
+            runCatching { part.delete() }
             _tasks.value = _tasks.value.map {
                 if (it.id == task.id) it.copy(state = DownloadState.CANCELED, error = "已取消") else it
             }
@@ -272,7 +278,26 @@ class DownloadManager(
             return
         }
         if (!ok) {
+            runCatching { part.delete() }
             fail(task.id, lastError ?: "下载失败")
+            return
+        }
+        // 下载完成，把临时文件原子移动到目标位置；跨文件系统或不支持 ATOMIC_MOVE 时退回普通 move。
+        val moved = runCatching {
+            target.parentFile?.mkdirs()
+            runCatching {
+                Files.move(part.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+            }.onFailure {
+                Files.move(part.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            }
+            true
+        }.getOrElse {
+            lastError = "保存文件失败"
+            false
+        }
+        if (!moved) {
+            runCatching { part.delete() }
+            fail(task.id, lastError ?: "保存文件失败")
             return
         }
 
@@ -373,13 +398,10 @@ class DownloadManager(
         println("[download] 失败：$message")
     }
 
-    /** 生成下载文件名：`歌手 - 标题.扩展名`，并清理非法字符。 */
+    /** 生成下载文件名：按用户配置的模板渲染，未配置时用默认模板。 */
     fun buildTargetFile(song: Song, url: String): File {
         val extension = extensionFor(song, url)
-        val baseName = listOf(song.artistText(), song.displayName())
-            .filter { it.isNotBlank() }
-            .joinToString(" - ")
-        return File(downloadDirectory(), "${sanitizeFileName(baseName)}.$extension")
+        return File(downloadDirectory(), DownloadNaming.buildFileName(song, extension, settings.current.downloadFileNameTemplate))
     }
 
     private fun extensionFor(song: Song, url: String): String {

@@ -19,6 +19,8 @@ import kotlinx.coroutines.withContext
 import moe.ouom.neriplayer.desktop.net.OnlineRepository
 import java.io.ByteArrayInputStream
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
 import javax.imageio.ImageIO
@@ -144,6 +146,9 @@ class PlayerManager(
     private var sleepTimerJob: Job? = null
     private val resolveMutex = Mutex()
     private val resolvedCache = ConcurrentHashMap<String, AudioInput>()
+
+    /** 在线音频磁盘 LRU 缓存；与 /dev/shm 的播放加速缓存相互独立。 */
+    private val musicCache = MusicCache(settings)
 
     /**
      * 下一首的内存音频缓存：播放稳定后后台把下一首整首下载到 /dev/shm（内存文件系统，
@@ -559,7 +564,53 @@ class PlayerManager(
             // 播放稳定后：后台下载当前歌到内存缓存（供 seek 瞬时切换），
             // 并预解析下一首直链（切歌时省去网络解析）。都不阻塞当前播放。
             scope.launch { cacheCurrentForSeek() }
+            // 把在线音频流式缓存到磁盘 LRU（后台进行，切歌即取消），不阻塞播放。
+            musicCacheApplyLimit()
+            cacheOnlineSong(song, input)
         }
+    }
+
+    /** 播放开始时低频应用一次缓存上限（如用户把上限调小后立即生效）。 */
+    private fun musicCacheApplyLimit() {
+        if (settings.current.cacheLimitMb == 0) {
+            scope.launch(Dispatchers.IO) { musicCache.clear() }
+        } else {
+            scope.launch(Dispatchers.IO) { musicCache.applyLimit(settings.current.cacheLimitMb) }
+        }
+    }
+
+    /**
+     * 在线音频后台写入磁盘 LRU 缓存：本地/已下载歌曲、无直链的音频、缓存被禁用时都跳过。
+     * 缓存文件按 key 命名但写入时用唯一临时文件，避免两个并发任务互相覆盖半成品。
+     * writeMetadata 等下载路径不受影响。
+     */
+    private fun cacheOnlineSong(song: Song, input: AudioInput) {
+        if (settings.current.cacheLimitMb == 0) return
+        if (song.isLocalFile() || song.source == MediaSource.LOCAL || downloads.contains(song.key)) return
+        val url = input.url ?: return
+        scope.launch(Dispatchers.IO) {
+            val target = musicCache.targetFor(song.key, input.urlExt())
+            val part = File(target.parentFile, "${target.name}.part-${System.nanoTime()}")
+            val ok = runCatching {
+                if (!online.httpService.downloadToFile(url, input.headers, part) { _, _ -> }) {
+                    false
+                } else {
+                    runCatching {
+                        if (target.exists()) target.delete()
+                        Files.move(part.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
+                        true
+                    }.getOrDefault(false)
+                }
+            }.getOrDefault(false)
+            if (!ok) runCatching { part.delete() }
+            musicCache.applyLimit(settings.current.cacheLimitMb)
+        }
+    }
+
+    /** 从直链路径推断音频扩展名，失败时按 mp3 处理。 */
+    private fun AudioInput.urlExt(): String {
+        val raw = url?.substringBefore('?')?.substringAfterLast('.')?.lowercase().orEmpty()
+        return raw.takeIf { it.length in 2..4 && it.all(Char::isLetterOrDigit) } ?: "mp3"
     }
 
     /**
@@ -656,6 +707,13 @@ class PlayerManager(
         // 已下载的歌曲优先走本地文件，未联网也能播放
         downloads.fileFor(song.key)?.let { file ->
             return@withLock AudioInput(path = file.absolutePath)
+        }
+        // 磁盘 LRU 缓存：cacheLimitMb=0 表示禁用（不读也不写）
+        if (settings.current.cacheLimitMb != 0) {
+            musicCache.fileFor(song.key)?.let { file ->
+                musicCache.touch(song.key)
+                return@withLock AudioInput(path = file.absolutePath)
+            }
         }
         // 引擎侧直链播放失败后会申请一次 B 站回退：本次跳过直链缓存，直接从 B 站音源开始
         val engineFailureRetry = song.source == MediaSource.NETEASE &&

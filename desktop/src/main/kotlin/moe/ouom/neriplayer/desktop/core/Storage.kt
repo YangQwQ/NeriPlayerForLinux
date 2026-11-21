@@ -30,6 +30,8 @@ object AppDirs {
     val cacheDir: File by lazy { File(xdg("XDG_CACHE_HOME", ".cache"), "NeriPlayer").apply { mkdirs() } }
     val artworkDir: File by lazy { File(cacheDir, "artwork").apply { mkdirs() } }
     val coverDir: File by lazy { File(cacheDir, "covers").apply { mkdirs() } }
+    /** 在线音频的 LRU 缓存目录（对齐 Android 的 media_cache），与单文件的播放加速缓存分开。 */
+    val musicCacheDir: File by lazy { File(cacheDir, "music_cache").apply { mkdirs() } }
     val logDir: File by lazy { File(dataDir, "logs").apply { mkdirs() } }
 
     val libraryFile: File get() = File(dataDir, "library.json")
@@ -239,6 +241,8 @@ data class AppSettings(
     val downloadQuality: String = "exhigh",
     val downloadConcurrency: Int = 2,
     val downloadNotifyOnComplete: Boolean = true,
+    /** 下载文件名模板，留空表示默认「%title% - %artist% - %album% - %source%」。 */
+    val downloadFileNameTemplate: String = "",
 
     // ---------------------------------------------------------------- 后台与系统控制
     /** 关闭窗口时最小化到托盘继续后台播放。 */
