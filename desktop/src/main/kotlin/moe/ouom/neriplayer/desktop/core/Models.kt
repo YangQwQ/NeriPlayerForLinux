@@ -115,6 +115,8 @@ data class LyricLine(
     val timeMs: Long,
     val text: String,
     val translation: String? = null,
+    /** 音译（罗马音等）行：网易云 `romalrc` / 同名 sidecar，按时间戳合并进主歌词。 */
+    val phonetic: String? = null,
     /** 整行结束时间；只有 yrc 等带明确行时长的来源才会填，0 表示未知。 */
     val endMs: Long = 0L,
     /** 逐词时间（yrc）；为空表示普通 LRC，前端回退到整行线性进度。 */

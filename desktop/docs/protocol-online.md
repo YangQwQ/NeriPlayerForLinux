@@ -302,6 +302,7 @@ B 站收藏夹列表。`url` 可省略：
       "timeMs": 15000,
       "text": "如果那两个字没有颤抖",
       "translation": "...",            // 已合并翻译；没有时为 null
+      "phonetic": "...",               // 音译行（网易云 romalrc / 同名 sidecar）；没有时为 null
       "endMs": 18760,                  // 行结束时间（yrc 才有；普通 LRC 为 0）
       "words": [                       // 逐词时间（yrc）；普通 LRC 为空数组
         {"startMs": 15000, "durationMs": 300, "text": "如"},

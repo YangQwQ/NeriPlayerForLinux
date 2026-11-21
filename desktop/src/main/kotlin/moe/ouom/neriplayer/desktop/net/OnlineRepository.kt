@@ -153,6 +153,7 @@ class OnlineRepository(private val http: HttpService = HttpService()) {
         val source = MediaSource.NETEASE.displayName
         val payload = netease.lyricPayload(id)
         val yrc = payload?.yrc
+        val romanized = payload?.romanized?.takeIf { it.isNotBlank() }
         if (!yrc.isNullOrBlank()) {
             buildYrcLyrics(
                 yrcRaw = yrc,
@@ -160,10 +161,18 @@ class OnlineRepository(private val http: HttpService = HttpService()) {
                 translatedYrc = payload.yrcTranslated,
                 translatedRaw = payload.translated,
                 source = source,
+                romanizedRaw = romanized,
             )?.let { return it }
         }
-        val plain = netease.lyric(id) ?: return null
-        return buildLrcLyrics(plain.first, plain.second, source)
+        // 普通 LRC 优先用 eapi 的 lrc；没有时回退明文接口（同时带 romalrc 音译）
+        val plainPayload = netease.lyricPlainPayload(id)
+        val plain = payload?.lrc?.takeIf { it.isNotBlank() }?.let { it to payload.translated }
+            ?: plainPayload?.lrc?.takeIf { it.isNotBlank() }?.let { it to plainPayload.translated }
+            ?: netease.lyric(id)
+            ?: return null
+        // eapi 没带音译时用明文接口的 romalrc 补齐
+        val romanizedFinal = romanized ?: plainPayload?.romanized?.takeIf { it.isNotBlank() }
+        return buildLrcLyrics(plain.first, plain.second, source, romanizedRaw = romanizedFinal)
     }
 
     /** 本地歌曲没有歌词文件时在线补全；有 yrc 的同样走逐词解析。 */

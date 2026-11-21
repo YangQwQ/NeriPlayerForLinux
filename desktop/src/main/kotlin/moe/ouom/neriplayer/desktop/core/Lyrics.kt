@@ -66,6 +66,23 @@ object LrcParser {
         }
     }
 
+    /** 把音译歌词（romalrc 等）按时间戳合并进主歌词的 [LyricLine.phonetic] 字段。 */
+    fun mergeRomanized(base: List<LyricLine>, romanized: List<LyricLine>): List<LyricLine> {
+        if (romanized.isEmpty()) return base
+        val phoneticByTime = LinkedHashMap<Long, String>()
+        romanized.forEach { line ->
+            if (line.text.isNotBlank()) {
+                phoneticByTime.putIfAbsent(line.timeMs, line.text)
+            }
+        }
+        if (phoneticByTime.isEmpty()) return base
+        return base.map { line ->
+            val phonetic = phoneticByTime[line.timeMs]
+                ?.takeIf { it.isNotBlank() && it != line.text }
+            line.copy(phonetic = phonetic)
+        }
+    }
+
     /** 同一文件内同时包含原文与翻译（相同时间戳连写两行）时拆分为翻译。 */
     fun splitDuplicatedTimestamps(raw: String): Pair<List<LyricLine>, List<LyricLine>> {
         val lines = parse(raw)
@@ -156,17 +173,23 @@ object YrcParser {
 /** 翻译行与逐词行的时间戳来源不同，允许几百毫秒偏差后按就近匹配。 */
 private const val TRANSLATION_MATCH_TOLERANCE_MS = 1200L
 
-/** 把普通 LRC 原文（可选翻译原文）构建成结构化歌词。 */
-fun buildLrcLyrics(raw: String, translatedRaw: String?, source: String?): Lyrics {
+/** 把普通 LRC 原文（可选翻译原文、音译原文）构建成结构化歌词。 */
+fun buildLrcLyrics(
+    raw: String,
+    translatedRaw: String?,
+    source: String?,
+    romanizedRaw: String? = null,
+): Lyrics {
     val (main, inlineTranslation) = LrcParser.splitDuplicatedTimestamps(raw)
     val translationLines = if (!translatedRaw.isNullOrBlank()) {
         LrcParser.parse(translatedRaw)
     } else {
         inlineTranslation
     }
+    val phoneticLines = romanizedRaw?.takeIf { it.isNotBlank() }?.let { LrcParser.parse(it) }.orEmpty()
     return Lyrics(
         raw = raw,
-        lines = LrcParser.merge(main, translationLines),
+        lines = LrcParser.mergeRomanized(LrcParser.merge(main, translationLines), phoneticLines),
         translated = translationLines,
         source = source,
     )
@@ -185,6 +208,7 @@ fun buildYrcLyrics(
     translatedYrc: String?,
     translatedRaw: String?,
     source: String?,
+    romanizedRaw: String? = null,
 ): Lyrics? {
     val yrcLines = YrcParser.parse(yrcRaw)
     if (yrcLines.isEmpty()) return null
@@ -193,9 +217,11 @@ fun buildYrcLyrics(
         !translatedRaw.isNullOrBlank() -> LrcParser.parse(translatedRaw)
         else -> emptyList()
     }
+    // 音译是普通 LRC 时间轴（romalrc），与 yrc 行时间有偏差，用就近合并。
+    val phoneticLines = romanizedRaw?.takeIf { it.isNotBlank() }?.let { LrcParser.parse(it) }.orEmpty()
     return Lyrics(
         raw = lrcRaw?.takeIf { it.isNotBlank() } ?: yrcRaw,
-        lines = mergeNearestTranslation(yrcLines, translationLines),
+        lines = mergeNearestPhonetic(mergeNearestTranslation(yrcLines, translationLines), phoneticLines),
         translated = translationLines,
         source = source,
     )
@@ -227,10 +253,42 @@ fun mergeNearestTranslation(base: List<LyricLine>, translated: List<LyricLine>):
     }
 }
 
+/** 把音译行按时间就近合并进主行（yrc 行时间与音译 LRC 时间戳存在偏差）。 */
+fun mergeNearestPhonetic(base: List<LyricLine>, romanized: List<LyricLine>): List<LyricLine> {
+    val candidates = romanized.filter { it.text.isNotBlank() }.sortedBy { it.timeMs }
+    if (base.isEmpty() || candidates.isEmpty()) return base
+    val used = BooleanArray(candidates.size)
+    return base.map { line ->
+        var best = -1
+        var bestDistance = Long.MAX_VALUE
+        candidates.forEachIndexed { index, candidate ->
+            if (used[index]) return@forEachIndexed
+            val distance = kotlin.math.abs(candidate.timeMs - line.timeMs)
+            if (distance < bestDistance) {
+                bestDistance = distance
+                best = index
+            }
+        }
+        if (best < 0 || bestDistance > TRANSLATION_MATCH_TOLERANCE_MS) {
+            line
+        } else {
+            used[best] = true
+            val text = candidates[best].text.takeIf { it != line.text }
+            line.copy(phonetic = text)
+        }
+    }
+}
+
 /** 歌词仓库：本地 .lrc → 内嵌标签 → 在线接口。 */
 class LyricsRepository(
     private val remoteProvider: suspend (Song) -> Lyrics? = { null },
 ) {
+    /**
+     * 歌词来源策略提供者：每次加载时读取，使设置变更即时生效。
+     * 默认 AUTO（保持原有回退链）；集成方在 AppContainer 里注入
+     * `{ LyricSourcePolicy.from(settings) }` 即可接入「歌词来源」设置。
+     */
+    var sourcePolicyProvider: () -> LyricSourcePolicy = { LyricSourcePolicy.AUTO }
     // 歌词缓存按 LRU 限长：听歌久了缓存会一直涨，而歌词只在当前/最近几首之间来回用
     private val cache = object : LinkedHashMap<String, Lyrics>(64, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Lyrics>): Boolean =
@@ -252,22 +310,31 @@ class LyricsRepository(
 
     suspend fun load(song: Song): Lyrics {
         synchronized(cacheLock) { cache[song.key] }?.let { return it }
-        localLyrics(song)?.let { lyrics ->
-            synchronized(cacheLock) { cache[song.key] = lyrics }
-            return lyrics
+        // NETEASE 先在线后本地；AUTO / LOCAL 先本地后在线（LOCAL 未命中仍走在线补全）
+        val localFirst = sourcePolicyProvider().localFirst
+        val first: Lyrics?
+        val second: Lyrics?
+        if (localFirst) {
+            first = localLyrics(song)
+            second = if (first.isNullOrEmpty() && song.key !in missCache) {
+                runCatching { remoteProvider(song) }.getOrNull()
+            } else null
+        } else {
+            first = if (song.key !in missCache) runCatching { remoteProvider(song) }.getOrNull() else null
+            if (first != null && !first.isEmpty) missCache.remove(song.key) else missCache += song.key
+            second = localLyrics(song)
         }
-        if (song.key !in missCache) {
-            val remote = runCatching { remoteProvider(song) }.getOrNull()
-            if (remote != null && !remote.isEmpty) {
-                synchronized(cacheLock) { cache[song.key] = remote }
-                return remote
-            }
-            missCache += song.key
+        val chosen = listOf(first, second).firstOrNull { it != null && !it.isEmpty }
+        if (chosen != null) {
+            synchronized(cacheLock) { cache[song.key] = chosen }
+            return chosen
         }
         val empty = Lyrics()
         synchronized(cacheLock) { cache[song.key] = empty }
         return empty
     }
+
+    private fun Lyrics?.isNullOrEmpty(): Boolean = this == null || isEmpty
 
     private fun localLyrics(song: Song): Lyrics? {
         val path = song.filePath
@@ -285,9 +352,11 @@ class LyricsRepository(
                 val raw = runCatching { lrc.readText() }.getOrNull()
                 if (!raw.isNullOrBlank()) {
                     val (main, translation) = LrcParser.splitDuplicatedTimestamps(raw)
+                    val romanizedRaw = romanizedSidecar(audio.parentFile, baseName)
+                    val phoneticLines = romanizedRaw?.let { LrcParser.parse(it) }.orEmpty()
                     return Lyrics(
                         raw = raw,
-                        lines = LrcParser.merge(main, translation),
+                        lines = LrcParser.mergeRomanized(LrcParser.merge(main, translation), phoneticLines),
                         translated = translation,
                         source = "本地歌词",
                     )
@@ -305,6 +374,20 @@ class LyricsRepository(
             )
         }
         return null
+    }
+
+    /** 读取同名音译 sidecar（对齐 Android 的 `_romalrc` / `_romanized` 命名）。 */
+    private fun romanizedSidecar(dir: File?, baseName: String): String? {
+        if (dir == null) return null
+        val names = listOf(
+            "$baseName.romanized.lrc", "$baseName.romalrc.lrc", "$baseName.roma.lrc",
+            "${baseName}_romanized.lrc", "${baseName}_romalrc.lrc", "${baseName}_roma.lrc",
+        )
+        return names.asSequence()
+            .map { File(dir, it) }
+            .firstOrNull { it.isFile }
+            ?.let { runCatching { it.readText() }.getOrNull() }
+            ?.takeIf { it.isNotBlank() }
     }
 }
 

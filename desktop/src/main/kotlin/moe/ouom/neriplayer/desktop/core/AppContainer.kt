@@ -67,7 +67,10 @@ class AppContainer {
     )
     val neteaseLogin = moe.ouom.neriplayer.desktop.net.NeteaseLogin(online.httpService)
     val biliLogin = moe.ouom.neriplayer.desktop.net.BiliLogin(online.httpService)
-    val lyrics = LyricsRepository { song -> online.lyricsStructured(song) }
+    val lyrics = LyricsRepository { song -> online.lyricsStructured(song) }.also {
+        // 来源策略每次 load 都读当前设置，让设置页切换「歌词来源」立即生效。
+        it.sourcePolicyProvider = { LyricSourcePolicy.from(settings) }
+    }
     val player = PlayerManager(
         settings = settings,
         history = history,

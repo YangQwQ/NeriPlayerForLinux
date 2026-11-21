@@ -48,6 +48,8 @@ data class NeteaseLyricPayload(
     /** 翻译的逐词时间版本（`ytlrc`），比 `tlyric` 更贴合 yrc 行时间。 */
     val yrcTranslated: String? = null,
     val yrc: String? = null,
+    /** 音译歌词（`romalrc` / `romanized`），与 Android 的 romanizedLyric 对应。 */
+    val romanized: String? = null,
 )
 
 /** 网易云音乐公开接口客户端（无需登录即可搜索、取歌词与试听地址）。 */
@@ -202,6 +204,19 @@ class NeteaseApi(private val http: HttpService) {
         return lyric to translated?.takeIf { it.isNotBlank() }
     }
 
+    /** 明文歌词接口的完整包（含音译 romalrc），供 eapi 失败时回退。 */
+    fun lyricPlainPayload(id: String): NeteaseLyricPayload? {
+        val root = getJson("/api/song/lyric?id=$id&lv=1&kv=1&tv=-1") ?: return null
+        val lyric = root.obj("lrc")?.str("lyric")?.takeIf { it.isNotBlank() } ?: return null
+        return NeteaseLyricPayload(
+            lrc = lyric,
+            translated = root.obj("tlyric")?.str("lyric")?.takeIf { it.isNotBlank() },
+            romanized = (root.obj("romalrc")?.str("lyric")
+                ?: root.obj("romanized")?.str("lyric"))
+                ?.takeIf { it.isNotBlank() },
+        )
+    }
+
     /**
      * eapi 版本歌词：一次拿回普通 LRC、翻译与逐词 yrc。
      *
@@ -229,6 +244,11 @@ class NeteaseApi(private val http: HttpService) {
             translated = root.obj("tlyric")?.str("lyric"),
             yrcTranslated = root.obj("ytlrc")?.str("lyric"),
             yrc = root.obj("yrc")?.str("lyric"),
+            // 不同接口字段名不一：优先 romalrc，回退 romanized / yromalrc
+            romanized = (root.obj("romalrc")?.str("lyric")
+                ?: root.obj("romanized")?.str("lyric")
+                ?: root.obj("yromalrc")?.str("lyric"))
+                ?.takeIf { it.isNotBlank() },
         )
     }.getOrNull()
 
