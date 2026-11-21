@@ -30,6 +30,17 @@ Item {
     }
     readonly property bool sourcesEmpty: root.sources.length === 0
     property string source: "NETEASE"
+    /** 媒体库把每个音源平铺成独立 Tab 时传 false，隐藏内部的音源切换条。 */
+    property bool showSourceTabs: true
+
+    /** 当前固定音源是否被设置禁用（平铺模式用）。 */
+    readonly property bool sourceDisabled: {
+        for (let i = 0; i < root.sources.length; ++i) {
+            if (root.sources[i].value === root.source)
+                return false
+        }
+        return true
+    }
 
     // ---- 账号 ----
     property var accounts: []
@@ -75,6 +86,9 @@ Item {
     }
 
     function ensureValidSource() {
+        // 平铺模式下音源由外层 Tab 固定，不能被设置变化改写。
+        if (!root.showSourceTabs)
+            return
         for (let i = 0; i < root.sources.length; ++i) {
             if (root.sources[i].value === root.source)
                 return
@@ -143,7 +157,7 @@ Item {
     }
 
     function reloadCollections() {
-        if (!root.loggedIn || root.source === "")
+        if (!root.loggedIn || root.source === "" || root.sourceDisabled)
             return
         const targetSource = root.source
         const seq = ++root._seq
@@ -265,14 +279,16 @@ Item {
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        height: 44
+        // 平铺模式下没有内部音源切换条，未登录时也没有账号信息，整条留白没有意义。
+        height: (root.showSourceTabs === false && !(root.accountsLoaded && root.loggedIn)) ? 0 : 44
+        clip: true
 
         TabBar {
             id: sourceTabs
 
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
-            visible: !root.sourcesEmpty
+            visible: root.showSourceTabs && !root.sourcesEmpty
             options: root.sources
             value: root.source
             onSelected: function(value) { root.source = value }
@@ -325,13 +341,15 @@ Item {
         anchors.bottom: parent.bottom
         clip: true
 
-        // 两个音源都在设置里被禁用
+        // 聚合模式：所有音源都被禁用；平铺模式：当前音源被禁用
         EmptyState {
             anchors.fill: parent
-            visible: root.sourcesEmpty
+            visible: root.sourcesEmpty || (root.showSourceTabs === false && root.sourceDisabled)
             icon: "cloud_off"
-            title: I18n.tr("在线音源已禁用")
-            hint: I18n.tr("在「设置 - 在线音源」中启用网易云 / 哔哩哔哩后，可以在媒体库这里浏览账号歌单")
+            title: root.showSourceTabs === false ? I18n.tr("音源已禁用") : I18n.tr("在线音源已禁用")
+            hint: root.showSourceTabs === false
+                  ? I18n.tr("在「设置 - 在线音源」中启用该音源后，即可在此浏览账号歌单")
+                  : I18n.tr("在「设置 - 在线音源」中启用网易云 / 哔哩哔哩后，可以在媒体库这里浏览账号歌单")
         }
 
         LoadingState {

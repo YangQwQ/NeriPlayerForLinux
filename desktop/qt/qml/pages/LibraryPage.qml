@@ -23,8 +23,26 @@ Item {
 
     // ---- 交互状态 ----
     property string query: ""
-    property string primaryTab: "local"      // local / favorites / online
+    property string primaryTab: "local"      // local / favorites / netease / bilibili / youtube
     property string localTab: "songs"        // songs / artists / albums / playlists
+
+    // 一级 Tab 平铺各在线音源（对齐 Android：网易云 / YouTube / 哔哩哔哩 各自独立）。
+    readonly property var primaryTabOptions: {
+        // 读一次让绑定依赖设置对象，YouTube 开关变化后 Tab 列表自动刷新。
+        const settings = Settings.values
+        const list = [
+            { value: "local", label: I18n.tr("本地") },
+            { value: "favorites", label: I18n.tr("收藏") },
+            { value: "netease", label: I18n.tr("网易云") },
+        ]
+        if (Settings.get("youtubeEnabled", false) === true)
+            list.push({ value: "youtube", label: "YouTube" })
+        list.push({ value: "bilibili", label: I18n.tr("哔哩哔哩") })
+        return list
+    }
+    readonly property bool onlineTab: page.primaryTab === "netease"
+                                      || page.primaryTab === "bilibili"
+                                      || page.primaryTab === "youtube"
 
     // ---- 扫描状态（library.scan 事件）----
     property bool scanning: false
@@ -185,8 +203,12 @@ Item {
         page.reloadLibrary()
         page.reloadCollections()
         page.reloadScanState()
-        if (page.primaryTab === "online")
-            onlineSourcesTab.refresh()
+        if (page.primaryTab === "netease")
+            neteaseTab.refresh()
+        else if (page.primaryTab === "bilibili")
+            bilibiliTab.refresh()
+        else if (page.primaryTab === "youtube")
+            youtubeTab.refresh()
         page.rescan(false)
     }
 
@@ -210,10 +232,25 @@ Item {
         page.reloadCollections()
     }
 
+    /** YouTube 开关变化后 Tab 列表会变，当前选中项失效时回退到本地。 */
+    function ensureValidPrimaryTab() {
+        for (let i = 0; i < page.primaryTabOptions.length; ++i) {
+            if (page.primaryTabOptions[i].value === page.primaryTab)
+                return
+        }
+        page.primaryTab = "local"
+    }
+
+    property Connections settingsConnection: Connections {
+        target: Settings
+        function onValuesChanged() { page.ensureValidPrimaryTab() }
+    }
+
     Component.onCompleted: {
         Api.on("library.changed", page.onLibraryChanged)
         Api.on("library.scan", page.onLibraryScan)
         Api.on("collections.changed", page.onCollectionsChanged)
+        page.ensureValidPrimaryTab()
         page.reloadLibrary()
         page.reloadCollections()
         page.reloadScanState()
@@ -298,7 +335,7 @@ Item {
 
             // 搜索框（本地过滤，不需要请求后端；在线音源 Tab 不适用）
             Rectangle {
-                visible: page.primaryTab !== "online"
+                visible: !page.onlineTab
                 Layout.preferredWidth: 240
                 Layout.preferredHeight: 40
                 Layout.leftMargin: Theme.spacingSm
@@ -355,11 +392,7 @@ Item {
             anchors.leftMargin: Theme.spacingLg
             anchors.verticalCenter: parent.verticalCenter
             implicitHeight: 34
-            options: [
-                { value: "local", label: I18n.tr("本地") },
-                { value: "favorites", label: I18n.tr("收藏") },
-                { value: "online", label: I18n.tr("在线音源") }
-            ]
+            options: page.primaryTabOptions
             value: page.primaryTab
             onSelected: function(value) { page.primaryTab = value }
         }
@@ -872,14 +905,38 @@ Item {
             }
         }
 
-        // ---- 在线音源 Tab ----
+        // ---- 在线音源 Tab（平铺：每个音源独立一页，对齐 Android）----
         OnlineSourcesTab {
-            id: onlineSourcesTab
+            id: neteaseTab
+            source: "NETEASE"
+            showSourceTabs: false
             anchors.top: scanBanner.bottom
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            visible: page.primaryTab === "online"
+            visible: page.primaryTab === "netease"
+        }
+
+        OnlineSourcesTab {
+            id: bilibiliTab
+            source: "BILIBILI"
+            showSourceTabs: false
+            anchors.top: scanBanner.bottom
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            visible: page.primaryTab === "bilibili"
+        }
+
+        OnlineSourcesTab {
+            id: youtubeTab
+            source: "YOUTUBE"
+            showSourceTabs: false
+            anchors.top: scanBanner.bottom
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            visible: page.primaryTab === "youtube"
         }
     }
 
