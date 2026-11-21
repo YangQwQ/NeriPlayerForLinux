@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Effects
 import "../ArtworkCache.js" as ArtworkCache
+import "../motion"
 
 // 播放页背景：当前封面放大 + 高斯模糊 + 暗色叠加。
 // Settings.nowPlayingBackground 可选 BLUR（默认）/ GRADIENT / SOLID；
@@ -29,6 +30,7 @@ Item {
     clip: true
 
     NowPlayingTheme { id: np }
+    MotionPrefs { id: motion }
 
     function resolveRemote() {
         if (coverPath !== "" || coverUrl === "") {
@@ -65,6 +67,14 @@ Item {
             anchors.fill: parent
             color: root.hasCover ? Theme.surfaceContainerLowest
                                  : Theme.mix(Theme.surface, Theme.primary, 0.22)
+
+            Behavior on color {
+                ColorAnimation {
+                    duration: motion.themeTransition ? motion.themeDuration : 0
+                    easing.type: Easing.Bezier
+                    easing.bezierCurve: [0.4, 0.0, 0.2, 1.0]
+                }
+            }
         }
 
         // BLUR：双层封面交叉淡入。切歌时把新封面加载到非活跃层，加载完成后
@@ -190,6 +200,14 @@ Item {
         Rectangle {
             anchors.fill: parent
             color: Theme.withAlpha(np.scrim, root.mode === "GRADIENT" ? 0.3 : 0.56)
+
+            Behavior on color {
+                ColorAnimation {
+                    duration: motion.themeTransition ? motion.themeDuration : 0
+                    easing.type: Easing.Bezier
+                    easing.bezierCurve: [0.4, 0.0, 0.2, 1.0]
+                }
+            }
         }
 
         // 强调色调和：让背景与封面/进度条属于同一个色相家族
@@ -197,6 +215,14 @@ Item {
             anchors.fill: parent
             visible: root.hasCover && root.mode === "BLUR"
             color: Theme.withAlpha(np.accent, 0.1)
+
+            Behavior on color {
+                ColorAnimation {
+                    duration: motion.themeTransition ? motion.themeDuration : 0
+                    easing.type: Easing.Bezier
+                    easing.bezierCurve: [0.4, 0.0, 0.2, 1.0]
+                }
+            }
         }
     }
 

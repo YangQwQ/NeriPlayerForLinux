@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Dialogs
 import QtQuick.Effects
 import ".."
+import "../motion"
 
 // 播放页大封面：形状可配（CIRCLE / ROUNDED / SQUARE）+ 强调色光晕 + 柔和投影 + 缓冲遮罩。
 // 光晕颜色取自当前封面种子（Player.coverSeed），让封面与模糊背景属于同一色相。
@@ -33,6 +34,7 @@ Item {
     implicitHeight: coverSize
 
     NowPlayingTheme { id: np }
+    MotionPrefs { id: motion }
 
     // ---- 强调色光晕 ----
     Item {
@@ -48,6 +50,14 @@ Item {
             radius: width / 2
             color: Theme.withAlpha(np.accent, 0.45)
             visible: false
+
+            Behavior on color {
+                ColorAnimation {
+                    duration: motion.themeTransition ? motion.themeDuration : 0
+                    easing.type: Easing.Bezier
+                    easing.bezierCurve: [0.4, 0.0, 0.2, 1.0]
+                }
+            }
         }
 
         MultiEffect {
@@ -102,6 +112,21 @@ Item {
         }
     }
 
+    // 切歌微动效：封面轻微回弹（0.96 → 1）并淡入，让换歌有「落位」感。
+    // 用 rotationEnabled 之外的独立 scale 属性，不影响圆形封面的旋转逻辑。
+    SequentialAnimation {
+        id: coverPop
+
+        NumberAnimation {
+            target: coverSpin
+            property: "scale"
+            from: 0.96
+            to: 1.0
+            duration: Theme.motionMedium
+            easing.type: Easing.OutBack
+        }
+    }
+
     // 20 秒一圈的线性旋转；暂停时停在当前角度，切歌回到 0 度。
     NumberAnimation {
         id: spinAnimation
@@ -141,6 +166,9 @@ Item {
             return
         _lastSongKey = key
         restartSpin()
+        // 首帧封面加载和切歌都做一次回弹；动效关闭时直接保持原状。
+        if (motion.pageTransition && key !== "")
+            coverPop.restart()
     }
 
     Connections {

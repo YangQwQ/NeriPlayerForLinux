@@ -21,17 +21,26 @@ ApplicationWindow {
     Item {
         id: appBackgroundLayer
         anchors.fill: parent
-        visible: Prefs.backgroundImage !== ""
+        visible: Prefs.backgroundImage !== "" || appBackgroundLayer.dynamicBackgroundActive
         z: -1
         clip: true
 
         Image {
             id: bgImage
             anchors.fill: parent
-            source: Prefs.backgroundImage !== "" ? "file://" + Prefs.backgroundImage : ""
+            source: appBackgroundLayer.dynamicBackgroundSource
             fillMode: Image.PreserveAspectCrop
             smooth: true
             cache: false
+
+            // 以中心为原点缓慢呼吸缩放（1.0→1.12→1.0），放大时不会露出边缘；
+            // 关闭动态背景时静止在 100%，与旧行为一致。
+            transform: Scale {
+                origin.x: bgImage.width / 2
+                origin.y: bgImage.height / 2
+                xScale: appBackgroundLayer.dynamicScale
+                yScale: appBackgroundLayer.dynamicScale
+            }
 
             MultiEffect {
                 source: bgImage
@@ -40,6 +49,37 @@ ApplicationWindow {
                 blur: Math.min(1, Prefs.backgroundBlur / 20)
                 blurMax: 24
             }
+        }
+
+        // 动态背景：封面来源时用 Player.coverPath / 封面 URL，否则用用户设置的程序背景图。
+        // 只做缓慢呼吸缩放，不做花哨位移，避免分散对歌词/封面的注意力。
+        property bool dynamicBackgroundActive: Prefs.dynamicBackground
+                                                && root.dynamicBackgroundSource !== ""
+        property string dynamicBackgroundSource: Prefs.dynamicBackgroundSource === "COVER"
+                                                  ? (Player.coverPath ? "file://" + Player.coverPath : "")
+                                                  : ("file://" + Prefs.backgroundImage)
+        property real dynamicScale: 1.0
+        onDynamicBackgroundActiveChanged: {
+            if (!dynamicBackgroundActive)
+                dynamicScale = 1.0
+            else
+                dynamicBackgroundTimer.triggered()
+        }
+        Timer {
+            id: dynamicBackgroundTimer
+            running: appBackgroundLayer.dynamicBackgroundActive
+            repeat: true
+            interval: 50
+            onTriggered: {
+                const period = Math.max(2, Prefs.dynamicBackgroundSpeed) * 1000
+                const phase = (Date.now() % period) / period
+                // 1.0 → 1.12 → 1.0 的平滑呼吸（余弦），不会突跳。
+                appBackgroundLayer.dynamicScale = 1.06 - 0.06 * Math.cos(phase * Math.PI * 2)
+            }
+        }
+        Component.onCompleted: {
+            if (appBackgroundLayer.dynamicBackgroundActive)
+                dynamicBackgroundTimer.triggered()
         }
 
         Rectangle {
