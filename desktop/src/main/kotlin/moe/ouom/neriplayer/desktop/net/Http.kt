@@ -136,6 +136,15 @@ class HttpService {
         return request("POST", url, body, headers + mapOf("Content-Type" to "application/x-www-form-urlencoded"), timeoutSeconds)
     }
 
+    /** 解压 gzip 字节；失败时原样返回，避免单个坏响应中断整个请求。 */
+    private fun gunzipOrRaw(bytes: ByteArray): ByteArray = runCatching {
+        GZIPInputStream(bytes.inputStream()).use { stream ->
+            val out = ByteArrayOutputStream()
+            stream.copyTo(out)
+            out.toByteArray()
+        }
+    }.getOrDefault(bytes)
+
     private fun request(
         method: String,
         url: String,
@@ -161,13 +170,7 @@ class HttpService {
             storeCookies(host, response)
             val bytes = response.body() ?: return@runCatching null
             val decoded = if (response.headers().firstValue("Content-Encoding").orElse("").contains("gzip")) {
-                runCatching {
-                    GZIPInputStream(bytes.inputStream()).use { stream ->
-                        val out = ByteArrayOutputStream()
-                        stream.copyTo(out)
-                        out.toByteArray()
-                    }
-                }.getOrDefault(bytes)
+                gunzipOrRaw(bytes)
             } else {
                 bytes
             }
@@ -231,13 +234,7 @@ class HttpService {
             response.headers().firstValue("Content-Encoding").orElse("").contains("gzip") &&
             raw.size > 2 && raw[0] == 0x1F.toByte() && raw[1] == 0x8B.toByte()
         ) {
-            runCatching {
-                GZIPInputStream(raw.inputStream()).use { stream ->
-                    val out = ByteArrayOutputStream()
-                    stream.copyTo(out)
-                    out.toByteArray()
-                }
-            }.getOrDefault(raw)
+            gunzipOrRaw(raw)
         } else {
             raw
         }
