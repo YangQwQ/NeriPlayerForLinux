@@ -11,7 +11,6 @@ QtObject {
     readonly property bool connected: Backend.connected
 
     property var _handlers: ({})
-    property var _pending: ({})
 
     // ---- 请求 ----
 
@@ -42,6 +41,9 @@ QtObject {
     function on(name, handler) {
         if (!_handlers[name])
             _handlers[name] = []
+        // 同一 handler 重复注册只会重复调用，跳过即可
+        if (_handlers[name].indexOf(handler) >= 0)
+            return
         _handlers[name].push(handler)
     }
 
@@ -52,6 +54,9 @@ QtObject {
         const index = list.indexOf(handler)
         if (index >= 0)
             list.splice(index, 1)
+        // 没有订阅者了就删掉表项，避免 _dispatch 每次仍查空数组
+        if (list.length === 0)
+            delete _handlers[name]
     }
 
     function _dispatch(name, data) {
