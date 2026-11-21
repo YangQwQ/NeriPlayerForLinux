@@ -2574,7 +2574,7 @@ Item {
                     description: I18n.tr("统计各目录的实际磁盘占用")
                     SettingsButton {
                         text: I18n.tr("查看")
-                        onClicked: if (storageDialogLoader.item) storageDialogLoader.item.open()
+                        onClicked: if (storageDialogLoader.item) storageDialogLoader.item.openDialog()
                     }
                 }
 
