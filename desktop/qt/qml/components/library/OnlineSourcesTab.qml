@@ -1,4 +1,6 @@
 import QtQuick
+import QtQuick.Controls as Controls
+import QtQuick.Layouts
 // 根目录 components 与本目录存在同名组件（CollectionCard/EmptyState/ErrorCard/LoadingState），
 // 用限定导入避免覆盖同目录组件。
 import ".." as Root
@@ -44,6 +46,7 @@ Item {
 
     // ---- 账号 ----
     property var accounts: []
+    property var status: null
     property bool accountsLoaded: false
 
     // ---- 歌单 / 收藏夹 ----
@@ -53,6 +56,70 @@ Item {
     property bool needLogin: false
     property int _seq: 0
 
+    // ---- 网易云云盘（二级视图，对齐 Android 的云盘入口）----
+    property bool cloudMode: false
+    property var cloudSongs: []
+    property int cloudTotal: 0
+    property int cloudUsedBytes: 0
+    property int cloudMaxBytes: 0
+    property bool cloudHasMore: false
+    property bool cloudLoading: false
+    property bool cloudAllLoaded: false
+
+    function openCloud() {
+        root.cloudMode = true
+        root.cloudSongs = []
+        root.cloudTotal = 0
+        root.cloudAllLoaded = false
+        root.loadCloud(0)
+    }
+
+    function closeCloud() {
+        root.cloudMode = false
+        root.cloudSongs = []
+        root.cloudAllLoaded = false
+    }
+
+    function loadCloud(offset) {
+        if (root.cloudLoading || root.cloudAllLoaded)
+            return
+        root.cloudLoading = true
+        Api.call("online.neteaseCloudSongs", { offset: offset, limit: 200 }).then(function(result) {
+            root.cloudLoading = false
+            if (!result)
+                return
+            if (result.needLogin) {
+                root.status = null
+                root.cloudMode = false
+                return
+            }
+            const incoming = root.toArray(result.songs)
+            const merged = offset === 0 ? incoming : root.cloudSongs.concat(incoming)
+            root.cloudSongs = merged
+            root.cloudTotal = Number(result.totalCount) || 0
+            root.cloudUsedBytes = Number(result.usedBytes) || 0
+            root.cloudMaxBytes = Number(result.maxBytes) || 0
+            root.cloudHasMore = !!result.hasMore && merged.length > 0
+            root.cloudAllLoaded = !root.cloudHasMore
+        }).catch(function() {
+            root.cloudLoading = false
+        })
+    }
+
+    // ---- 搜索（本地过滤已加载的歌单列表，对齐 Android）----
+    property string query: ""
+    readonly property var filteredCollections: {
+        const q = root.query.trim().toLowerCase()
+        if (q === "")
+            return root.collections
+        return root.collections.filter(function(c) {
+            return String(c.name || "").toLowerCase().indexOf(q) >= 0
+                    || String(c.creator || "").toLowerCase().indexOf(q) >= 0
+                    || String(c.id || "").toLowerCase().indexOf(q) >= 0
+                    || String(c.description || "").toLowerCase().indexOf(q) >= 0
+        })
+    }
+
     readonly property var currentAccount: {
         for (let i = 0; i < root.accounts.length; ++i) {
             const account = root.accounts[i]
@@ -61,7 +128,9 @@ Item {
         }
         return null
     }
-    readonly property bool loggedIn: root.currentAccount !== null
+    readonly property bool loggedIn: root.youtube
+                                     ? !!(root.status && root.status.loggedIn)
+                                     : root.currentAccount !== null
     readonly property string accountName: {
         const account = root.currentAccount
         if (!account)
@@ -141,6 +210,15 @@ Item {
 
     // ---------------------------------------------------------------- 数据加载
 
+    function loadYouTubeStatus() {
+        Api.get("ytmusic.status", {}, function(result, error) {
+            if (error)
+                return
+            root.status = (result && result.status) ? result.status : null
+            root.afterAccountsChanged()
+        })
+    }
+
     function loadAccounts() {
         Api.get("login.accounts", {}, function(result, error) {
             if (error) {
@@ -152,7 +230,12 @@ Item {
             }
             root.accounts = root.toArray(result && result.accounts)
             root.accountsLoaded = true
-            root.afterAccountsChanged()
+            // YouTube 的登录态由 ytmusic.status 判定（账号记录 + Cookie 罐都有效才算登录），
+            // 不能只看 login.accounts：残留的账号记录会让界面误判为已登录而只显示空列表。
+            if (root.youtube)
+                root.loadYouTubeStatus()
+            else
+                root.afterAccountsChanged()
         })
     }
 
@@ -183,6 +266,9 @@ Item {
             }
             root.collections = items
             root.needLogin = !!(result && result.needLogin)
+            // YouTube 返回 needLogin 说明 Cookie 已失效：回到未登录态，展示粘贴 Cookie 引导。
+            if (root.needLogin && targetSource === "YOUTUBE")
+                root.status = null
             root.errorMessage = ""
         }
 
@@ -221,7 +307,10 @@ Item {
         if (list.length > 0) {
             root.accounts = list
             root.accountsLoaded = true
-            root.afterAccountsChanged()
+            if (root.youtube)
+                root.loadYouTubeStatus()
+            else
+                root.afterAccountsChanged()
             return
         }
         // 数组事件在 Qt 桥里通常只剩空对象，拿不到内容时重新查询账号列表。
@@ -248,6 +337,8 @@ Item {
         root.needLogin = false
         if (root.accountsLoaded && root.loggedIn)
             root.reloadCollections()
+        else if (root.accountsLoaded && root.youtube)
+            root.loadYouTubeStatus()
     }
 
     Component.onCompleted: {
@@ -413,10 +504,11 @@ Item {
                 onRetryClicked: root.reloadCollections()
             }
 
-            // 接口返回 needLogin（Cookie 失效 / 账号信息缺失）：提示重新登录
+            // 接口返回 needLogin（Cookie 失效 / 账号信息缺失）：提示重新登录。
+            // YouTube 不走扫码，统一由未登录分支的 Cookie 卡承接。
             SourceLoginPrompt {
                 anchors.fill: parent
-                visible: root.needLogin && !root.loading
+                visible: root.needLogin && !root.loading && !root.youtube
                 source: root.source
                 relogin: true
                 onLoginClicked: root.openLogin()
@@ -424,22 +516,26 @@ Item {
 
             EmptyState {
                 anchors.fill: parent
-                visible: !root.loading && !root.needLogin && root.errorMessage === ""
-                        && root.collections.length === 0
-                icon: root.source === "BILIBILI" ? "bookmark_border"
+                visible: !root.cloudMode && !root.loading && !root.needLogin && root.errorMessage === ""
+                        && (root.collections.length === 0 || root.filteredCollections.length === 0)
+                icon: root.query.trim() !== "" ? "search_off"
+                      : root.source === "BILIBILI" ? "bookmark_border"
                       : root.youtube ? "smart_display" : "queue_music"
-                title: root.source === "BILIBILI" ? I18n.tr("还没有收藏夹")
+                title: root.query.trim() !== "" ? I18n.tr("没有匹配的歌单")
+                       : root.source === "BILIBILI" ? I18n.tr("还没有收藏夹")
                        : root.youtube ? I18n.tr("还没有 YouTube 歌单") : I18n.tr("还没有歌单")
-                hint: root.youtube
-                      ? I18n.tr("YouTube 未登录或账号下没有歌单曲库，登录后可浏览「我的歌单」")
-                      : I18n.tr("当前账号下暂无可浏览的内容，点击右上角刷新重试")
+                hint: root.query.trim() !== "" ? I18n.tr("换个关键词试试")
+                      : root.youtube
+                        ? I18n.tr("YouTube 未登录或账号下没有歌单曲库，登录后可浏览「我的歌单」")
+                        : I18n.tr("当前账号下暂无可浏览的内容，点击右上角刷新重试")
             }
 
             Flickable {
                 id: collectionsPane
 
                 anchors.fill: parent
-                visible: !root.needLogin && root.errorMessage === "" && root.collections.length > 0
+                visible: !root.cloudMode && !root.needLogin && root.errorMessage === ""
+                         && root.filteredCollections.length > 0
                 clip: true
                 contentWidth: width
                 contentHeight: collectionsFlow.height + Theme.spacingXl
@@ -458,8 +554,23 @@ Item {
                     readonly property real cardWidth: Math.min(190,
                                                              (width - spacing * (columns - 1)) / columns)
 
+                    // 网易云云盘入口（对齐 Android：歌单列表顶部的卡片式入口）。
+                    // Flow 不为 visible:false 让位，非网易云时用 0 宽避免留下空位。
+                    CollectionCard {
+                        readonly property bool showCloud: root.source === "NETEASE" && root.query.trim() === ""
+                        cardWidth: showCloud ? collectionsFlow.cardWidth : 0
+                        name: I18n.tr("云盘")
+                        subtitle: I18n.tr("上传到网易云的音乐")
+                        coverUrl: ""
+                        placeholderIcon: "cloud"
+                        placeholderColor: Theme.secondaryContainer
+                        placeholderIconFilled: true
+                        placeholderIconColor: Theme.onSecondaryContainerColor
+                        onClicked: root.openCloud()
+                    }
+
                     Repeater {
-                        model: root.collections
+                        model: root.filteredCollections
 
                         delegate: CollectionCard {
                             id: collectionCard
@@ -477,6 +588,119 @@ Item {
                             onClicked: root.openCollection(item)
                         }
                     }
+                }
+            }
+
+            // ---- 网易云云盘视图 ----
+            Item {
+                anchors.fill: parent
+                visible: root.cloudMode
+
+                Column {
+                    anchors.top: parent.top
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    spacing: Theme.spacingSm
+
+                    // 工具栏：返回 / 标题 / 容量 / 播放全部
+                    RowLayout {
+                        width: parent.width - Theme.spacingLg * 2
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        spacing: Theme.spacingSm
+
+                        Root.IconButton {
+                            icon: "arrow_back"
+                            iconSize: 20
+                            size: 36
+                            tooltip: I18n.tr("返回")
+                            onClicked: root.closeCloud()
+                        }
+
+                        Column {
+                            Layout.fillWidth: true
+                            Text {
+                                text: I18n.tr("云盘")
+                                color: Theme.onSurfaceColor
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.textStyle("titleMedium").size
+                                font.weight: Font.DemiBold
+                            }
+                            Text {
+                                text: root.cloudTotal + I18n.tr(" 首 · 已用 ")
+                                      + Math.round(root.cloudUsedBytes / 1048576) + " MB / "
+                                      + Math.round(root.cloudMaxBytes / 1048576) + " MB"
+                                color: Theme.onSurfaceVariantColor
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.textStyle("labelSmall").size
+                            }
+                        }
+
+                        Controls.Button {
+                            text: I18n.tr("播放全部")
+                            enabled: root.cloudSongs.length > 0
+                            onClicked: Player.setQueue(root.cloudSongs, 0, true)
+                        }
+
+                        Root.IconButton {
+                            icon: "refresh"
+                            iconSize: 20
+                            size: 36
+                            tooltip: I18n.tr("刷新")
+                            onClicked: {
+                                root.cloudSongs = []
+                                root.cloudAllLoaded = false
+                                root.loadCloud(0)
+                            }
+                        }
+                    }
+
+                    ListView {
+                        width: parent.width - Theme.spacingLg * 2
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        height: root.cloudMode ? parent.height - 72 : 0
+                        clip: true
+                        model: root.cloudSongs
+                        boundsBehavior: Flickable.StopAtBounds
+
+                        delegate: Item {
+                            width: ListView.view.width
+                            height: 58
+                            property var song: modelData
+                            SongRow {
+                                anchors.fill: parent
+                                song: parent.song
+                                index: modelData === undefined ? -1 : index
+                                showMore: false
+                                onActivated: function(idx) { Player.setQueue(root.cloudSongs, idx, true) }
+                            }
+                        }
+
+                        footer: Item {
+                            width: ListView.view.width
+                            height: root.cloudHasMore ? 52 : 8
+                            visible: root.cloudHasMore
+                            Controls.Button {
+                                anchors.centerIn: parent
+                                text: root.cloudLoading ? I18n.tr("正在加载更多…") : I18n.tr("加载更多")
+                                enabled: !root.cloudLoading
+                                onClicked: root.loadCloud(root.cloudSongs.length)
+                            }
+                        }
+                    }
+                }
+
+                LoadingState {
+                    anchors.centerIn: parent
+                    visible: root.cloudMode && root.cloudLoading && root.cloudSongs.length === 0
+                    text: I18n.tr("正在加载云盘…")
+                }
+
+                EmptyState {
+                    anchors.centerIn: parent
+                    visible: root.cloudMode && !root.cloudLoading && root.cloudSongs.length === 0
+                    icon: "cloud_off"
+                    title: I18n.tr("云盘暂无歌曲")
+                    hint: I18n.tr("上传到网易云云盘的歌曲会出现在这里")
                 }
             }
         }

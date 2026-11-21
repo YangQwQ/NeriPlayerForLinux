@@ -36,6 +36,9 @@ Item {
     property string coverUrl: entry && entry.coverUrl !== undefined && entry.coverUrl !== null
                               ? entry.coverUrl : ""
     property string placeholderIcon: "music_note"
+    property color placeholderColor: Theme.surfaceContainerHighest
+    property bool placeholderIconFilled: false
+    property color placeholderIconColor: Theme.onSurfaceVariantColor
     property real cardWidth: 150
 
     signal clicked()
@@ -70,6 +73,10 @@ Item {
             height: parent.width
             radius: 14
             placeholderIconSize: 44
+            placeholderIcon: root.placeholderIcon
+            placeholderColor: root.placeholderColor
+            placeholderIconFilled: root.placeholderIconFilled
+            placeholderIconColor: root.placeholderIconColor
             path: root.coverPath
             url: root.coverUrl
         }

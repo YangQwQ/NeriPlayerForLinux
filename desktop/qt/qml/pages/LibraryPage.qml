@@ -26,7 +26,7 @@ Item {
     property string primaryTab: "local"      // local / favorites / netease / bilibili / youtube
     property string localTab: "songs"        // songs / artists / albums / playlists
 
-    // 一级 Tab 平铺各在线音源（对齐 Android：网易云 / YouTube / 哔哩哔哩 各自独立）。
+    // 一级 Tab 平铺各在线音源，顺序与探索页 / 设置页一致：网易云 → 哔哩哔哩 → YouTube。
     readonly property var primaryTabOptions: {
         // 读一次让绑定依赖设置对象，YouTube 开关变化后 Tab 列表自动刷新。
         const settings = Settings.values
@@ -34,10 +34,10 @@ Item {
             { value: "local", label: I18n.tr("本地") },
             { value: "favorites", label: I18n.tr("收藏") },
             { value: "netease", label: I18n.tr("网易云") },
+            { value: "bilibili", label: I18n.tr("哔哩哔哩") },
         ]
         if (Settings.get("youtubeEnabled", false) === true)
             list.push({ value: "youtube", label: "YouTube" })
-        list.push({ value: "bilibili", label: I18n.tr("哔哩哔哩") })
         return list
     }
     readonly property bool onlineTab: page.primaryTab === "netease"
@@ -98,6 +98,22 @@ Item {
         const q = page.normalizedQuery
         return page.playlists.filter(function(playlist) {
             return String(playlist.name || "").toLowerCase().indexOf(q) >= 0
+        })
+    }
+
+    // 在线 Tab 搜索（header 右上角统一入口，多个在线音源共享一个关键词）。
+    property string onlineQuery: ""
+
+    // 收藏 Tab 独立搜索（对齐 Android 收藏页的上下文搜索）。
+    property string favoritesQuery: ""
+    readonly property var filteredFavorites: {
+        const q = page.favoritesQuery.trim().toLowerCase()
+        if (q === "")
+            return page.favorites
+        return page.favorites.filter(function(song) {
+            return String(song.title || "").toLowerCase().indexOf(q) >= 0
+                    || String(song.artist || "").toLowerCase().indexOf(q) >= 0
+                    || String(song.album || "").toLowerCase().indexOf(q) >= 0
         })
     }
 
@@ -368,6 +384,44 @@ Item {
                     font.pixelSize: Theme.textStyle("bodyMedium").size
                     background: null
                     onTextChanged: page.query = text
+                }
+            }
+
+            // 在线搜索框（与本地搜索同一位置，切换音源时共享关键词）。
+            Rectangle {
+                visible: page.onlineTab
+                Layout.preferredWidth: 240
+                Layout.preferredHeight: 40
+                Layout.leftMargin: Theme.spacingSm
+                radius: 20
+                color: Theme.surfaceContainerHigh
+
+                NeriIcon {
+                    id: onlineSearchIcon
+
+                    anchors.left: parent.left
+                    anchors.leftMargin: Theme.spacingMd
+                    anchors.verticalCenter: parent.verticalCenter
+                    name: "search"
+                    iconSize: 18
+                    color: Theme.onSurfaceVariantColor
+                }
+
+                TextField {
+                    anchors.left: onlineSearchIcon.right
+                    anchors.right: parent.right
+                    anchors.rightMargin: Theme.spacingMd
+                    anchors.verticalCenter: parent.verticalCenter
+                    padding: 0
+                    text: page.onlineQuery
+                    placeholderText: I18n.tr("搜索我的歌单 / 收藏夹")
+                    placeholderTextColor: Theme.onSurfaceVariantColor
+                    color: Theme.onSurfaceColor
+                    selectByMouse: true
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.textStyle("bodyMedium").size
+                    background: null
+                    onTextChanged: page.onlineQuery = text
                 }
             }
         }
@@ -784,7 +838,7 @@ Item {
             anchors.bottom: parent.bottom
             visible: page.primaryTab === "favorites"
             clip: true
-            model: page.favorites
+            model: page.filteredFavorites
             boundsBehavior: Flickable.StopAtBounds
             bottomMargin: Theme.spacingXl
 
@@ -853,8 +907,8 @@ Item {
                                     text: I18n.tr("播放全部")
                                     icon: "play_arrow"
                                     filled: true
-                                    enabled: page.favorites.length > 0
-                                    onClicked: page.playSongs(page.favorites, 0)
+                                    enabled: page.filteredFavorites.length > 0
+                                    onClicked: page.playSongs(page.filteredFavorites, 0)
                                 }
 
                                 LibraryButton {
@@ -871,7 +925,44 @@ Item {
                     width: parent.width
                     title: I18n.tr("喜欢的歌曲")
                     icon: "favorite"
-                    trailingText: page.favorites.length + I18n.tr(" 首")
+                    trailingText: page.filteredFavorites.length + I18n.tr(" 首")
+                }
+
+                // 收藏页上下文搜索框（与顶部本地搜索独立）。
+                Rectangle {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: Math.min(parent.width - Theme.spacingLg * 2, 360)
+                    height: 40
+                    radius: 20
+                    color: Theme.surfaceContainerHigh
+
+                    NeriIcon {
+                        id: favSearchIcon
+
+                        anchors.left: parent.left
+                        anchors.leftMargin: Theme.spacingMd
+                        anchors.verticalCenter: parent.verticalCenter
+                        name: "search"
+                        iconSize: 18
+                        color: Theme.onSurfaceVariantColor
+                    }
+
+                    TextField {
+                        anchors.left: favSearchIcon.right
+                        anchors.right: parent.right
+                        anchors.rightMargin: Theme.spacingMd
+                        anchors.verticalCenter: parent.verticalCenter
+                        padding: 0
+                        text: page.favoritesQuery
+                        placeholderText: I18n.tr("搜索收藏的歌曲")
+                        placeholderTextColor: Theme.onSurfaceVariantColor
+                        color: Theme.onSurfaceColor
+                        selectByMouse: true
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.textStyle("bodyMedium").size
+                        background: null
+                        onTextChanged: page.favoritesQuery = text
+                    }
                 }
             }
 
@@ -890,7 +981,7 @@ Item {
                     index: favoriteDelegate.itemIndex
                     playing: page.currentKey !== "" && favoriteDelegate.item
                              && favoriteDelegate.item.key === page.currentKey
-                    onActivated: function(index) { page.playSongs(page.favorites, index) }
+                    onActivated: function(index) { page.playSongs(page.filteredFavorites, index) }
                     onMoreClicked: function(song) { songMenu.openFor(song, { playlistId: "system:favorites" }) }
                     onRightClicked: function(song) { songMenu.openFor(song, { playlistId: "system:favorites" }) }
                 }
@@ -898,10 +989,12 @@ Item {
 
             footer: EmptyState {
                 width: favoritesPane.width
-                visible: page.favorites.length === 0
-                icon: "favorite_border"
-                title: I18n.tr("还没有收藏的歌曲")
-                hint: I18n.tr("在歌曲的「更多」菜单里点击「收藏」，歌曲会出现在这里")
+                visible: page.filteredFavorites.length === 0
+                icon: page.favoritesQuery.trim() !== "" ? "search_off" : "favorite_border"
+                title: page.favoritesQuery.trim() !== "" ? I18n.tr("没有匹配的收藏歌曲")
+                                                         : I18n.tr("还没有收藏的歌曲")
+                hint: page.favoritesQuery.trim() !== "" ? I18n.tr("换个关键词试试")
+                      : I18n.tr("在歌曲的「更多」菜单里点击「收藏」，歌曲会出现在这里")
             }
         }
 
@@ -910,6 +1003,7 @@ Item {
             id: neteaseTab
             source: "NETEASE"
             showSourceTabs: false
+            query: page.onlineQuery
             anchors.top: scanBanner.bottom
             anchors.left: parent.left
             anchors.right: parent.right
@@ -921,6 +1015,7 @@ Item {
             id: bilibiliTab
             source: "BILIBILI"
             showSourceTabs: false
+            query: page.onlineQuery
             anchors.top: scanBanner.bottom
             anchors.left: parent.left
             anchors.right: parent.right
@@ -932,6 +1027,7 @@ Item {
             id: youtubeTab
             source: "YOUTUBE"
             showSourceTabs: false
+            query: page.onlineQuery
             anchors.top: scanBanner.bottom
             anchors.left: parent.left
             anchors.right: parent.right

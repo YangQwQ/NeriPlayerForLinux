@@ -14,6 +14,14 @@ Item {
     /** 正圆模式：遮罩半径取实际尺寸的一半，不受传入 radius 与取整影响。 */
     property bool circle: false
     property real placeholderIconSize: 22
+    /** 无图时的占位图标；歌单卡可按类型传 cloud/bookmark 等。 */
+    property string placeholderIcon: "music_note"
+    /** 无图时的占位背景色；默认中性色，云盘等入口可传 secondaryContainer 强调。 */
+    property color placeholderColor: Theme.surfaceContainerHighest
+    /** 占位图标是否实心（Material Symbols FILL 轴）；云盘入口对齐 Android 用实心。 */
+    property bool placeholderIconFilled: false
+    /** 占位图标颜色；默认中性，云盘入口用 onSecondaryContainer 强调色。 */
+    property color placeholderIconColor: Theme.onSurfaceVariantColor
 
     // 远程 URL 解析后的本地缓存路径
     property string resolvedPath: ""
@@ -120,15 +128,16 @@ Item {
     Rectangle {
         anchors.fill: parent
         radius: cover.maskRadius
-        color: Theme.surfaceContainerHighest
+        color: cover.placeholderColor
         antialiasing: true
         visible: !cover.hasImage
 
         NeriIcon {
             anchors.centerIn: parent
-            name: "music_note"
+            name: cover.placeholderIcon
+            filled: cover.placeholderIconFilled
             iconSize: cover.placeholderIconSize
-            color: Theme.onSurfaceVariantColor
+            color: cover.placeholderIconColor
         }
     }
 

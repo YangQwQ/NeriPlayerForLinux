@@ -2,12 +2,14 @@ package moe.ouom.neriplayer.desktop.net
 
 import kotlinx.serialization.Serializable
 import moe.ouom.neriplayer.desktop.core.MediaSource
+import moe.ouom.neriplayer.desktop.core.NeteaseCloudPage
 import moe.ouom.neriplayer.desktop.core.OnlineArtist
 import moe.ouom.neriplayer.desktop.core.OnlineCollection
 import moe.ouom.neriplayer.desktop.core.Song
 import moe.ouom.neriplayer.desktop.core.biliSongKey
 import moe.ouom.neriplayer.desktop.core.neteaseSongKey
 import java.security.MessageDigest
+import java.util.concurrent.ConcurrentHashMap
 
 private const val NETEASE_BASE = "https://music.163.com"
 
@@ -412,6 +414,50 @@ class NeteaseApi(private val http: HttpService) {
         }
     }
 
+    /**
+     * 分页读取用户云盘（明文 /api，带登录 Cookie）。code=301 表示登录态失效，返回 null 交由命令层转 needLogin。
+     * 条目优先用 simpleSong 映射，缺失时用外层 songId/songName/fileName 等字段回退。
+     */
+    fun cloudSongs(offset: Int, limit: Int): NeteaseCloudPage? {
+        val root = getJson("/api/v1/cloud/get?offset=$offset&limit=$limit") ?: return null
+        val code = root.int("code")
+        if (code == 301) return null
+        if (code != null && code != 200) return null
+        val total = root.int("count") ?: 0
+        val data = root.array("data")?.objects().orEmpty().map(::JsonObjectSelf)
+        val songs = data.mapNotNull { item ->
+            val simple = item.obj("simpleSong")
+            if (simple != null && simple.long("id") != null) {
+                songFromJson(simple)
+            } else {
+                val id = item.long("songId") ?: return@mapNotNull null
+                val name = item.str("songName").takeIf { !it.isNullOrBlank() }
+                    ?: item.str("fileName")?.substringBeforeLast('.').takeIf { !it.isNullOrBlank() }
+                    ?: "未知歌曲"
+                Song(
+                    key = neteaseSongKey(id),
+                    source = MediaSource.NETEASE,
+                    title = name,
+                    artist = item.str("artist").orEmpty(),
+                    album = item.str("album").orEmpty(),
+                    durationMs = item.long("duration") ?: 0L,
+                    remoteId = id.toString(),
+                    artworkUrl = normalizeImageUrl(item.str("cover")),
+                )
+            }
+        }
+        val consumed = data.size
+        val hasMore = root.str("hasMore")?.toBooleanStrictOrNull()
+            ?: (consumed > 0 && offset + consumed < total)
+        return NeteaseCloudPage(
+            songs = songs,
+            totalCount = total,
+            usedBytes = root.long("size") ?: 0L,
+            maxBytes = root.long("maxSize") ?: 0L,
+            hasMore = hasMore,
+        )
+    }
+
     // ---------------------------------------------------------------- 首页推荐（登录态 / 公开接口）
 
     /**
@@ -764,18 +810,43 @@ class BiliApi(private val http: HttpService) {
         val root = NeriJsonParser.parse(text).asObject() ?: return emptyList()
         if (root.int("code") != 0) return emptyList()
         val list = root.obj("data")?.array("list") ?: return emptyList()
-        return list.objects().mapNotNull { item ->
+        val folders = list.objects().mapNotNull { item ->
             val id = item.long("id") ?: return@mapNotNull null
             OnlineCollection(
                 id = id.toString(),
                 name = cleanBiliText(item.str("title")),
                 creator = "哔哩哔哩收藏夹",
+                // created/list-all 的 list 项不带 cover；能直接拿到时用之，缺的下面用详情接口补。
                 coverUrl = normalizeImageUrl(item.str("cover")),
                 trackCount = item.int("media_count") ?: 0,
                 source = MediaSource.BILIBILI,
             )
         }
+        // created/list-all 通常不返回封面，逐个用 folder/info 补齐；封面属于低频元数据，
+        // 按 id 缓存成功结果，避免刷新页面时重复请求。请求失败只保持 null，下次刷新可重试。
+        return folders.map { folder ->
+            if (!folder.coverUrl.isNullOrBlank()) return@map folder
+            val cached = folderInfoCovers[folder.id]
+            if (!cached.isNullOrEmpty()) return@map folder.copy(coverUrl = cached)
+            val info = http.get(
+                "https://api.bilibili.com/x/v3/fav/folder/info?media_id=${folder.id}",
+                headers,
+            )
+            val infoRoot = NeriJsonParser.parse(info.orEmpty()).asObject()
+            val cover = if (infoRoot?.int("code") == 0) {
+                normalizeImageUrl(infoRoot.obj("data")?.str("cover"))
+            } else {
+                null
+            }
+            if (cover.isNullOrBlank()) folder else {
+                folderInfoCovers[folder.id] = cover
+                folder.copy(coverUrl = cover)
+            }
+        }
     }
+
+    /** 收藏夹封面详情缓存：id → 封面 URL（只缓存成功解析的结果）。 */
+    private val folderInfoCovers = ConcurrentHashMap<String, String>()
 
     // ---------------------------------------------------------------- 首页音乐榜 / 热门音乐
 

@@ -51,6 +51,7 @@
 | `online.collectionDetail` | `{source, id, kind?}`，`kind` 默认 `"playlist"` | `{title, coverUrl, description, creator, songs, collection}` |
 | `online.myPlaylists` | `{source}` | `{collections:[OnlineCollection], needLogin:Boolean}` |
 | `online.biliFavorites` | `{url?}` | `{collections:[OnlineCollection], needLogin:Boolean}` |
+| `online.neteaseCloudSongs` | `{offset?, limit?}`（默认 0/200，limit 1..1000） | `{songs:[Song], totalCount, usedBytes, maxBytes, hasMore, needLogin}`；登录失效返回 `needLogin:true` 与空 songs |
 | `online.lyrics` | `{song:Song, refresh?}` | `{lyrics:Lyrics}` |
 | `online.playbackUrl` | `{song:Song}` | `{song:Song, playable:Boolean, url?, path?, headers?, error?}` |
 | `online.sources` | — | `{sources:[{id,name,enabled}], quality, ffmpeg:Boolean}` |

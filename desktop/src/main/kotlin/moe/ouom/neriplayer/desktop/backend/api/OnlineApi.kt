@@ -285,6 +285,37 @@ object OnlineApi {
             }
         }
 
+        // 网易云云盘：明文 /api/v1/cloud/get，带登录 Cookie。code=301 视为登录失效。
+        server.on("online.neteaseCloudSongs") { params ->
+            val offset = (params.intOrNull("offset") ?: 0).coerceAtLeast(0)
+            val limit = (params.intOrNull("limit") ?: 200).coerceIn(1, 1000)
+            val hasLogin = container.accounts.isLoggedIn(MediaSource.NETEASE) &&
+                online.httpService.cookieSnapshot("netease")["MUSIC_U"].orEmpty().isNotBlank()
+            if (!hasLogin) {
+                buildJsonObject {
+                    put("songs", encodeJson(emptyList<Song>()))
+                    put("needLogin", true)
+                }
+            } else {
+                val page = withContext(Dispatchers.IO) { online.netease.cloudSongs(offset, limit) }
+                if (page == null) {
+                    buildJsonObject {
+                        put("songs", encodeJson(emptyList<Song>()))
+                        put("needLogin", true)
+                    }
+                } else {
+                    buildJsonObject {
+                        put("songs", encodeJson(page.songs))
+                        put("totalCount", page.totalCount)
+                        put("usedBytes", page.usedBytes)
+                        put("maxBytes", page.maxBytes)
+                        put("hasMore", page.hasMore)
+                        put("needLogin", false)
+                    }
+                }
+            }
+        }
+
         server.on("online.biliFavorites") { params ->
             val url = params.stringOrNull("url")?.trim().orEmpty()
             val account = container.accounts.accountOf(MediaSource.BILIBILI)

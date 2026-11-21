@@ -144,6 +144,16 @@ data class OnlineCollection(
     val description: String = "",
 )
 
+/** 网易云云盘分页：歌曲直接复用 Song，播放链路可直接消费。 */
+@Serializable
+data class NeteaseCloudPage(
+    val songs: List<Song> = emptyList(),
+    val totalCount: Int = 0,
+    val usedBytes: Long = 0L,
+    val maxBytes: Long = 0L,
+    val hasMore: Boolean = false,
+)
+
 @Serializable
 data class OnlineArtist(
     val id: String,
