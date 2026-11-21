@@ -6,6 +6,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
+import moe.ouom.neriplayer.desktop.APP_VERSION
 import moe.ouom.neriplayer.desktop.backend.CoreServer
 import moe.ouom.neriplayer.desktop.backend.ShortcutCatalog
 import moe.ouom.neriplayer.desktop.backend.PlayerWire
@@ -148,7 +149,7 @@ object AppApi {
         val syncState = container.sync.state.value
         return buildJsonObject {
             put("protocol", PROTOCOL_VERSION)
-            put("appVersion", "2.1.0")
+            put("appVersion", APP_VERSION)
             put("settings", encodeJson(container.settings.current))
             put("theme", themePayload(container))
             put("player", PlayerWire.state(player))

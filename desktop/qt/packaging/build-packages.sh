@@ -69,11 +69,15 @@ while [ "$#" -gt 0 ]; do
     esac
     shift
 done
-VERSION="${VERSION:-2.0.0}"
-
+# 版本号默认值来自 desktop/VERSION（单一事实来源）；调用方仍可显式传入以构建修订版
+# （例如 fix-only 构建用 3.0.0.1）。见 desktop/docs/versioning.md。
 PACKAGING_DIR="$(cd "$(dirname "$0")" && pwd)"
 QT_DIR="$(cd "$PACKAGING_DIR/.." && pwd)"
 DESKTOP_DIR="$(cd "$QT_DIR/.." && pwd)"
+if [ -z "$VERSION" ]; then
+    VERSION="$(tr -d '[:space:]' < "$DESKTOP_DIR/VERSION")"
+    [ -n "$VERSION" ] || { echo "错误：desktop/VERSION 为空" >&2; exit 2; }
+fi
 BUILD_DIR="${PACKAGING_BUILD_DIR:-$QT_DIR/build/packages}"
 STAGE="$BUILD_DIR/stage"
 OUT_DIR="$BUILD_DIR/out"

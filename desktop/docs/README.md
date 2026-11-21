@@ -34,6 +34,7 @@
 
 | 文档 | 覆盖范围 |
 | --- | --- |
+| [versioning.md](versioning.md) | 版本号单一事实来源（`desktop/VERSION`）、何时递增、修订包规则 |
 | [/AGENTS.md](../../AGENTS.md) | 目录速查、构建命令、编码约定、并行协作规则、环境注意 |
 | [upstream-sync.md](upstream-sync.md) | 与上游 `cwuom/NeriPlayer` 的同步方式 |
 
