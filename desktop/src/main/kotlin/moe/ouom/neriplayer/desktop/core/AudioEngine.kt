@@ -142,11 +142,11 @@ class FfmpegAudioEngine : AudioEngine {
     private var input: AudioInput? = null
     private var offsetMs: Long = 0L
     private var durationMs: Long = 0L
-    private var volume: Float = 0.85f
-    /** 音量由命令线程写、PCM 写入线程读，必须 volatile 保证即时可见。 */
-    private var speed: Float = 1.0f
-    private var pitch: Float = 0.0f
-    private var loudness: Boolean = false
+    // 这组参数由命令线程写、音频线程读；volatile 保证调节即时生效，不能依赖锁的偶发 happens-before。
+    @Volatile private var volume: Float = 0.85f
+    @Volatile private var speed: Float = 1.0f
+    @Volatile private var pitch: Float = 0.0f
+    @Volatile private var loudness: Boolean = false
 
     /** 当前 DSP 音效参数；`null` 表示旁路。由命令线程写、滤镜构建时读。 */
     @Volatile private var audioEffects: AudioEffectsSound? = null

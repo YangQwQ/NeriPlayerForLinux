@@ -164,22 +164,22 @@ class PlayerManager(
     @Volatile private var audioCachedKey: String? = null
     private val audioCacheFile: File get() = File(audioCacheDir, "current.audio")
 
-    /** 后台下载指定歌曲到唯一的内存缓存文件；成功记录 audioCachedKey。 */
+    /** 后台流式下载指定歌曲到唯一的内存缓存文件；成功记录 audioCachedKey。 */
     private suspend fun prefetchAudio(song: Song, input: AudioInput) {
         val url = input.url ?: return
-        val bytes = withContext(Dispatchers.IO) {
-            online.httpService.download(url, input.headers)
-        }
-        if (bytes == null || bytes.isEmpty()) return
         val ok = withContext(Dispatchers.IO) {
-            runCatching {
-                audioCachedKey = null   // 先作废旧缓存，避免切歌时读到半写文件
-                val tmp = File(audioCacheDir, "current.audio.tmp")
-                tmp.writeBytes(bytes)
-                if (audioCacheFile.exists()) audioCacheFile.delete()
-                tmp.renameTo(audioCacheFile)
-                audioCacheFile.length() > 0L
-            }.getOrDefault(false)
+            val tmp = File(audioCacheDir, "current.audio.tmp")
+            audioCachedKey = null   // 先作废旧缓存，避免切歌时读到半写文件
+            // 流式下载，避免整首歌以 ByteArray 驻留堆内存；失败时工具方法会删除半成品
+            if (!online.httpService.downloadToFile(url, input.headers, tmp) { _, _ -> }) {
+                false
+            } else {
+                runCatching {
+                    if (audioCacheFile.exists()) audioCacheFile.delete()
+                    tmp.renameTo(audioCacheFile)
+                    audioCacheFile.length() > 0L
+                }.getOrDefault(false)
+            }
         }
         audioCachedKey = if (ok) song.key else null
     }
@@ -868,7 +868,7 @@ class PlayerManager(
                 },
             ),
         )
-        settings.update { it.copy(equalizerPreset = name) }
+        settings.updateDeferred { it.copy(equalizerPreset = name) }
     }
 
     fun setEqualizerBand(index: Int, gain: Float) {
@@ -886,7 +886,7 @@ class PlayerManager(
                 },
             ),
         )
-        settings.update { it.copy(equalizerPreset = "自定义") }
+        settings.updateDeferred { it.copy(equalizerPreset = "自定义") }
     }
 
     /** 更新淡入淡出 / 交叉淡入设置；内存与引擎立即生效，写盘延迟合并。 */
