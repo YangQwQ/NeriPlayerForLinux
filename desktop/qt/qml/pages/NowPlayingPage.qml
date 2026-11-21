@@ -392,6 +392,11 @@ Item {
                         Nav.openPanel("listenTogether")
                 }
             }
+
+            // 原文 / 音译 / 翻译开关：与评论、一起听同列，放在一起听下方。
+            LyricDisplayToggleRow {
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
         }
     }
 
@@ -426,7 +431,7 @@ Item {
 
         anchors.fill: parent
         z: 20
-        visible: page.showFullLyrics
+        active: page.showFullLyrics
         onCloseRequested: page.showFullLyrics = false
     }
 }
