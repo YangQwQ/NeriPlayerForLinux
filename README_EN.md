@@ -14,16 +14,44 @@
 > - ⬇️ Download: [Releases](https://github.com/YangQwQ/NeriPlayerForLinux/releases) → `neriplayer_<version>_amd64.deb` / `_x86_64.rpm` / `_x86_64.AppImage` (with `SHA256SUMS.txt`)
 > - 📦 Runtime & optional dependencies (ffmpeg / yt-dlp / layer-shell, etc.) are documented in
 >   [desktop/README.md](./desktop/README.md#依赖与运行环境) (Chinese)
-> - 🔄 Shares the same GitHub sync format with the Android app (playlists / favorites / recents / play stats)
-> - 🔑 QR login for NetEase & Bilibili, local library, lyrics (including floating lyrics), multi-source playback
-> - 🖥️ Background residency: tray (StatusNotifierItem) + control panel + MPRIS media keys + xdg global shortcuts
-> - 🎨 Material 3 UI whose colors follow KDE/GNOME system theme by default
-> - 🌊 Fade-in/fade-out and crossfade on track change; in-memory audio cache makes seeking instant when the current track is cached (one track only, bounded memory)
-> - 🌐 Full UI localization (Chinese / English); configurable app font, lyric font, and program background
-> - 🎚️ Full **native DSP engine** (bundled `lib_neri.so`): all 23 parameters active, including virtual bass, surround, reverb, compressor/limiter and speaker optimization; an 8-tab effects panel (Presets / EQ / Tone / Space / Dynamics / Speaker / Speed / Advanced) with AutoEQ import and frequency-response preview
-> - 🛠️ Sidebar-categorized settings with separate "Audio effects & speed" and "Playback" sections plus a dedicated Shortcuts category; floating lyrics support a layer-shell overlay or normal draggable window, and per-word karaoke highlighting
-> - 📦 Desktop utilities: per-video Bilibili skip intervals, storage usage with safe cache cleanup, settings snapshot export/import and a redacted log viewer
-> - 🎧 Refined Now Playing style: cross-faded blurred cover background, synced bilingual lyrics with configurable scroll easing/duration
+>
+> #### Feature parity with the Android upstream
+>
+> The desktop version takes the Android app as its feature baseline. The table below summarizes the current
+> alignment by area (✅ aligned / ⚠️ partial / ➖ large platform difference). For a detailed item-by-item
+> comparison, see the [desktop README feature table](./desktop/README.md#功能) and the
+> [gap investigations](./desktop/docs/investigations/README.md).
+>
+> | Area | Android upstream | This desktop version | Status |
+> | :--- | :--- | :--- | :---: |
+> | Multi-source playback | NetEase / Bilibili / YouTube Music / local / self-hosted server (preview) in one queue | NetEase / Bilibili / YouTube Music / local in one queue; **self-hosted server not integrated** | ⚠️ |
+> | Source fallback | NetEase failure → lower quality → match Bili candidates by title/artist/duration | NetEase failure auto-switches to same-title Bili audio, scoring candidates by title/artist/duration; **quality downgrade retry not done** | ⚠️ |
+> | Audio effects | In-house DSP, 10-band EQ, AutoEQ, loudness, 32-bit output, USB exclusive | **native DSP (104 params / 24 capabilities, incl. virtual bass / surround / reverb / compressor-limiter)**, AutoEQ import, frequency response, speed / pitch / loudness (all live when native is available; ~10 marked inactive on ffmpeg fallback); USB exclusive & 32-bit output N/A | ✅ |
+> | Lyrics | LRC / YRC / TTML line & word sync, translation/transliteration, multi-source matching, external output | Local / embedded / online lyrics, translation, line & **word highlighting**, configurable scroll easing; floating lyrics window (overlay / drag / lock / per-word); **TTML, transliteration & multi-source matching not done** | ⚠️ |
+> | Home recommendations | Daily recommend / Private FM / charts / radar / playlists / new songs / Bili music | Daily recommend / Private FM / charts / radar / playlists / new songs / Bili music / YouTube shelves | ✅ |
+> | Explore & details | Per-platform search, share-link recognition, album/artist details, song encyclopedia | Per-platform search (**only partial paging**), dedicated album/artist pages, comments; **share-link recognition & song encyclopedia not done** | ⚠️ |
+> | Playlists & favorites | Custom playlists, favorites, sorting, save to NetEase playlist | Custom playlists, favorites, add/remove & sorting; **save to NetEase playlist not done** | ⚠️ |
+> | Listen together | Room sync, roles, clock offset, shared playback candidates | NeriPlayer-LTW protocol interop, create/join room, queue & playback sync, roles and repeat/shuffle sync, clock offset correction; **shared playback candidates not done**, example or self-hosted server | ⚠️ |
+> | Downloads & cache | Multi-platform downloads, resume, custom directory, cache cap, keep-recently-played | Batch download / progress / retry / offline playback, storage usage stats & safe cleanup, per-video skip rules; **resume, filename templates & cache-size enforcement not done** (history fixed at 600 entries) | ⚠️ |
+> | Sync & backup | GitHub / WebDAV sync, stats, JSON backup, encrypted config export | **Shares the Android GitHub sync protocol** (playlists / favorites / recents / stats), stats, settings snapshot import/export; **WebDAV & encrypted credential export not done** | ⚠️ |
+> | UI personalization | Material You / Clean themes, dynamic color, custom background, UI scale, widgets | Material 3, colors follow KDE/GNOME, dynamic color, custom background/font, Chinese/English, UI scale; **Clean theme N/A** | ✅ |
+> | System integration | Media foreground service, keep-alive, status-bar/Bluetooth/car lyrics, widgets | Tray + control panel, MPRIS media keys, xdg global shortcuts, single instance, close-to-tray, layer-shell floating lyrics | ➖ |
+> | Stability & diagnostics | Offline / safe mode, crash & ANR logs, developer mode | Redacted log viewer, settings snapshot, storage usage stats; **crash/ANR logs, offline mode & safe mode not done** | ⚠️ |
+>
+> **Main gaps**: self-hosted music server, quality-downgrade retry, TTML / transliteration / multi-source lyrics matching,
+> Bili CC subtitle lyrics, share-link recognition, song encyclopedia, save-to-NetEase-playlist,
+> listen-together shared playback candidates, download resume & filename templates, WebDAV sync,
+> cache-size enforcement, offline/safe mode. A number of Android-only features (status-bar/Bluetooth/car lyrics,
+> desktop widgets, USB DAC exclusive, keep-alive, ANR logs) do not apply on Linux desktop.
+>
+> #### Relationship to the official NeriPlayer-Desktop
+>
+> The upstream also has [cwuom/NeriPlayer-Desktop](https://github.com/cwuom/NeriPlayer-Desktop) (Tauri 2 + Vue 3,
+> Windows / macOS / Linux, preview). The two follow similar feature routes with different trade-offs: it targets
+> multiple platforms, while this fork focuses on Linux with native Qt windows and a Kotlin headless backend —
+> no WebView in the UI, lower resident overhead, and tighter Linux integration (tray / MPRIS / global shortcuts /
+> layer-shell floating lyrics). Both ship a native DSP and stay compatible with the Android sync protocol;
+> choose based on your platform preference and desktop experience.
 >
 > Desktop sources live in [`desktop/`](./desktop) and do not overlap with the upstream Android project.
 >
