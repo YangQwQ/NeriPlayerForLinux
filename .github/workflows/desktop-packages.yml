@@ -6,7 +6,7 @@ name: Desktop Linux packages
 # macOS/Windows 不在本 workflow 范围内。
 on:
   push:
-    branches: [compose-desktop]
+    branches: [master]
     paths:
       - 'desktop/**'
       - '.github/workflows/desktop-packages.yml'
