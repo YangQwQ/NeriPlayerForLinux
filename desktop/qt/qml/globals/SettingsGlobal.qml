@@ -57,6 +57,33 @@ QtObject {
     readonly property string colorSpec: values.colorSpec || "SPEC_2021"
     readonly property bool onboarded: values.onboardingAccepted === true
     readonly property bool showLyricTranslation: values.showLyricTranslation !== false
+    readonly property bool showLyricPhonetic: values.showLyricPhonetic === true
+    readonly property bool showLyricOriginal: values.showLyricOriginal !== false
+
+    // ---- 动效 ----
+    readonly property bool motionEnabled: values.motionEnabled !== false
+    readonly property bool motionPageTransition: values.motionPageTransition !== false
+    readonly property bool motionPanelTransition: values.motionPanelTransition !== false
+    readonly property bool motionThemeTransition: values.motionThemeTransition !== false
+    readonly property bool motionLyricScroll: values.motionLyricScroll !== false
+    readonly property string progressColorMode: values.progressColorMode || "COVER"
+
+    // ---- 歌词显示 ----
+    readonly property string lyricSource: values.lyricSource || "AUTO"
+    readonly property string lyricLineOrder: values.lyricLineOrder || "ORIGINAL_TRANSLATION_PHONETIC"
+    readonly property real lyricPhoneticFontSizeScale: {
+        const v = values.lyricPhoneticFontSizeScale
+        return (typeof v === "number" && v > 0) ? v : 0.58
+    }
+    readonly property real lyricTranslationFontSizeScale: {
+        const v = values.lyricTranslationFontSizeScale
+        return (typeof v === "number" && v > 0) ? v : 0.58
+    }
+    readonly property bool lyricBlurEnabled: values.lyricBlurEnabled !== false
+    readonly property real lyricBlurAmount: {
+        const v = values.lyricBlurAmount
+        return (typeof v === "number" && v >= 0) ? v : 1.5
+    }
 
     property Connections backendConnection: Connections {
         target: Backend

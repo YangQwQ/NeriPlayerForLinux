@@ -8,6 +8,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonObject
+import moe.ouom.neriplayer.desktop.APP_VERSION
 import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -38,8 +39,7 @@ object ConfigSnapshot {
     /** 平台标识：本仓库只有 Linux 桌面版，Android 备份包不在此接受范围内。 */
     const val PLATFORM = "desktop"
 
-    /** 仅作信息展示；真正的版本号在 AppApi.bootstrapPayload 里，这里不参与任何判断。 */
-    const val APP_VERSION = "2.1.0"
+    /** 仅作信息展示；与 AppApi.bootstrapPayload 共用同一个生成常量，不参与任何判断。 */
 
     /** 快照文件大小上限：设置只有几百个字段，超过这个量级说明选错文件了。 */
     const val MAX_FILE_BYTES = 2L * 1024 * 1024
@@ -305,6 +305,9 @@ object ConfigSnapshot {
             "FruitSalad", "Monochrome", "Fidelity", "Content",
         ),
         "colorSpec" to listOf("SPEC_2021", "SPEC_2025"),
+        "progressColorMode" to listOf("COVER", "THEME"),
+        "lyricSource" to listOf("AUTO", "NETEASE", "LOCAL"),
+        "dynamicBackgroundSource" to listOf("COVER", "APP"),
         "language" to listOf("zh-CN", "en"),
         "qualityPreference" to listOf("standard", "higher", "exhigh", "lossless", "hires"),
         "downloadQuality" to listOf("standard", "higher", "exhigh", "lossless", "hires"),
@@ -375,7 +378,15 @@ object ConfigSnapshot {
             playbackSpeed = clampFloat("playbackSpeed", next.playbackSpeed, 0.5f, 3f),
             pitchSemitone = clampFloat("pitchSemitone", next.pitchSemitone, -12f, 12f),
             lyricsFontScale = clampFloat("lyricsFontScale", next.lyricsFontScale, 0.5f, 3f),
+            lyricPhoneticFontSizeScale = clampFloat(
+                "lyricPhoneticFontSizeScale", next.lyricPhoneticFontSizeScale, 0.3f, 1.5f,
+            ),
+            lyricTranslationFontSizeScale = clampFloat(
+                "lyricTranslationFontSizeScale", next.lyricTranslationFontSizeScale, 0.3f, 1.5f,
+            ),
+            lyricBlurAmount = clampFloat("lyricBlurAmount", next.lyricBlurAmount, 0f, 8f),
             appBackgroundDim = clampFloat("appBackgroundDim", next.appBackgroundDim, 0f, 1f),
+            dynamicBackgroundSpeed = clampInt("dynamicBackgroundSpeed", next.dynamicBackgroundSpeed, 2, 60),
             fadeInMs = clampInt("fadeInMs", next.fadeInMs, 0, 10_000),
             fadeOutMs = clampInt("fadeOutMs", next.fadeOutMs, 0, 10_000),
             crossfadeMs = clampInt("crossfadeMs", next.crossfadeMs, 0, 20_000),
@@ -415,7 +426,31 @@ object ConfigSnapshot {
             floatingLyricsPositionY = clampFloat(
                 "floatingLyricsPositionY", next.floatingLyricsPositionY, 0f, 1f,
             ),
+            floatingLyricsPhoneticAlpha = clampFloat(
+                "floatingLyricsPhoneticAlpha", next.floatingLyricsPhoneticAlpha, 0f, 1f,
+            ),
         )
+
+        // 行组合串必须恰好由 ORIGINAL / TRANSLATION / PHONETIC 各一次组成（顺序可任意）；
+        // 手改快照写错时回退默认，而不是让前端拿到一个渲染不出歌词的值。
+        val validLineOrders = setOf(
+            "ORIGINAL_TRANSLATION_PHONETIC", "PHONETIC_ORIGINAL_TRANSLATION",
+            "TRANSLATION_ORIGINAL_PHONETIC", "ORIGINAL_PHONETIC_TRANSLATION",
+            "PHONETIC_TRANSLATION_ORIGINAL", "TRANSLATION_PHONETIC_ORIGINAL",
+        )
+        for ((key, value) in listOf(
+            "lyricLineOrder" to next.lyricLineOrder,
+            "floatingLyricsLineOrder" to next.floatingLyricsLineOrder,
+        )) {
+            if (value !in validLineOrders) {
+                warnings += "$key 取值「$value」非法，已回退默认顺序"
+                next = if (key == "lyricLineOrder") {
+                    next.copy(lyricLineOrder = "ORIGINAL_TRANSLATION_PHONETIC")
+                } else {
+                    next.copy(floatingLyricsLineOrder = "ORIGINAL_TRANSLATION_PHONETIC")
+                }
+            }
+        }
 
         // uiScale：0 = 跟随系统，其余是固定的几档；任何 >0 的值都接受，但夹在合理区间
         if (next.uiScale != 0f) {

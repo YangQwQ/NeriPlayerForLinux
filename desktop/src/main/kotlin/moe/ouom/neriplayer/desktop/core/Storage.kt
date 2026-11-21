@@ -120,6 +120,16 @@ data class AppSettings(
     val darkMode: DarkModeSetting = DarkModeSetting.AUTO,
     val paletteStyle: String = "TonalSpot",
     val colorSpec: String = "SPEC_2021",
+
+    // ---------------------------------------------------------------- 动效
+    /** 动效总开关：关闭后页面/面板/主题切换动画退化为瞬时切换（无障碍/低性能设备）。 */
+    val motionEnabled: Boolean = true,
+    val motionPageTransition: Boolean = true,
+    val motionPanelTransition: Boolean = true,
+    val motionThemeTransition: Boolean = true,
+    val motionLyricScroll: Boolean = true,
+    /** 播放页进度条强调色来源：COVER=封面派生色（默认），THEME=主题 primary。 */
+    val progressColorMode: String = "COVER",
     val musicFolders: List<String> = emptyList(),
     val volume: Float = 0.85f,
     val playbackSpeed: Float = 1.0f,
@@ -141,6 +151,20 @@ data class AppSettings(
     val equalizerBands: List<Float> = List(10) { 0f },
     val lyricsFontScale: Float = 1.0f,
     val showLyricTranslation: Boolean = true,
+    /** 播放页/悬浮歌词是否显示音译行（音译数据由后端 LyricLine.phonetic 下发）。 */
+    val showLyricPhonetic: Boolean = false,
+    /** 是否显示原文行；关闭后主行改由音译/翻译中第一个可用行顶替。 */
+    val showLyricOriginal: Boolean = true,
+    /** 歌词来源策略：AUTO=自动优先在线，NETEASE=仅网易云，LOCAL=仅本地文件。 */
+    val lyricSource: String = "AUTO",
+    /** 歌词行显示组合：ORIGINAL / TRANSLATION / PHONETIC 任意排列，下划线分隔。 */
+    val lyricLineOrder: String = "ORIGINAL_TRANSLATION_PHONETIC",
+    /** 音译行相对主行字号比例；翻译行同理。 */
+    val lyricPhoneticFontSizeScale: Float = 0.58f,
+    val lyricTranslationFontSizeScale: Float = 0.58f,
+    /** 当前歌词行模糊效果（对非当前行施加轻微模糊，突出当前行）。 */
+    val lyricBlurEnabled: Boolean = true,
+    val lyricBlurAmount: Float = 1.5f,
     /** 播放页歌词水平对齐：LEFT / CENTER / RIGHT。 */
     val lyricsAlignment: String = "LEFT",
     /** 歌词高亮方式：LINE=整句亮起，WORD=逐字亮起。 */
@@ -204,6 +228,12 @@ data class AppSettings(
     val appBackgroundBlur: Int = 0,
     /** 背景暗化程度（0..1）。 */
     val appBackgroundDim: Float = 0f,
+    /** 动态背景：封面/背景图缓慢缩放平移，避免静态背景显得呆板。 */
+    val dynamicBackground: Boolean = false,
+    /** 动态背景来源：COVER=当前封面，APP=程序背景图。 */
+    val dynamicBackgroundSource: String = "COVER",
+    /** 动态背景一个完整循环耗时（秒）。 */
+    val dynamicBackgroundSpeed: Int = 8,
 
     // ---------------------------------------------------------------- 悬浮歌词
     val floatingLyricsEnabled: Boolean = false,
@@ -225,6 +255,13 @@ data class AppSettings(
     /** 悬浮窗底色（配合背景不透明度使用）。 */
     val floatingLyricsBackgroundColor: String = "BLACK",
     val floatingLyricsShowTranslation: Boolean = true,
+    /** 悬浮歌词窗口显现/隐藏时是否淡入淡出。 */
+    val floatingLyricsShowAnimation: Boolean = true,
+    /** 悬浮歌词里是否显示音译行。 */
+    val floatingLyricsShowPhonetic: Boolean = false,
+    /** 悬浮歌词行显示组合（同 lyricLineOrder）。 */
+    val floatingLyricsLineOrder: String = "ORIGINAL_TRANSLATION_PHONETIC",
+    val floatingLyricsPhoneticAlpha: Float = 0.75f,
     val floatingLyricsRevealAnimation: Boolean = true,
     val floatingLyricsMaxWidthDp: Float = 900f,
     /** LEFT / CENTER / RIGHT */

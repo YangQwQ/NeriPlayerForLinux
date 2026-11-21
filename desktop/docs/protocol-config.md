@@ -168,6 +168,9 @@ UI：`qt/qml/components/settings/ConfigTransferDialog.qml`、`qt/qml/components/
 | `darkMode` | `AUTO` / `LIGHT` / `DARK` |
 | `paletteStyle` | `TonalSpot` / `Neutral` / `Vibrant` / `Expressive` / `Rainbow` / `FruitSalad` / `Monochrome` / `Fidelity` / `Content` |
 | `colorSpec` | `SPEC_2021` / `SPEC_2025` |
+| `progressColorMode` | `COVER`（封面派生色）/ `THEME`（主题 primary） |
+| `lyricSource` | `AUTO` / `NETEASE` / `LOCAL` |
+| `dynamicBackgroundSource` | `COVER` / `APP` |
 | `language` | `zh-CN` / `en` |
 | `qualityPreference`、`downloadQuality` | `standard` / `higher` / `exhigh` / `lossless` / `hires` |
 | `lyricsAlignment`、`nowPlayingInfoAlignment`、`floatingLyricsAlignment` | `LEFT` / `CENTER` / `RIGHT` |
@@ -187,7 +190,8 @@ UI：`qt/qml/components/settings/ConfigTransferDialog.qml`、`qt/qml/components/
 ### 数值字段（越界自动夹取，不报错）
 
 `volume` 0..1、`playbackSpeed` 0.5..3、`pitchSemitone` ±12、`lyricsFontScale` 0.5..3、
-`appBackgroundDim` 0..1、`appBackgroundBlur` 0..100、`fadeInMs`/`fadeOutMs` 0..10000、
+`lyricPhoneticFontSizeScale` / `lyricTranslationFontSizeScale` 0.3..1.5、`lyricBlurAmount` 0..8、
+`dynamicBackgroundSpeed` 2..60 秒、`appBackgroundDim` 0..1、`appBackgroundBlur` 0..100、`fadeInMs`/`fadeOutMs` 0..10000、
 `crossfadeMs` 0..20000、`lyricsHighlightDuration`/`lyricsScrollDuration` 0..5000、
 `nowPlayingAutoHideDelayMs` 0..60000、`sleepTimerMinutes` 0..1440、
 `cacheLimitMb` -1..1048576（-1 = 无上限，0 = 禁用在线音频缓存，正值 = MiB 上限），
@@ -195,6 +199,10 @@ UI：`qt/qml/components/settings/ConfigTransferDialog.qml`、`qt/qml/components/
 `floatingLyrics*` 的透明度/字号/描边/模糊/宽度/位置（见 `core/ConfigSnapshot.kt`）。
 
 `equalizerBands` 必须是 10 段；长度不对时补齐/截断，增益夹到 ±20 dB。
+
+`lyricLineOrder` / `floatingLyricsLineOrder` 必须由 `ORIGINAL` / `TRANSLATION` / `PHONETIC`
+三者各出现一次、用下划线连接（默认 `ORIGINAL_TRANSLATION_PHONETIC`），顺序可任意；
+非法取值在导入时回退默认值并记 warning。
 
 `themeSeedColor` / `customSeedColors` 必须是 6 位十六进制；非法的种子色回退默认色，
 非法的自定义色被丢弃（都记进 `warnings`）。

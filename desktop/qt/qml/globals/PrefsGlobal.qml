@@ -13,6 +13,9 @@ QtObject {
     property string backgroundImage: ""
     property int backgroundBlur: 0
     property real backgroundDim: 0
+    property bool dynamicBackground: false
+    property string dynamicBackgroundSource: "COVER"
+    property int dynamicBackgroundSpeed: 8
 
     /** 实际用于整个界面的字体族。 */
     readonly property string effectiveAppFont: appFontFamily !== "" ? appFontFamily : defaultFont
@@ -27,6 +30,9 @@ QtObject {
         backgroundImage = Settings.get("appBackgroundImage", "")
         backgroundBlur = Settings.get("appBackgroundBlur", 0)
         backgroundDim = Settings.get("appBackgroundDim", 0)
+        dynamicBackground = Settings.get("dynamicBackground", false) === true
+        dynamicBackgroundSource = Settings.get("dynamicBackgroundSource", "COVER") || "COVER"
+        dynamicBackgroundSpeed = Settings.get("dynamicBackgroundSpeed", 8)
     }
 
     Component.onCompleted: reload()
