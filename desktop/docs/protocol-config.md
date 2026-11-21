@@ -6,8 +6,6 @@
 UI：`qt/qml/components/settings/ConfigTransferDialog.qml`、`qt/qml/components/settings/DebugLogViewer.qml`
 （入口由集成负责人接线，见 §6）。
 
-调查与取舍背景见 `docs/investigations/config-transfer-debug.md`（阶段 A + B，C/D 不做）。
-
 ---
 
 ## 0. 设计边界（改代码前先读）

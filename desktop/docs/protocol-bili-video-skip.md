@@ -4,8 +4,6 @@
 `core/BiliVideoSkip.kt`（模型、归一化、JSON 仓库）。前端编辑器：
 `qt/qml/components/settings/BiliVideoSkipDialog.qml`。
 
-方案背景见 `desktop/docs/investigations/bili-video-skip.md`。
-
 本领域**只做规则 CRUD 与查询**：播放中「进度走到区间起点 → 自动 seek 到终点」的 hook
 由播放链路单独接线（前端订阅 `player` 事件的 `positionMs`，统一调用 `player.seekTo`；
 不要绕过后端 `PlayerManager.seekTo()` 直接调引擎）。本协议不定义跳过动作本身。

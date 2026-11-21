@@ -19,8 +19,7 @@
 >
 > The desktop version takes the Android app as its feature baseline. The table below summarizes the current
 > alignment by area (✅ aligned / ⚠️ partial / ➖ large platform difference). For a detailed item-by-item
-> comparison, see the [desktop README feature table](./desktop/README.md#功能) and the
-> [gap investigations](./desktop/docs/investigations/README.md).
+> comparison, see the [desktop README feature table](./desktop/README.md#功能).
 >
 > | Area | Android upstream | This desktop version | Status |
 > | :--- | :--- | :--- | :---: |

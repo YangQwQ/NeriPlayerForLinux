@@ -16,7 +16,7 @@
 > #### 与 Android 上游的功能对齐情况
 >
 > 桌面版以 Android 版为功能基准，下表按能力域列出当前对齐状态（✅ 已对齐 / ⚠️ 部分对齐 / ➖ 平台差异较大）。
-> 详细的逐项对比与迁移记录见 [`desktop/README.md` 的功能表](./desktop/README.md#功能)与[差距调查](./desktop/docs/investigations/README.md)。
+> 更多细节见 [`desktop/README.md` 的功能表](./desktop/README.md#功能)。
 >
 > | 能力域 | Android 上游 | 本桌面版 | 状态 |
 > | :--- | :--- | :--- | :---: |

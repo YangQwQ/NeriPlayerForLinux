@@ -2,7 +2,6 @@
 
 领域：DSP 音效的**参数数据模型、AutoEQ / Equalizer APO 文本导入、频响曲线计算，以及实时生效**。
 实现：`backend/api/AudioEffectsApi.kt` + `core/AudioEffects.kt` + `core/AudioEngine.kt`；
-方案与取舍见 `desktop/docs/investigations/dsp-autoeq.md`。
 前端：`qt/qml/components/settings/DspSettingsPanel.qml`。
 
 ## 0. 生效范围（务必先读）
