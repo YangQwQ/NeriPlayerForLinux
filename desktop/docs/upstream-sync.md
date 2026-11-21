@@ -64,3 +64,23 @@ cd qt && tools/dev.sh backend && tools/dev.sh screenshot /tmp/home.png --page ho
 桌面版**不是**直接编译这些模块，而是按同样的接口协议在 `desktop/src/main/kotlin/.../net|sync|core`
 里实现；移植时对照上游改动即可。桌面版的 IPC 协议文档在 `desktop/docs/protocol.md`，
 Qt 侧命令对接见 `desktop/qt/docs/qt-dev-guide.md`。
+
+## 同步记录
+
+### 2026-11-21 · 合并 upstream/master 的三个提交
+
+| 上游提交 | 内容 | 桌面版结论 |
+| --- | --- | --- |
+| `22f7d8fc` | Clean 风格增强视觉（Tab 镜头/果冻效果、菜单形变、磨砂背景） | **不适用**：纯 Android Compose + `RuntimeShader`/`PixelCopy` 系统 API；桌面无 Clean 风格，模糊/菜单动画已由 `MultiEffect` 与 `Theme.motion*` 覆盖 |
+| `a679dd63` | 修复一起听面板在 localized sheet context 下拿不到宿主 Activity | **不适用**：Android `LocalActivity`/`createConfigurationContext` 特有；桌面版身份由服务端响应 + UUID 决定，无 Activity 链 |
+| `9b9869f5` | Android 16 Live Update 升级为 now-playing island（系统胶囊 + 歌词 chip） | **不适用**：依赖 Android 16 通知晋级 API；桌面版由 MPRIS（系统媒体控制）、托盘控制面板、layer-shell 悬浮歌词三件套等价覆盖 |
+
+三次合并均无冲突（上游只动 Android 工程，`desktop/` 零重叠）。
+
+### 已知待办：切歌通知设置项未落地
+
+`AppSettings.notifyOnSongChange`（`core/Storage.kt`）默认 `true`，设置页也有对应开关，
+文案为「仅当窗口隐藏 / 最小化时提示」，但**后端没有任何读取该字段的代码**，
+也没有调用 `notify-send` / freedesktop Notifications，切歌时不会发桌面通知，属于名存实亡的设置。
+若后续要实现，需由前端在切歌事件里判断窗口可见性后请求后端发通知（后端无从判断窗口是否隐藏）。
+当前版本暂不实现，记录在此避免遗漏。
