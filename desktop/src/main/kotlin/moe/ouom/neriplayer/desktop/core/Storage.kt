@@ -13,6 +13,8 @@ import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 
 /** XDG 目录布局。 */
 object AppDirs {
@@ -48,7 +50,15 @@ val NeriJson: Json = Json {
     isLenient = true
 }
 
-/** 简单的 JSON 文件存储，写入采用「临时文件 + 原子重命名」。 */
+// 持久化文件用户不直接阅读，去掉 prettyPrint 可减小体积并加快序列化；NeriJson 保持原样供其他调用方使用。
+private val CompactJson: Json = Json {
+    prettyPrint = false
+    ignoreUnknownKeys = true
+    encodeDefaults = true
+    isLenient = true
+}
+
+/** 简单的 JSON 文件存储，写入采用「临时文件 + 原子替换」。 */
 class JsonFileStore<T>(
     private val file: File,
     private val serializer: KSerializer<T>,
@@ -58,7 +68,7 @@ class JsonFileStore<T>(
 
     fun load(): T = synchronized(lock) {
         if (!file.exists()) return@synchronized defaultProvider()
-        runCatching { NeriJson.decodeFromString(serializer, file.readText()) }
+        runCatching { CompactJson.decodeFromString(serializer, file.readText()) }
             .getOrElse { defaultProvider() }
     }
 
@@ -66,9 +76,15 @@ class JsonFileStore<T>(
         runCatching {
             file.parentFile?.mkdirs()
             val tmp = File(file.parentFile, "${file.name}.tmp")
-            tmp.writeText(NeriJson.encodeToString(serializer, value))
-            if (file.exists()) file.delete()
-            tmp.renameTo(file)
+            tmp.writeText(CompactJson.encodeToString(serializer, value))
+            val src = tmp.toPath()
+            val dst = file.toPath()
+            // 先试原子替换（同分区稳定），避免旧实现先 delete 再 rename 造成「文件不存在」窗口期。
+            runCatching {
+                Files.move(src, dst, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+            }.onFailure {
+                Files.move(src, dst, StandardCopyOption.REPLACE_EXISTING)
+            }
         }
     }
 }
