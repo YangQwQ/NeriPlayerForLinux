@@ -11,7 +11,6 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
-import java.io.ByteArrayOutputStream
 import java.net.StandardProtocolFamily
 import java.net.UnixDomainSocketAddress
 import java.nio.ByteBuffer
@@ -153,7 +152,9 @@ class CoreServer(
 
         private fun readLoop() {
             val buffer = ByteBuffer.allocate(64 * 1024)
-            val pending = ByteArrayOutputStream()
+            // 可增长缓冲：只在容量不足时扩容，避免每拆一行都全量复制
+            var pending = ByteArray(8192)
+            var used = 0
             try {
                 while (running && channel.isOpen) {
                     buffer.clear()
@@ -163,19 +164,26 @@ class CoreServer(
                     if (read == 0)
                         continue
                     buffer.flip()
-                    val bytes = ByteArray(buffer.remaining())
-                    buffer.get(bytes)
-                    pending.write(bytes)
-                    // 逐行拆包
+                    // 读入直接追加，容量不足时按 2 倍扩容
+                    val incoming = buffer.remaining()
+                    if (used + incoming > pending.size) {
+                        var cap = pending.size
+                        while (cap < used + incoming)
+                            cap *= 2
+                        pending = pending.copyOf(cap)
+                    }
+                    buffer.get(pending, used, incoming)
+                    used += incoming
+                    // 逐行拆包：按字节找 \n，只在剩余字节前移时做一次局部 arraycopy
                     while (true) {
-                        val data = pending.toByteArray()
-                        val newline = data.indexOf('\n'.code.toByte())
+                        val newline = indexOfByte(pending, used, '\n'.code.toByte())
                         if (newline < 0)
                             break
-                        val line = String(data, 0, newline, StandardCharsets.UTF_8).trim()
-                        val rest = data.copyOfRange(newline + 1, data.size)
-                        pending.reset()
-                        pending.write(rest)
+                        val line = String(pending, 0, newline, StandardCharsets.UTF_8).trim()
+                        val rest = used - newline - 1
+                        if (rest > 0)
+                            System.arraycopy(pending, newline + 1, pending, 0, rest)
+                        used = rest
                         if (line.isEmpty())
                             continue
                         val request = runCatching { WireJson.parseToJsonElement(line).jsonObject }
@@ -229,6 +237,16 @@ class CoreServer(
 
     @Volatile
     private var serverChannel: ServerSocketChannel? = null
+}
+
+/** 只在有效区间内找分隔符，避免扫到扩容后残留的旧字节。 */
+private fun indexOfByte(data: ByteArray, used: Int, target: Byte): Int {
+    var i = 0
+    while (i < used) {
+        if (data[i] == target) return i
+        i++
+    }
+    return -1
 }
 
 internal fun log(message: String) {

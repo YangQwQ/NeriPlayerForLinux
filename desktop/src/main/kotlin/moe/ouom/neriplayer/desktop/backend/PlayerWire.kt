@@ -15,8 +15,20 @@ import moe.ouom.neriplayer.desktop.core.SleepTimerState
 /** 播放器相关的 JSON 编码（事件、快照共用一个形状）。 */
 object PlayerWire {
 
-    fun songOrNull(song: Song?): JsonElement =
-        if (song == null) JsonNull else encodeJson(song)
+    /** 单条歌曲编码缓存：Song 是不可变 data class，同一首歌 4Hz 快照里无需反复整首序列化。 */
+    private data class SongCache(val song: Song, val json: JsonElement)
+
+    @Volatile
+    private var songCache: SongCache? = null
+
+    fun songOrNull(song: Song?): JsonElement {
+        if (song == null) return JsonNull
+        val cached = songCache
+        if (cached != null && cached.song == song) return cached.json
+        val json = encodeJson(song)
+        songCache = SongCache(song, json)
+        return json
+    }
 
     fun sleepTimer(state: SleepTimerState): JsonObject = buildJsonObject {
         put("active", state.active)

@@ -26,6 +26,42 @@ class StatePublisher(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
+    /** 播放快照的轻量去重键：只读各 StateFlow 值，避免每 250ms 都编码整份 JsonObject。 */
+    private data class PlayerSig(
+        val song: Any?,
+        val state: Any?,
+        val positionMs: Long,
+        val durationMs: Long,
+        val volume: Float,
+        val shuffle: Boolean,
+        val repeatMode: Any?,
+        val speed: Float,
+        val pitch: Float,
+        val loudness: Boolean,
+        val equalizerEnabled: Boolean,
+        val equalizerBands: List<Float>,
+        val buffering: Boolean,
+        val sleepTimer: Any?,
+        val supportsEffects: Boolean,
+        val queueIndex: Int,
+        val coverSeed: Any?,
+    )
+
+    private fun playerSig(): PlayerSig {
+        val p = container.player
+        return PlayerSig(
+            p.currentSong.value, p.state.value, p.positionMs.value, p.durationMs.value,
+            p.volume.value, p.shuffle.value, p.repeatMode.value, p.speed.value,
+            p.pitch.value, p.loudness.value, p.equalizerEnabled.value,
+            p.equalizerBands.value, p.buffering.value, p.sleepTimer.value,
+            p.supportsEffects, p.currentIndex.value, p.coverSeedColor.value,
+        )
+    }
+
+    /** 轻量签名作前置过滤：状态值没变时连 JsonObject 都不用构建。 */
+    @Volatile
+    private var lastPlayerSig: PlayerSig? = null
+
     @Volatile
     private var lastPlayerJson: String = ""
 
@@ -33,14 +69,18 @@ class StatePublisher(
     private var lastThemeJson: String = ""
 
     fun start() {
-        // 播放状态：定时采样 + 去重，播放中约 4Hz，暂停时只在变化时发
+        // 播放状态：定时采样 + 去重，播放中约 4Hz，暂停且无变化时跳过编码与广播
         scope.launch {
             while (true) {
-                val state = PlayerWire.state(container.player)
-                val text = state.toString()
-                if (text != lastPlayerJson) {
-                    lastPlayerJson = text
-                    server.broadcast("player", state)
+                val sig = playerSig()
+                if (sig != lastPlayerSig) {
+                    lastPlayerSig = sig
+                    val state = PlayerWire.state(container.player)
+                    val text = state.toString()
+                    if (text != lastPlayerJson) {
+                        lastPlayerJson = text
+                        server.broadcast("player", state)
+                    }
                 }
                 delay(250)
             }
