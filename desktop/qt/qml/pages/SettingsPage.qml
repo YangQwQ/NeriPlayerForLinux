@@ -2433,6 +2433,23 @@ Item {
                     }
                 }
 
+                SettingsRow {
+                    width: parent.width
+                    title: I18n.tr("文件名格式")
+                    description: {
+                        const t = page.sv("downloadFileNameTemplate", "")
+                        return t !== "" ? t : "%title% - %artist% - %album% - %source%"
+                    }
+                    SettingsButton {
+                        text: I18n.tr("编辑")
+                        onClicked: {
+                            const item = fileNameDialogLoader.item
+                            if (item)
+                                item.openFor(page.sv("downloadFileNameTemplate", ""))
+                        }
+                    }
+                }
+
                 Item {
                     width: 1
                     height: 10
@@ -2504,8 +2521,51 @@ Item {
                 width: parent.width - 24
                 x: 12
                 title: I18n.tr("数据与缓存")
-                description: I18n.tr("清理封面缓存、下载记录与本地统计")
+                description: I18n.tr("音乐缓存上限、清理封面缓存与存储统计")
                 icon: "storage"
+
+                SliderRow {
+                    width: parent.width
+                    label: I18n.tr("音乐缓存上限")
+                    from: 0
+                    to: 10241
+                    decimals: 0
+                    // 0 关闭，最右端无上限，中间按 MB 显示（≥1024 显示 GB）。
+                    externalValue: {
+                        const v = Number(page.sv("cacheLimitMb", 1024))
+                        return v < 0 ? 10241 : Math.min(10241, v)
+                    }
+                    formatValue: function(mb) {
+                        const v = Math.round(mb)
+                        if (v >= 10241)
+                            return I18n.tr("无上限")
+                        if (v < 10)
+                            return "0 MB · " + I18n.tr("关闭")
+                        if (v >= 1024)
+                            return (v / 1024).toFixed(1) + " GB"
+                        return v + " MB"
+                    }
+                    onCommitted: function(mb) {
+                        const v = Math.round(mb)
+                        // 对齐 Android：<10MB 视为关闭，最右端为无上限（-1）。
+                        page.setSetting("cacheLimitMb", v >= 10241 ? -1 : (v < 10 ? 0 : v))
+                    }
+                }
+
+                Text {
+                    width: parent.width
+                    text: I18n.tr("设置为 0 MB 即禁用缓存，滑到最右端为无上限。超出上限时自动清理最久未用的缓存。")
+                    color: Theme.onSurfaceVariantColor
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 12
+                    wrapMode: Text.Wrap
+                    topPadding: 6
+                }
+
+                Item {
+                    width: 1
+                    height: 10
+                }
 
                 // 存储占用详情：按目录统计磁盘占用，清理入口在对话框内（只清可再生缓存）。
                 SettingsRow {
@@ -2590,6 +2650,18 @@ Item {
                     active: true
                     onStatusChanged: if (status === Loader.Error)
                                          console.warn("[settings] StorageManagementDialog.qml 尚未就绪")
+                }
+
+                // 下载文件名模板编辑对话框
+                Loader {
+                    id: fileNameDialogLoader
+                    source: Qt.resolvedUrl("../components/settings/DownloadFileNameDialog.qml")
+                    active: true
+                    onLoaded: item.accepted.connect(function(template) {
+                        page.setSetting("downloadFileNameTemplate", template)
+                    })
+                    onStatusChanged: if (status === Loader.Error)
+                                         console.warn("[settings] DownloadFileNameDialog.qml 尚未就绪")
                 }
 
 

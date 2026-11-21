@@ -1329,5 +1329,14 @@ var translations = {
         "参数改动会立即提交；这里只是手动冲刷尚未发出的那次合并提交。": "Changes are committed automatically; this only flushes a pending merged commit.",
         "自定义": "Custom",
         "人声突出度": "Vocal presence",
+        "文件名格式": "File name format",
+        "编辑": "Edit",
+        "音乐缓存上限": "Music cache limit",
+        "无上限": "Unlimited",
+        "设置为 0 MB 即禁用缓存，滑到最右端为无上限。超出上限时自动清理最久未用的缓存。": "Set to 0 MB to disable caching; slide to the far right for unlimited. When the limit is exceeded, the least recently used cache is removed.",
+        "下载文件名格式": "Download file name format",
+        "使用占位符自定义下载文件名，扩展名会自动附加。": "Use placeholders to customize download file names; the extension is added automatically.",
+        "预览": "Preview",
+        "歌曲标题": "Song title",
     }
 };
