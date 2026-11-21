@@ -743,6 +743,7 @@ Item {
                         enabled: sectionLoader.item !== null
                         function onActionClicked(kind, items) { page.handleSectionAction(kind, items) }
                         function onSongActivated(songs, index) { page.playSongs(songs, index) }
+                        function onSongRightClicked(song) { songMenu.openFor(song) }
                         function onCollectionActivated(collection) { page.openCollection(collection) }
                     }
 
@@ -801,5 +802,16 @@ Item {
                 height: Theme.spacingSm
             }
         }
+    }
+
+    // 歌曲右键菜单 / 歌曲信息弹窗：首页所有栏目共用，右键时弹出（popup 自动定位到鼠标）。
+    SongActionsMenu {
+        id: songMenu
+
+        onInfoRequested: function(song) { infoDialog.openFor(song) }
+    }
+
+    SongInfoDialog {
+        id: infoDialog
     }
 }

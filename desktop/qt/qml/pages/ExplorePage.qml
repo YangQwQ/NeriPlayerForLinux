@@ -740,7 +740,7 @@ Item {
                     artists: page.resultArtists
                     sourceName: page.sourceName
                     onPlayAt: function(index) { page.playAt(index) }
-                    onSongMore: function(song) { page.enqueueSong(song) }
+                    onSongMore: function(song) { songMenu.openFor(song) }
                     onOpenCollection: function(collection) { page.openCollection(collection) }
                     onOpenArtist: function(artist) { page.openArtist(artist) }
                 }
@@ -809,5 +809,16 @@ Item {
                     page.reloadDefault()
             }
         }
+    }
+
+    // 歌曲右键菜单 / 歌曲信息弹窗：搜索结果里的「更多」与右键共用，popup 自动定位到鼠标。
+    SongActionsMenu {
+        id: songMenu
+
+        onInfoRequested: function(song) { infoDialog.openFor(song) }
+    }
+
+    SongInfoDialog {
+        id: infoDialog
     }
 }

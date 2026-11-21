@@ -22,6 +22,7 @@ import ".."
 //   removeRequested(song)      从当前列表移除
 //   moveRequested(song, delta) delta = -1 上移 / +1 下移
 //   favoriteToggled(song, bool) 收藏状态切换后
+//   infoRequested(song)        查看歌曲信息（由页面打开 SongInfoDialog）
 Menu {
     id: root
 
@@ -33,6 +34,7 @@ Menu {
     signal removeRequested(var song)
     signal moveRequested(var song, int delta)
     signal favoriteToggled(var song, bool favorite)
+    signal infoRequested(var song)
 
     readonly property string songSource: root.song && root.song.source
                                          ? String(root.song.source).toUpperCase() : "LOCAL"
@@ -100,7 +102,7 @@ Menu {
         })
     }
 
-    /** 打开菜单；options 可含 playlistId / showMove / anchor（用于定位）。 */
+    /** 打开菜单；options 可含 playlistId / showMove / anchor 或 x/y（用于定位）。 */
     function openFor(song, options) {
         if (!song)
             return
@@ -113,12 +115,18 @@ Menu {
             root.favorite = !!(result && result.favorite)
         }).catch(function() {})
 
-        if (options && options.anchor) {
-            const anchor = options.anchor
+        const opts = options || {}
+        const parentWidth = root.parent ? root.parent.width : 1180
+        const parentHeight = root.parent ? root.parent.height : 720
+        if (opts.anchor) {
+            const anchor = opts.anchor
             const point = anchor.mapToItem(root.parent, anchor.width, 0)
-            const parentWidth = root.parent ? root.parent.width : 1180
-            root.x = Math.max(0, Math.min(point.x, parentWidth - root.width))
-            root.y = Math.max(0, point.y)
+            root.x = Math.max(0, Math.min(point.x, Math.max(0, parentWidth - root.width)))
+            root.y = Math.max(0, Math.min(point.y, Math.max(0, parentHeight - root.height)))
+        } else if (opts.x !== undefined && opts.y !== undefined) {
+            // 右键菜单：x/y 是调用方换算到菜单父项坐标系的鼠标位置，clamp 到父边界避免弹出屏外。
+            root.x = Math.max(0, Math.min(Number(opts.x), Math.max(0, parentWidth - root.width)))
+            root.y = Math.max(0, Math.min(Number(opts.y), Math.max(0, parentHeight - root.height)))
         }
         root.popup()
     }
@@ -179,6 +187,14 @@ Menu {
         onTriggered: {
             if (root.song)
                 Player.enqueueNext([root.song])
+        }
+    }
+
+    ActionItem {
+        text: I18n.tr("查看信息")
+        onTriggered: {
+            if (root.song)
+                root.infoRequested(root.song)
         }
     }
 

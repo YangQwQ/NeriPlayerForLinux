@@ -10,6 +10,7 @@ Rectangle {
     property bool playing: false
 
     signal activated()
+    signal rightClicked(var song)
 
     readonly property string title: song && song.title ? song.title : I18n.tr("未知歌曲")
     readonly property string artist: song && song.artist ? song.artist : I18n.tr("未知歌手")
@@ -25,10 +26,17 @@ Rectangle {
         ColorAnimation { duration: Theme.motionShort }
     }
 
-    // 整卡点击播放（放在最底层，右侧播放按钮在其上）
+    // 整卡点击播放（放在最底层，右侧播放按钮在其上）。
+    // 同时接受右键：右侧 IconButton 的 MouseArea 只吃左键，右键会落到本层，整卡都能出菜单。
     MouseArea {
         anchors.fill: parent
-        onClicked: card.activated()
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
+        onClicked: function(mouse) {
+            if (mouse.button === Qt.RightButton)
+                card.rightClicked(card.song)
+            else
+                card.activated()
+        }
     }
 
     Item {

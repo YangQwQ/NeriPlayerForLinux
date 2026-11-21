@@ -95,6 +95,7 @@ Item {
 
     signal actionClicked(string kind, var items)
     signal songActivated(var items, int index)
+    signal songRightClicked(var song, var songs, int index)
     signal collectionActivated(var collection)
 
     Library.SectionHeader {
@@ -165,6 +166,7 @@ Item {
                 song: modelData
                 playing: Player.hasSong && Player.song !== null && Player.song.key === modelData.key && Player.playing
                 onActivated: root.songActivated(root.displayItems, index)
+                onRightClicked: function(song) { root.songRightClicked(song, root.displayItems, index) }
             }
         }
 
@@ -177,6 +179,7 @@ Item {
                 song: modelData
                 playing: Player.hasSong && Player.song !== null && Player.song.key === modelData.key && Player.playing
                 onActivated: root.songActivated(root.displayItems, index)
+                onRightClicked: function(song) { root.songRightClicked(song, root.displayItems, index) }
             }
         }
 

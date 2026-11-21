@@ -13,6 +13,7 @@ Item {
     property bool playing: false
 
     signal activated()
+    signal rightClicked(var song)
 
     readonly property string title: song && song.title ? song.title : I18n.tr("未知歌曲")
     readonly property string artist: song && song.artist ? song.artist : I18n.tr("未知歌手")
@@ -99,6 +100,12 @@ Item {
 
     MouseArea {
         anchors.fill: parent
-        onClicked: card.activated()
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
+        onClicked: function(mouse) {
+            if (mouse.button === Qt.RightButton)
+                card.rightClicked(card.song)
+            else
+                card.activated()
+        }
     }
 }
