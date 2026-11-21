@@ -68,7 +68,7 @@ grep -rhoE 'server\.on\("[^"]+"' desktop/src/main/kotlin/moe/ouom/neriplayer/des
 | 悬浮歌词 | `floatingLyrics*`（启用/锁定/颜色/字号/位置比例等） |
 | 播放页 | `coverShowsLyrics` `nowPlayingCoverShape` `nowPlayingBackground` `nowPlayingAutoHide*` `nowPlayingCoverRotate`… |
 | 媒体库/首页 | `musicFolders` `homeCards` `homeGridMode` `libraryViewMode` |
-| 下载 | `downloadDirectory` `downloadQuality` `downloadConcurrency` `downloadNotifyOnComplete` |
+| 下载 | `downloadDirectory` `downloadQuality` `downloadConcurrency` `downloadNotifyOnComplete` `downloadFileNameTemplate` |
 | 系统集成 | `closeToTray` `minimizeToTray` `notifyOnSongChange` `mprisEnabled` `shortcuts` |
 | 音源 | `neteaseEnabled` `bilibiliEnabled` `youtubeEnabled` `neteaseAutoSourceSwitch` `qualityPreference` |
 

@@ -175,6 +175,11 @@ UI：`qt/qml/components/settings/ConfigTransferDialog.qml`、`qt/qml/components/
 | `lyricsScrollEasing` | `LINEAR` / `SINE` / `QUAD` / `CUBIC` |
 | `nowPlayingCoverShape` | `CIRCLE` / `ROUNDED` / `SQUARE` |
 | `nowPlayingBackground` | `BLUR` / `GRADIENT` / `SOLID` |
+
+`downloadFileNameTemplate` 为下载文件名模板字符串，留空表示默认
+`%title% - %artist% - %album% - %source%`；可用占位符 `%title%` `%artist%` `%album%` `%source%`
+`%id%` `%audioId%` `%subAudioId%` `%hash%`。模板只生成主文件名，扩展名自动附加；
+非法字符替换为 `_`，整体限长 128 UTF-8 字节（渲染与限长逻辑见 `core/DownloadNaming.kt`）。
 | `floatingLyricsRenderStyle` | `SHADOW` / `OUTLINE` |
 | `floatingLyricsWindowMode` | `LAYER` / `NORMAL` |
 | `floatingLyrics{Text,Shadow,Outline,Background}Color` | `WHITE` `BLACK` `RED` `ORANGE` `YELLOW` `GREEN` `CYAN` `BLUE` `PURPLE` `PINK` |
@@ -184,7 +189,8 @@ UI：`qt/qml/components/settings/ConfigTransferDialog.qml`、`qt/qml/components/
 `volume` 0..1、`playbackSpeed` 0.5..3、`pitchSemitone` ±12、`lyricsFontScale` 0.5..3、
 `appBackgroundDim` 0..1、`appBackgroundBlur` 0..100、`fadeInMs`/`fadeOutMs` 0..10000、
 `crossfadeMs` 0..20000、`lyricsHighlightDuration`/`lyricsScrollDuration` 0..5000、
-`nowPlayingAutoHideDelayMs` 0..60000、`sleepTimerMinutes` 0..1440、`cacheLimitMb` 0..1048576、
+`nowPlayingAutoHideDelayMs` 0..60000、`sleepTimerMinutes` 0..1440、
+`cacheLimitMb` -1..1048576（-1 = 无上限，0 = 禁用在线音频缓存，正值 = MiB 上限），
 `downloadConcurrency` 1..8、`uiScale`（0 或 0.5..3）、
 `floatingLyrics*` 的透明度/字号/描边/模糊/宽度/位置（见 `core/ConfigSnapshot.kt`）。
 

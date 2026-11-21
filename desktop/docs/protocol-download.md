@@ -8,8 +8,11 @@
 - **任务队列只在内存**（core 现状），进程重启后 `download.tasks` 为空，`download.items` 仍在；
 - 任务进度回调非常频繁（每 64 KB），前端靠 `downloads.changed` 事件刷新角标、用低频（500ms 左右）
   `download.tasks` 拉进度，**不要**每次事件都全量重绘；
-- 下载目录/音质/并发数属于设置项，用已有的 `settings.get` / `settings.set`
-  （`downloadDirectory`、`downloadQuality`、`downloadConcurrency`），不在本领域另设命令。
+- 下载目录/音质/并发数/文件名模板属于设置项，用已有的 `settings.get` / `settings.set`
+  （`downloadDirectory`、`downloadQuality`、`downloadConcurrency`、`downloadFileNameTemplate`），不在本领域另设命令。
+- 下载先写缓存目录（`XDG_CACHE_HOME/NeriPlayer/music_cache/<uuid>.part`），完成后原子移入下载目录，
+  半成品不会出现在下载目录被媒体库扫到；文件名由 `downloadFileNameTemplate` 渲染（见 `protocol-config.md`）。
+- 在线播放音频的 LRU 缓存（`cacheLimitMb`）在同目录按歌曲 key 累积，-1 无上限 / 0 禁用。
 
 ## 1. 命令
 
