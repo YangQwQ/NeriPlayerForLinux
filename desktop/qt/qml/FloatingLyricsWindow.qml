@@ -40,15 +40,68 @@ Window {
     readonly property var lyricLines: Player.lyrics && Player.lyrics.lines ? Player.lyrics.lines : []
     readonly property int currentIndex: Player.currentLyricIndex()
     readonly property var currentLine: currentIndex >= 0 && currentIndex < lyricLines.length ? lyricLines[currentIndex] : null
-    readonly property string mainText: currentLine ? currentLine.text : (Player.hasSong ? (Player.title + " - " + Player.artist) : "NeriPlayer")
-    readonly property string translationText: {
-        if (!currentLine || !Settings.get("floatingLyricsShowTranslation", true))
-            return ""
-        const translated = Player.lyrics && Player.lyrics.translated ? Player.lyrics.translated : null
-        if (translated && currentIndex < translated.length && translated[currentIndex].text)
-            return translated[currentIndex].text
-        return currentLine.translation ? String(currentLine.translation) : ""
+
+    /**
+     * 悬浮歌词显示行顺序：原文 / 翻译 / 音译 任意排列，下划线分隔。
+     * 与播放页 LyricsPane 的 lyricLineOrder 同源，但悬浮歌词有自己的一份设置。
+     */
+    readonly property var displayLines: {
+        const valid = ["ORIGINAL", "TRANSLATION", "PHONETIC"]
+        const raw = String(Settings.get("floatingLyricsLineOrder", "ORIGINAL_TRANSLATION_PHONETIC") || "").split("_")
+        const order = []
+        for (let i = 0; i < raw.length; i++) {
+            if (valid.indexOf(raw[i]) >= 0 && order.indexOf(raw[i]) < 0)
+                order.push(raw[i])
+        }
+        for (let i = 0; i < valid.length; i++) {
+            if (order.indexOf(valid[i]) < 0)
+                order.push(valid[i])
+        }
+        return order
     }
+
+    /** 某一类行是否启用：翻译/音译各有独立开关，原文始终显示。 */
+    function kindEnabled(kind) {
+        if (kind === "TRANSLATION")
+            return Settings.get("floatingLyricsShowTranslation", true) !== false
+        if (kind === "PHONETIC")
+            return Settings.get("floatingLyricsShowPhonetic", false) === true
+        return true
+    }
+
+    /** 当前行指定类型的文本；没有歌词时用歌名/歌手作为原文占位。 */
+    function textFor(kind) {
+        if (kind === "ORIGINAL")
+            return currentLine ? currentLine.text : (Player.hasSong ? (Player.title + " - " + Player.artist) : "NeriPlayer")
+        if (!currentLine)
+            return ""
+        if (kind === "TRANSLATION") {
+            const translated = Player.lyrics && Player.lyrics.translated ? Player.lyrics.translated : null
+            if (translated && currentIndex < translated.length && translated[currentIndex].text)
+                return translated[currentIndex].text
+            return currentLine.translation ? String(currentLine.translation) : ""
+        }
+        if (kind === "PHONETIC")
+            return currentLine.phonetic ? String(currentLine.phonetic) : ""
+        return ""
+    }
+
+    /** 实际要渲染的行（已过滤关闭的类型与空文本），每项 {key, text}。 */
+    readonly property var visibleLines: {
+        const rows = []
+        for (let i = 0; i < win.displayLines.length; i++) {
+            const kind = win.displayLines[i]
+            if (!win.kindEnabled(kind))
+                continue
+            const text = win.textFor(kind)
+            if (text)
+                rows.push({ key: kind, text: text })
+        }
+        return rows
+    }
+
+    readonly property string mainText: textFor("ORIGINAL")
+    readonly property string translationText: textFor("TRANSLATION")
 
     // ---------------------------------------------------------------- 逐字高亮
     //
@@ -130,7 +183,6 @@ Window {
     readonly property real outlineWidth: Settings.get("floatingLyricsOutlineWidth", 2.0) || 2.0
     readonly property real shadowBlur: Settings.get("floatingLyricsShadowBlur", 6.0) || 6.0
     readonly property real lyricAlpha: Settings.get("floatingLyricsLyricAlpha", 1.0) || 1.0
-    readonly property real translationAlpha: Settings.get("floatingLyricsTranslationAlpha", 0.75) || 0.75
     readonly property real backgroundAlpha: Settings.get("floatingLyricsBackgroundAlpha", 0.35) || 0.35
     readonly property string backgroundColor: colorOf(Settings.get("floatingLyricsBackgroundColor", "BLACK"))
     readonly property int alignment: {
@@ -141,7 +193,26 @@ Window {
         }
     }
 
-    readonly property bool showTranslation: Settings.get("floatingLyricsShowTranslation", true) === true
+    // 行字号：原文用基础字号，翻译/音译按各自比例缩小（与播放页、设置预览一致）。
+    readonly property real phoneticScale: {
+        const v = Settings.get("lyricPhoneticFontSizeScale", 0.58)
+        return (typeof v === "number" && v > 0) ? v : 0.58
+    }
+    readonly property real translationScale: {
+        const v = Settings.get("lyricTranslationFontSizeScale", 0.58)
+        return (typeof v === "number" && v > 0) ? v : 0.58
+    }
+    function fontScaleFor(kind) {
+        return kind === "PHONETIC" ? win.phoneticScale
+             : (kind === "TRANSLATION" ? win.translationScale : 1.0)
+    }
+    function alphaFor(kind) {
+        if (kind === "TRANSLATION")
+            return Settings.get("floatingLyricsTranslationAlpha", 0.75)
+        if (kind === "PHONETIC")
+            return Settings.get("floatingLyricsPhoneticAlpha", 0.75)
+        return win.lyricAlpha
+    }
 
     // 窗口尺寸固定（与旧 Compose 版一致）：宽度取设置的最大宽度，高度由字号推导。
     // 不要跟随歌词内容自适应——每换一行就改窗口尺寸会让合成器在拖动时出现残影，
@@ -155,11 +226,16 @@ Window {
         return Math.max(160, Math.min(maxWidthDp, screenWidth))
     }
     readonly property real windowHeight: {
-        // 主歌词行高 + 可选翻译行高 + 上下内边距；未锁定时额外留出悬浮控制条的高度。
+        // 按启用的行类型预留高度：音译行过去之所以「开了也没显示」，一是渲染没有接
+        // phonetic，二是窗口高度只算了原文+翻译，多出来的行会被裁掉。
         const lineHeight = baseFontSize * 1.6
-        const translation = showTranslation ? baseFontSize * 1.35 : 0
+        let rows = lineHeight
+        if (kindEnabled("TRANSLATION"))
+            rows += baseFontSize * translationScale * 1.5
+        if (kindEnabled("PHONETIC"))
+            rows += baseFontSize * phoneticScale * 1.5
         const controlBarInset = locked ? 0 : 30
-        return Math.max(64, lineHeight + translation + 28 + controlBarInset)
+        return Math.max(64, rows + 28 + controlBarInset)
     }
 
     // 形态在窗口创建时从已到达的设置中一次读定；layer-shell 角色在本实例的
@@ -434,8 +510,11 @@ Window {
 
     /** 把当前设置里的比例下发到 layer-shell 的 margin（窗口已附着）。 */
     function applyPlacement() {
-        if (win.useLayerShell && win.attached)
+        if (win.useLayerShell && win.attached) {
             LayerShell.setPositionRatio(win, win.normalizedX, win.normalizedY)
+            // 开关音译/翻译或改字号后行数、窗口高度会变，同步 shell 尺寸，避免多出的行被裁掉。
+            LayerShell.setDesiredSize(win, win.attachWidth, win.attachHeight)
+        }
     }
 
     // 悬浮窗默认不抢焦点（由 WindowDoesNotAcceptFocus 保证，无需再重设 flags）
@@ -515,114 +594,98 @@ Window {
             width: Math.max(0, win.width - 28)
             spacing: 2
 
-            // 主歌词（带阴影或描边）
-            //
-            // 逐字高亮的分层方式：同一个 Text 画两遍——未唱层（底层，逐字模式下压暗）
-            // 与已唱层（上层，正常颜色），已唱层套一个宽度 = 已唱进度的裁切矩形。
-            // 两层字体/换行/对齐参数逐项相同，否则两层字形会错位。
-            Item {
-                id: mainItem
-                width: parent.width
-                // 固定窗口下最多显示两行，超出部分不参与布局（避免内容撑破窗口）
-                height: Math.min(mainLine.implicitHeight, win.baseFontSize * 1.6 * 2)
+            // 按浮点歌词显示顺序渲染每一行（原文 / 音译 / 翻译）。
+            // 原文行保留逐字高亮（未唱层 + 已唱层裁切），其余行按各自比例/透明度画普通文本。
+            Repeater {
+                model: win.visibleLines
 
-                // 已唱层裁切窗口的横向基准：文字实际起点与文字实际宽度。
-                // 中间/右对齐时文字不在 x=0，裁切窗口若从 0 开始按比例放宽，
-                // 会在文字左侧先亮出一段空白，所以要先加上文字起点偏移。
-                readonly property real textWidth: Math.min(width, mainLine.contentWidth)
-                readonly property real highlightX: win.alignment === Text.AlignLeft
-                                                   ? 0
-                                                   : (win.alignment === Text.AlignRight
-                                                      ? Math.max(0, width - textWidth)
-                                                      : Math.max(0, (width - textWidth) / 2))
+                delegate: Item {
+                    required property var modelData
+                    readonly property string kind: modelData.key
+                    readonly property string rowText: modelData.text
+                    readonly property bool isOriginal: kind === "ORIGINAL"
+                    readonly property int rowPixelSize: Math.max(10, Math.round(win.baseFontSize * win.fontScaleFor(kind)))
+                    readonly property real rowAlpha: win.alphaFor(kind)
 
-                // SHADOW 样式：单个偏移副本。不要用多个 Repeater 副本叠阴影——
-                // 透明置顶窗口里每换一行都要重建/重绘十几层文本，拖动时会留下残影。
-                Text {
-                    visible: win.renderStyle === "SHADOW"
-                    x: (mainItem.width - width) / 2 + win.shadowBlur * 0.4
-                    y: win.shadowBlur * 0.4
-                    width: mainItem.width
-                    text: mainLine.text
-                    horizontalAlignment: win.alignment
-                    wrapMode: Text.Wrap
-                    maximumLineCount: 2
-                    elide: Text.ElideRight
-                    color: win.shadowColor
-                    opacity: win.lyricAlpha * 0.6
-                    font.family: Prefs.effectiveLyricFont
-                    font.pixelSize: win.baseFontSize
-                    font.weight: Font.Bold
-                }
-
-                Text {
-                    id: mainLine
                     width: parent.width
-                    text: win.mainText
-                    horizontalAlignment: win.alignment
-                    wrapMode: Text.Wrap
-                    maximumLineCount: 2
-                    elide: Text.ElideRight
-                    color: win.textColor
-                    // 逐字模式下底层压暗，才能看出「唱到哪」；没有逐词数据时保持原样
-                    opacity: win.lyricAlpha * (win.karaokeActive ? win.karaokeUnplayedAlpha : 1)
-                    font.family: Prefs.effectiveLyricFont
-                    font.pixelSize: win.baseFontSize
-                    font.weight: Font.Bold
-                    // OUTLINE 样式交回 Qt 文字引擎（单个 item，描边随字形一起光栅化）
-                    style: win.renderStyle === "OUTLINE" ? Text.Outline : Text.Normal
-                    styleColor: win.outlineColor
-                    // Text.Outline 的描边宽度只能取整数像素
-                    font.preferShaping: true
-                }
+                    // 每行最多两行文本；原文行留出逐字分层所需的空间。
+                    height: Math.min(rowLine.implicitHeight, rowPixelSize * 1.6 * 2)
 
-                // 已唱层：同一段文字用满亮度再画一遍，被宽度随进度推进的整块矩形裁切。
-                // 两层共用用户选的文字颜色，靠底层压暗区分「唱过/没唱」，不额外引入强调色。
-                //
-                // 裁切从 x=0 起、宽度含 highlightX（与文字起点一致），文字仍按完整宽度
-                // 排版在内部，所以裁剪前后字形位置完全不变，只有「露出多少」在变。
-                // 这里只用 clip，不加模糊/阴影动画：layer-shell 覆盖层上每帧重绘代价很高。
-                Item {
-                    id: sungLayer
-                    x: 0
-                    y: 0
-                    width: Math.max(0, mainItem.highlightX + mainItem.textWidth * win.wordProgress)
-                    height: mainItem.height
-                    visible: win.karaokeActive && width > 0
-                    clip: true
+                    // 已唱层裁切窗口的横向基准（仅原文逐字模式用）。
+                    readonly property real textWidth: Math.min(width, rowLine.contentWidth)
+                    readonly property real highlightX: win.alignment === Text.AlignLeft
+                                                       ? 0
+                                                       : (win.alignment === Text.AlignRight
+                                                          ? Math.max(0, width - textWidth)
+                                                          : Math.max(0, (width - textWidth) / 2))
+
+                    // SHADOW 样式：单个偏移副本。不要用多个 Repeater 副本叠阴影——
+                    // 透明置顶窗口里每换一行都要重建/重绘十几层文本，拖动时会留下残影。
+                    Text {
+                        visible: win.renderStyle === "SHADOW"
+                        x: (parent.width - width) / 2 + win.shadowBlur * 0.4
+                        y: win.shadowBlur * 0.4
+                        width: parent.width
+                        text: rowText
+                        horizontalAlignment: win.alignment
+                        wrapMode: Text.Wrap
+                        maximumLineCount: 2
+                        elide: Text.ElideRight
+                        color: win.shadowColor
+                        opacity: rowAlpha * 0.6
+                        font.family: Prefs.effectiveLyricFont
+                        font.pixelSize: rowPixelSize
+                        font.weight: Font.Bold
+                    }
 
                     Text {
-                        width: mainItem.width
-                        text: mainLine.text
+                        id: rowLine
+                        width: parent.width
+                        text: rowText
                         horizontalAlignment: win.alignment
                         wrapMode: Text.Wrap
                         maximumLineCount: 2
                         elide: Text.ElideRight
                         color: win.textColor
-                        opacity: win.lyricAlpha
+                        // 逐字模式下原文底层压暗，才能看出「唱到哪」；其它行保持自身透明度
+                        opacity: rowAlpha * (isOriginal && win.karaokeActive ? win.karaokeUnplayedAlpha : 1)
                         font.family: Prefs.effectiveLyricFont
-                        font.pixelSize: win.baseFontSize
+                        font.pixelSize: rowPixelSize
                         font.weight: Font.Bold
+                        // OUTLINE 样式交回 Qt 文字引擎（单个 item，描边随字形一起光栅化）
                         style: win.renderStyle === "OUTLINE" ? Text.Outline : Text.Normal
                         styleColor: win.outlineColor
                         font.preferShaping: true
                     }
-                }
-            }
 
-            Text {
-                id: translationLine
-                width: parent.width
-                visible: win.translationText !== ""
-                text: win.translationText
-                horizontalAlignment: win.alignment
-                wrapMode: Text.Wrap
-                maximumLineCount: 2
-                elide: Text.ElideRight
-                color: win.textColor
-                opacity: win.translationAlpha
-                font.family: Prefs.effectiveLyricFont
-                font.pixelSize: Math.round(win.baseFontSize * 0.78)
+                    // 已唱层：同一段文字用满亮度再画一遍，被宽度随进度推进的整块矩形裁切。
+                    // 只对原文行 + 有逐词数据时启用；翻译/音译行没有词时间轴，不参与逐字。
+                    Item {
+                        x: 0
+                        y: 0
+                        width: Math.max(0, parent.highlightX + parent.textWidth * win.wordProgress)
+                        height: parent.height
+                        visible: isOriginal && win.karaokeActive && width > 0
+                        clip: true
+
+                        Text {
+                            width: parent.width
+                            text: rowText
+                            horizontalAlignment: win.alignment
+                            wrapMode: Text.Wrap
+                            maximumLineCount: 2
+                            elide: Text.ElideRight
+                            color: win.textColor
+                            opacity: rowAlpha
+                            font.family: Prefs.effectiveLyricFont
+                            font.pixelSize: rowPixelSize
+                            font.weight: Font.Bold
+                            style: win.renderStyle === "OUTLINE" ? Text.Outline : Text.Normal
+                            styleColor: win.outlineColor
+                            font.preferShaping: true
+                        }
+                    }
+                }
             }
         }
 
