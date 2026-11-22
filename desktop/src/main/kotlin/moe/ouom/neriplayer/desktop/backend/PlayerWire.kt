@@ -53,6 +53,7 @@ object PlayerWire {
         put("timeMs", line.timeMs)
         put("text", line.text)
         put("translation", line.translation)
+        put("phonetic", line.phonetic)
         put("endMs", line.endMs)
         put("words", buildJsonArray {
             for (word in line.words) add(buildJsonObject {

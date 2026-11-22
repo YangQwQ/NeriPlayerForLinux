@@ -48,6 +48,8 @@ data class NeteaseLyricPayload(
     /** 翻译的逐词时间版本（`ytlrc`），比 `tlyric` 更贴合 yrc 行时间。 */
     val yrcTranslated: String? = null,
     val yrc: String? = null,
+    /** 音译歌词（`romalrc` / `romanized`），与 Android 的 romanizedLyric 对应。 */
+    val romanized: String? = null,
 )
 
 /** 网易云音乐公开接口客户端（无需登录即可搜索、取歌词与试听地址）。 */
@@ -202,6 +204,19 @@ class NeteaseApi(private val http: HttpService) {
         return lyric to translated?.takeIf { it.isNotBlank() }
     }
 
+    /** 明文歌词接口的完整包（含音译 romalrc），供 eapi 失败时回退。 */
+    fun lyricPlainPayload(id: String): NeteaseLyricPayload? {
+        val root = getJson("/api/song/lyric?id=$id&lv=1&kv=1&tv=-1") ?: return null
+        val lyric = root.obj("lrc")?.str("lyric")?.takeIf { it.isNotBlank() } ?: return null
+        return NeteaseLyricPayload(
+            lrc = lyric,
+            translated = root.obj("tlyric")?.str("lyric")?.takeIf { it.isNotBlank() },
+            romanized = (root.obj("romalrc")?.str("lyric")
+                ?: root.obj("romanized")?.str("lyric"))
+                ?.takeIf { it.isNotBlank() },
+        )
+    }
+
     /**
      * eapi 版本歌词：一次拿回普通 LRC、翻译与逐词 yrc。
      *
@@ -224,11 +239,20 @@ class NeteaseApi(private val http: HttpService) {
         ) ?: return@runCatching null
         val root = NeriJsonParser.parse(text).asObject() ?: return@runCatching null
         if ((root.int("code") ?: 200) != 200) return@runCatching null
+        val neteaseYrc = root.obj("yrc")?.str("lyric")?.takeIf { it.isNotBlank() }
+        // 与安卓对齐：网易云没有 yrc 时回退 AMLL TTML 逐字时间，
+        // 转成 yrc 文本后交给既有 buildYrcLyrics，前端无需改动。
+        val wordTimed = neteaseYrc ?: AmllTtmlClient.fetchWordTimed(http, id)?.let { TtmlParser.toYrcText(it) }
         NeteaseLyricPayload(
             lrc = root.obj("lrc")?.str("lyric"),
             translated = root.obj("tlyric")?.str("lyric"),
             yrcTranslated = root.obj("ytlrc")?.str("lyric"),
-            yrc = root.obj("yrc")?.str("lyric"),
+            yrc = wordTimed,
+            // 不同接口字段名不一：优先 romalrc，回退 romanized / yromalrc
+            romanized = (root.obj("romalrc")?.str("lyric")
+                ?: root.obj("romanized")?.str("lyric")
+                ?: root.obj("yromalrc")?.str("lyric"))
+                ?.takeIf { it.isNotBlank() },
         )
     }.getOrNull()
 
@@ -590,7 +614,33 @@ class BiliApi(private val http: HttpService) {
 
     private val headers = mapOf("Referer" to "https://www.bilibili.com/")
 
+    /**
+     * DASH 请求档位，与 Android `PlayOptions.fnval` 一致：
+     * 272 = DASH(1<<4) + 杜比(1<<8)，4048 再加 8K/HDR/AV1/AAC 高档位。
+     * 高档位放后面：低档位拿到的音轨音质相同，先花一次往返更划算。
+     */
+    private val DASH_ATTEMPTS = listOf(
+        PlayUrlAttempt(fnval = "272", fourk = "1", platform = null),
+        PlayUrlAttempt(fnval = "4048", fourk = "1", platform = null),
+    )
+
+    /** 渐进式 MP4（durl）：`fnval=1` 只给 MP4，不含 DASH。 */
+    private val PROGRESSIVE_ATTEMPT = PlayUrlAttempt(fnval = "1", fourk = "0", platform = null)
+
+    /** html5 移动端 MP4 兜底（`high_quality=1` 才会给较高画质）。 */
+    private val HTML5_ATTEMPT = PlayUrlAttempt(fnval = "0", fourk = "0", platform = "html5")
+
+    /** WBI key 缓存时长，对齐 Android 的 WBI_CACHE_MS。 */
+    private val WBI_CACHE_MS = 10 * 60 * 1000L
+
+    /** 空音轨结果的重试次数与基础等待，对齐 Android 的 EMPTY_AUDIO_RETRY_*。 */
+    private val EMPTY_AUDIO_RETRY_COUNT = 3
+    private val EMPTY_AUDIO_RETRY_DELAY_MS = 250L
+
     private var wbiKeys: Pair<String, String>? = null
+    // mixin key 会随 B 站轮换失效；对齐 Android 的 WBI_CACHE_MS，到期主动重取，
+    // 否则一次进程活很久之后所有签名请求都会一直失败。
+    private var wbiKeysLoadedAt = 0L
     private var cookieReady = false
 
     private fun ensureCookies() {
@@ -624,15 +674,18 @@ class BiliApi(private val http: HttpService) {
     )
 
     private fun loadWbiKeys(): Pair<String, String>? {
-        wbiKeys?.let { return it }
+        val cached = wbiKeys
+        if (cached != null && System.currentTimeMillis() - wbiKeysLoadedAt < WBI_CACHE_MS) return cached
         ensureCookies()
-        val text = http.get("https://api.bilibili.com/x/web-interface/nav", headers) ?: return null
-        val wbi = NeriJsonParser.parse(text).asObject()?.obj("data")?.obj("wbi_img") ?: return null
+        val text = http.get("https://api.bilibili.com/x/web-interface/nav", headers) ?: return cached
+        val wbi = NeriJsonParser.parse(text).asObject()?.obj("data")?.obj("wbi_img")
+        if (wbi == null) return cached
         val imgKey = wbi.str("img_url").orEmpty().substringAfterLast('/').substringBefore('.')
         val subKey = wbi.str("sub_url").orEmpty().substringAfterLast('/').substringBefore('.')
-        if (imgKey.isEmpty() || subKey.isEmpty()) return null
+        if (imgKey.isEmpty() || subKey.isEmpty()) return cached
         val keys = imgKey to subKey
         wbiKeys = keys
+        wbiKeysLoadedAt = System.currentTimeMillis()
         return keys
     }
 
@@ -765,33 +818,285 @@ class BiliApi(private val http: HttpService) {
         }
     }
 
-    fun audioUrl(bvid: String, cid: String): String? {
+    /**
+     * 用 aid 换 bvid 与首个 cid。
+     *
+     * 一起听房间里来自 Android 端的 B 站曲目只带纯数字 aid（stableKey 形如 `bilibili:<aid>`），
+     * 而 playurl 接口只接受 bvid；缺少这一步就只能报「无法解析播放地址」。
+     * 返回 null 表示 aid 无效或接口不可用。
+     */
+    fun resolveByAid(aid: String): Pair<String, String?>? {
+        val numeric = aid.trim().takeIf { it.isNotEmpty() && it.all { ch -> ch.isDigit() } } ?: return null
         ensureCookies()
-        val params = mapOf(
-            "bvid" to bvid,
-            "cid" to cid,
-            "fnval" to "16",
-            "fourk" to "1",
-        )
-        var dash: kotlinx.serialization.json.JsonObject? = null
-        for (attempt in 0 until 3) {
-            if (attempt > 0) {
-                Thread.sleep(500L * attempt)
-                refreshWbiKeys()
-            }
-            var root = wbiRequest("https://api.bilibili.com/x/player/wbi/playurl", params)
-            if (root == null || root.int("code") != 0 || root.obj("data")?.obj("dash") == null) {
-                val fallback = "https://api.bilibili.com/x/player/playurl?bvid=$bvid&cid=$cid&fnval=16&fourk=1"
-                root = NeriJsonParser.parse(http.get(fallback, headers).orEmpty()).asObject()
-            }
-            dash = root?.obj("data")?.obj("dash")
-            if (dash != null) break
+        val text = http.get("https://api.bilibili.com/x/web-interface/view?aid=$numeric", headers)
+            ?: return null
+        val root = NeriJsonParser.parse(text).asObject() ?: return null
+        if (root.int("code") != 0) return null
+        val data = root.obj("data") ?: return null
+        val bvid = data.str("bvid")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val cid = data.long("cid")?.takeIf { it > 0L }?.toString()
+        return bvid to cid
+    }
+
+    /**
+     * 解析可播放的音频直链。
+     *
+     * 链路与 Android 端 `BiliClient.getAllAudioStreams` 保持一致（那边的解析已经稳定，
+     * 桌面版没有理由另造一套）：
+     * 1. DASH：默认 `fnval=272`（DASH 16 + 杜比 256），这是 Android 的默认值；
+     *    音轨为空时重试 3 次并换 WBI key（空列表多为签名/风控抖动，不是视频真的没音轨）；
+     * 2. DASH 高档位 `fnval=4048`（8K + HDR + 杜比 + AV1）：覆盖只在高档位下发音轨的稿件；
+     * 3. `fnval=1` 的 `durl`：老视频/版权受限稿件只有渐进式 MP4（含视频轨，仍可播）；
+     * 4. `platform=html5` + `fnval=0`：移动端 MP4 兜底，部分稿件 PC 端拒绝、html5 端可播。
+     *
+     * 注意 `fnval` 是位掩码：`16|1=17` 会退回 durl（`1` 是「只要 mp4」的旧语义），
+     * 所以 DASH 与 durl 必须分两次请求，不能拼成一个值。
+     *
+     * 试看流（`is_preview=1`）虽然也有直链，但只是前几分钟片段，播到一半会突然结束，
+     * 不能当完整音频交出去，只记录「需要登录/会员」。
+     *
+     * 失败原因写进 [BiliPlaybackDiagnostics]，供上层给出比「无法解析播放地址」更具体的话术。
+     */
+    fun audioUrl(bvid: String, cid: String): String? {
+        val cleanBvid = bvid.trim()
+        val cleanCid = cid.trim()
+        // 先按「调用方给的原始 ID」清掉旧原因：同一个视频换成正确的 cid 后可能就成功了，
+        // 不清会让上层读到上一次的失败原因。
+        BiliPlaybackDiagnostics.clear(cleanBvid)
+        if (cleanBvid.isEmpty() || cleanCid.isEmpty()) {
+            BiliPlaybackDiagnostics.record(cleanBvid, "缺少视频 ID 或分 P 信息")
+            return null
         }
-        val resolvedDash = dash ?: return null
-        val audios = resolvedDash.array("audio")?.objects().orEmpty()
-        val best = audios.maxByOrNull { it.long("bandwidth") ?: 0L } ?: return null
-        val direct = best.str("baseUrl") ?: best.str("base_url") ?: return null
-        return normalizeImageUrl(direct)
+        // bvid 大小写敏感：整串小写或全大写都会被 playurl 判成 -404「啥都木有」，
+        // 一起听房间与收藏同步里的写法不一定规范，这里只纠正 `BV` 前缀（后半段是大小写敏感的编码，
+        // 不能整体转换），纠正得了就纠正，纠正不了就明确报错。
+        if (!cleanBvid.startsWith("bv", ignoreCase = true)) {
+            // `au…` 是 B 站「音频」区的内容，走的是完全独立的接口（music-service-c），
+            // 不属于视频播放链路；这里必须点名，否则用户会以为是自己视频的问题。
+            val reason = if (cleanBvid.startsWith("au", ignoreCase = true)) {
+                "这是 B 站音频区内容（$cleanBvid），桌面版暂不支持播放"
+            } else {
+                "视频 ID 不是 bvid 形式（$cleanBvid）"
+            }
+            BiliPlaybackDiagnostics.record(cleanBvid, reason)
+            return null
+        }
+        val normalizedBvid = "BV" + cleanBvid.substring(2)
+        if (cleanCid.toLongOrNull() == null) {
+            BiliPlaybackDiagnostics.record(normalizedBvid, "分 P 的 cid 不是数字（$cleanCid）")
+            return null
+        }
+        ensureCookies()
+
+        var lastCode: Int? = null
+        var lastMessage: String? = null
+        var sawPreviewOnly = false
+        var sawEmptyDashAudio = false
+
+        // DASH：主档位按 Android 的做法重试（空音轨多半是签名/风控抖动），高档位只试一次
+        for ((index, attempt) in DASH_ATTEMPTS.withIndex()) {
+            val tries = if (index == 0) EMPTY_AUDIO_RETRY_COUNT else 1
+            for (round in 0 until tries) {
+                if (round > 0) {
+                    Thread.sleep(EMPTY_AUDIO_RETRY_DELAY_MS * round)
+                    refreshWbiKeys()
+                }
+                val root = requestPlayUrl(normalizedBvid, cleanCid, attempt) ?: continue
+                if (root.int("code").let { it != null && it != 0 }) {
+                    lastCode = root.int("code")
+                    lastMessage = root.str("message")
+                    break
+                }
+                val data = root.obj("data") ?: continue
+                if (data.bool("is_preview") == true) {
+                    sawPreviewOnly = true
+                    break
+                }
+                pickDashAudioUrl(data)?.let { return it }
+                if (data.obj("dash") == null) {
+                    // 整个 dash 结构都没有（老视频/版权受限稿件）：这类只会给 durl，
+                    // 重试也不会有变化，直接用渐进式 MP4，省掉两次空转请求。
+                    pickDurlUrl(data)?.let { return it }
+                    break
+                }
+                sawEmptyDashAudio = true
+            }
+        }
+
+        // 渐进式 MP4（durl）：老视频/版权受限稿件没有 DASH，只有含视频轨的 MP4。
+        // 顺序放在 DASH 之后、html5 之前：PC 端 durl 的画质（qn 32）通常高于 html5（qn 16）。
+        var multiSegmentCount = 0
+        val progressive = playUrlData(normalizedBvid, cleanCid, PROGRESSIVE_ATTEMPT)
+        if (progressive != null && progressive.bool("is_preview") != true) {
+            val segments = progressive.array("durl")?.objects().orEmpty().size
+            // 多分片 MP4 要按顺序拼接才完整，而播放器只接单条 URI；用第一段会播到一半断掉。
+            if (segments > 1) multiSegmentCount = segments else pickDurlUrl(progressive)?.let { return it }
+        }
+
+        // html5 移动端兜底：PC 端偶发拒绝/只给试看时，html5 端常能拿到完整 MP4
+        val html5 = playUrlData(normalizedBvid, cleanCid, HTML5_ATTEMPT)
+        if (html5 != null && html5.bool("is_preview") != true) {
+            val segments = html5.array("durl")?.objects().orEmpty().size
+            if (segments > 1) {
+                if (multiSegmentCount == 0) multiSegmentCount = segments
+            } else {
+                pickDurlUrl(html5)?.let { return it }
+            }
+        }
+
+        val reason = when {
+            sawPreviewOnly -> "该视频只提供试看片段，需要登录或会员才能播放完整内容"
+            multiSegmentCount > 1 -> "该视频只提供分段（$multiSegmentCount 段）MP4，桌面版暂不支持拼接播放"
+            lastCode == -404 -> "视频或分 P 不存在（cid 与视频不匹配，或视频已被删除/设为私密）"
+            lastCode == -400 -> "播放接口拒绝了请求（视频 ID 或分 P 参数无效）"
+            lastCode == -403 -> "无权播放该视频（可能需要登录、会员或受地区限制）"
+            lastCode == -10403 -> "该视频受地区限制，当前网络无法播放"
+            lastCode != null -> "播放接口返回失败（code=$lastCode${lastMessage?.let { " $it" } ?: ""}）"
+            sawEmptyDashAudio -> "视频音轨为空（接口返回了 dash 但没有 audio，可能是付费内容或风控拦截）"
+            else -> "播放接口未返回可用的音频流"
+        }
+        // 番剧/影视在普通链路上必然失败，单独兜底一次；它会给更准确的原因
+        // （试看片段 / 大会员专属），所以先写下普通链路的原因，让兜底结果覆盖它。
+        BiliPlaybackDiagnostics.record(normalizedBvid, reason)
+        resolvePgcDurl(normalizedBvid)?.let { return it }
+        return null
+    }
+
+    /**
+     * 番剧 / 影视（PGC）的最后兜底。
+     *
+     * 这类内容本质上是 PGC 稿件：`x/player/playurl` 只认真实投稿，对需要付费的番剧会直接
+     * 返回 -404，正确入口是 `pgc/player/web/playurl`，而且必须带 `ep_id` 而不是 bvid+cid。
+     * 免费/限免的番剧通常能走普通链路，所以这里只在一切都失败时补一次，
+     * 顺带把「付费/大会员」和「视频真的没了」区分开。
+     *
+     * 付费剧集也会给一条 `is_preview=1` 的 durl，但它只是前几分钟的试看片段；
+     * 播放器会把它当完整曲目播，播到片段末尾就「莫名其妙」结束了，所以不采用试看流，
+     * 只给出明确原因。
+     */
+    private fun resolvePgcDurl(bvid: String): String? {
+        val viewText = http.get("https://api.bilibili.com/x/web-interface/view?bvid=$bvid", headers)
+            ?: return null
+        val redirect = NeriJsonParser.parse(viewText).asObject()
+            ?.obj("data")?.str("redirect_url").orEmpty()
+        // 只有番剧/影视的稿件才会带 bangumi/play/epXXXX 跳转
+        val epId = Regex("/bangumi/play/ep(\\d+)").find(redirect)?.groupValues?.getOrNull(1)
+            ?: return null
+        val text = http.get(
+            "https://api.bilibili.com/pgc/player/web/playurl?ep_id=$epId&fnval=16&fnver=0&fourk=1",
+            headers,
+        ) ?: return null
+        val root = NeriJsonParser.parse(text).asObject() ?: return null
+        // pgc 接口把播放数据放在 result 而不是 data
+        val payload = root.obj("result") ?: root.obj("data")
+        val previewOnly = payload?.let { it.bool("is_preview") == true || it.int("is_preview") == 1 } == true
+        if (previewOnly) {
+            BiliPlaybackDiagnostics.record(
+                bvid,
+                "该视频是番剧/影视内容（ep$epId），只有试看片段，需要登录或大会员才能播放完整剧集",
+            )
+            return null
+        }
+        val url = payload?.let { pickDashAudioUrl(it) ?: pickDurlUrl(it) }
+        if (!url.isNullOrBlank()) return url
+        BiliPlaybackDiagnostics.record(
+            bvid,
+            "该视频是番剧/影视内容（ep$epId），当前网络/账号拿不到播放流（多为付费或大会员专属）",
+        )
+        return null
+    }
+
+    /** 一次 playurl 请求的档位参数。 */
+    private data class PlayUrlAttempt(
+        val fnval: String,
+        val fourk: String,
+        val platform: String?,
+    )
+
+    /** 请求一次 playurl 并直接取出 `data`；接口失败或没有 data 时返回 null。 */
+    private fun playUrlData(
+        bvid: String,
+        cid: String,
+        attempt: PlayUrlAttempt,
+    ): kotlinx.serialization.json.JsonObject? {
+        val root = requestPlayUrl(bvid, cid, attempt) ?: return null
+        if (root.int("code").let { it != null && it != 0 }) return null
+        return root.obj("data")
+    }
+
+    /**
+     * 请求 playurl：优先 WBI 签名接口，签名不可用/风控时退到明文接口。
+     * 两个接口对同一组参数返回体一致，所以解析逻辑共用。
+     */
+    private fun requestPlayUrl(
+        bvid: String,
+        cid: String,
+        attempt: PlayUrlAttempt,
+    ): kotlinx.serialization.json.JsonObject? {
+        val params = buildMap {
+            put("bvid", bvid)
+            put("cid", cid)
+            put("fnval", attempt.fnval)
+            put("fnver", "0")
+            put("fourk", attempt.fourk)
+            attempt.platform?.let { put("platform", it) }
+            // html5 端要配合 high_quality 才给较高画质，否则只有 360P
+            if (attempt.platform == "html5") put("high_quality", "1")
+        }
+        wbiRequest("https://api.bilibili.com/x/player/wbi/playurl", params)?.let { signed ->
+            val code = signed.int("code")
+            // -403 / -352 是签名失效或风控：换 key 后由上层重试，这里不再叠加明文请求
+            if (code == 0 || signed.obj("data") != null) return signed
+        }
+        val query = params.entries.joinToString("&") { (key, value) -> "$key=${urlEncode(value)}" }
+        val text = http.get("https://api.bilibili.com/x/player/playurl?$query", headers) ?: return null
+        return NeriJsonParser.parse(text).asObject()
+    }
+
+    /**
+     * DASH 音轨：优先普通音轨（取码率最高的一条）。
+     * 少数稿件普通音轨为空，音频只出现在 `dash.flac.audio`（Hi-Res）或
+     * `dash.dolby.audio`（杜比），不补这一步会误判成「没有音频流」。
+     *
+     * 每条流都会给出 baseUrl + 若干 backupUrl（不同 CDN），播放器只会用拿到的这一条，
+     * 所以要在这里按 CDN 稳定性排好序取第一条，避免拿到偶发握手中断的 mcdn 调度域名。
+     */
+    private fun pickDashAudioUrl(data: kotlinx.serialization.json.JsonObject): String? {
+        val dash = data.obj("dash") ?: return null
+        val ordinary = dash.array("audio")?.objects().orEmpty()
+            .maxByOrNull { it.long("bandwidth") ?: 0L }
+            ?.let(::firstReachableUrl)
+        if (!ordinary.isNullOrBlank()) return ordinary
+        val flac = dash.obj("flac")?.obj("audio")?.let(::firstReachableUrl)
+        if (!flac.isNullOrBlank()) return flac
+        return dash.obj("dolby")?.array("audio")?.objects().orEmpty()
+            .maxByOrNull { it.long("bandwidth") ?: 0L }
+            ?.let(::firstReachableUrl)
+    }
+
+    /** 取一条流的主备 URL 里最优的一条；DASH 用 baseUrl/backupUrl，durl 用 url/backup_url。 */
+    private fun firstReachableUrl(item: kotlinx.serialization.json.JsonObject): String? {
+        val primary = item.str("baseUrl") ?: item.str("base_url") ?: item.str("url")
+        val backups = (item.array("backupUrl") ?: item.array("backup_url")).orEmpty().mapNotNull { element ->
+            if (element is kotlinx.serialization.json.JsonPrimitive &&
+                element !is kotlinx.serialization.json.JsonNull
+            ) {
+                element.content
+            } else {
+                null
+            }
+        }
+        return BiliStreamUrls.prioritize(primary, backups).firstOrNull()?.let(::normalizeImageUrl)
+    }
+
+    /**
+     * 渐进式 MP4 回退：`durl` 数组是完整（含视频轨）的 mp4，顺序分片。
+     * 只要第一片的直链：播放器按单条流播放，分片视频实际只出现在超长/特殊稿件上。
+     */
+    private fun pickDurlUrl(data: kotlinx.serialization.json.JsonObject): String? {
+        val durl = data.array("durl")?.objects().orEmpty()
+        val first = durl.firstOrNull() ?: return null
+        return firstReachableUrl(first)
     }
 
     fun biliHeaders(): Map<String, String> = mapOf(
@@ -911,11 +1216,17 @@ class BiliApi(private val http: HttpService) {
 
     private fun musicRankSong(item: JsonObjectSelf): Song? {
         // 有官方 MV 时优先用 MV（音质/画面更稳定），否则回退上榜的授权投稿。
-        val bvid = item.str("mv_bvid").orEmpty().trim()
-            .ifBlank { item.str("creation_bvid").orEmpty().trim() }
+        val mvBvid = item.str("mv_bvid").orEmpty().trim()
+        val creationBvid = item.str("creation_bvid").orEmpty().trim()
+        val bvid = mvBvid.ifBlank { creationBvid }
         if (bvid.isBlank()) return null
         val cover = normalizeImageUrl(item.str("mv_cover"))
             ?: normalizeImageUrl(item.str("creation_cover"))
+        // creation_first_cid 永远属于 creation_bvid；选中 MV 时这个 cid 与 bvid 不配套，
+        // 带上它会让 playurl 直接 -404「啥都木有」。所以只有两个 bvid 相同时才复用 cid。
+        val cid = item.long("creation_first_cid")
+            ?.takeIf { it > 0L && mvBvid == creationBvid }
+            ?.toString()
         return Song(
             key = biliSongKey(bvid),
             source = MediaSource.BILIBILI,
@@ -927,7 +1238,7 @@ class BiliApi(private val http: HttpService) {
             durationMs = (item.long("creation_duration") ?: 0L) * 1000L,
             remoteId = bvid,
             artworkUrl = cover,
-            extraId = item.long("creation_first_cid")?.takeIf { it > 0L }?.toString(),
+            extraId = cid,
         )
     }
 

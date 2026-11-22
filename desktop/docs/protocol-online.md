@@ -50,8 +50,10 @@
 | `online.artistDetail` | `{source, id}` | `{artist:OnlineArtist, songs:[Song], albums:[OnlineCollection]}` |
 | `online.collectionDetail` | `{source, id, kind?}`，`kind` 默认 `"playlist"` | `{title, coverUrl, description, creator, songs, collection}` |
 | `online.myPlaylists` | `{source}` | `{collections:[OnlineCollection], needLogin:Boolean}` |
+| `online.addToNeteasePlaylist` | `{playlistId, songs:[Song]}` | `{ok, added, alreadyExists, failed, code?, error?, needLogin?, needsWebVerification?}` |
 | `online.biliFavorites` | `{url?}` | `{collections:[OnlineCollection], needLogin:Boolean}` |
 | `online.neteaseCloudSongs` | `{offset?, limit?}`（默认 0/200，limit 1..1000） | `{songs:[Song], totalCount, usedBytes, maxBytes, hasMore, needLogin}`；登录失效返回 `needLogin:true` 与空 songs |
+| `online.songEncyclopedia` | `{song:Song}` | `{available:Boolean, encyclopedia?:SongEncyclopedia, reason?}`；`reason` ∈ `not_supported` / `not_available` |
 | `online.lyrics` | `{song:Song, refresh?}` | `{lyrics:Lyrics}` |
 | `online.playbackUrl` | `{song:Song}` | `{song:Song, playable:Boolean, url?, path?, headers?, error?}` |
 | `online.sources` | — | `{sources:[{id,name,enabled}], quality, ffmpeg:Boolean}` |
@@ -266,6 +268,40 @@ Api.call("online.home", refresh ? { "refresh": true } : {}).then(r => {
 - 前端看到 `needLogin:true` 应显示「登录后查看」引导（登录命令见 `protocol-login.md`），
   并在收到 `accounts.changed` 事件后重试。
 
+### `online.addToNeteasePlaylist`
+
+把网易云歌曲真正写入当前账号的网易云歌单，对齐 Android 播放页「收藏到网易云歌单」。
+请求：
+
+```jsonc
+{"playlistId": 123456, "songs": [Song, ...]}   // Song 需带 remoteId 或 netease:<id> 的 key
+```
+
+结果：
+
+```jsonc
+// 成功：added 为新写入数量，alreadyExists 为提交前已在该歌单中的数量
+{"ok": true, "added": 1, "alreadyExists": 0, "failed": 0, "code": 200}
+// 未登录 / 歌单不归当前账号 / 歌曲没有有效网易云 id / 平台拒绝
+{"ok": false, "added": 0, "alreadyExists": 0, "failed": 1, "code": 524,
+ "error": "...", "needLogin": false, "needsWebVerification": true}
+```
+
+实现要点：
+
+- 接口 `POST https://music.163.com/weapi/playlist/manipulate/tracks`，weapi 加密
+  （`net/NeteaseWeapi.kt`，与 Android `NeteaseCrypto.weApiEncrypt` 一致：双层 AES-CBC + RSA），
+  query 带登录 Cookie 中的 `csrf_token`；复用 `HttpService` 的共享 Cookie jar。
+- 参数 `op=add` / `pid` / `id` / `tracks`（CSV）/ `trackIds`（JSON 数组）/ `imme=true`，
+  与 Android `buildNeteasePlaylistTrackParams` 一致；每批最多 50 首。
+- 提交前用明文 `/api/v6/playlist/detail` 读已有 `trackIds` 去重，并校验 `creator.userId`
+  等于当前账号 `userId`（Android 只列自建歌单，不能写入收藏的他人歌单）。
+- **鉴权限制**：网易云在 code=524 时要求网页业务校验令牌 `checkToken`。Android 用 WebView 加载
+  `music.163.com` 并调 `initWatchman(...WM.getToken(...))` 取令牌；桌面端没有 WebView，拿不到该令牌，
+  因此**不带令牌的基础写入尽力实现，524 时不重试并明确返回 `needsWebVerification:true`**。
+  前端据此提示去网易云网页版操作 / 复制歌曲链接，不会假装成功。
+- 未登录直接返回 `needLogin:true`，不发写请求；登录态失效（301/401 等）同样以 `needLogin:true` 返回。
+
 ### `online.biliFavorites`
 
 B 站收藏夹列表。`url` 可省略：
@@ -280,7 +316,67 @@ B 站收藏夹列表。`url` 可省略：
 - 收藏夹没有封面时，`OnlineCollection.coverUrl` 可能为 null；打开详情后
   `online.playlistDetail` 返回的 `collection.coverUrl` 会用首曲封面兜底。
 
-## 8. 歌词与播放地址
+## 8. 歌曲百科 `online.songEncyclopedia`
+
+对齐 Android 端 `SongEncyclopediaRepository`，聚合网易云匿名公开接口，返回结构化百科数据。
+**四个端点均为明文 GET（`/api/...`，无 eapi 签名、无需登录 Cookie）**，本机实测匿名可用：
+
+| 数据 | 接口 | 参数 | 用途 |
+| --- | --- | --- | --- |
+| 基础板块 | `/api/song/play/about/block/page` | `songId` | 曲风 / 语种 / BPM / 标签 / 获奖 / 影视综艺 / **相似歌曲** / **相关歌单**（同源一次请求） |
+| 创作团队 | `/api/song/creators` | `songId` | 作词 / 作曲 / 编曲 / 制作人及其它角色 |
+| 歌曲详情 | `/api/song/detail` | `ids=[id]` | 专辑 id / 名称 / 封面 / 发行公司 / 发行时间 / 主歌手 id |
+| 艺人简介 | `/api/v1/artist/{id}` | — | 头像 / 简介 / 专辑数 / 歌曲数 |
+
+- 请求 `{song: Song}`：`song.source` 必须是 `NETEASE`，`remoteId`（或 `key` 的 `netease:` 前缀）为正数 id；
+  其它来源返回 `{available:false, reason:"not_supported"}`。
+- 歌曲不存在时接口同样 code=200，但没有 `SONG_PLAY_ABOUT_SONG_BASIC` 板块 →
+  `{available:false, reason:"not_available"}`（前端显示「暂无资料」）。
+- 网络/解析失败 → 协议错误 `internal_error`，可重试。
+- 后端有 10 分钟 LRU 内存缓存（32 条，按 `songKey|album|filePath` 隔离）。
+- 相似歌曲 / 相关歌单复用基础板块的同一次响应，不额外请求；歌曲详情 / 艺人简介 / 创作团队
+  是加分项，**单独失败只丢对应分区**，不影响曲风 / BPM 等主数据。
+- 不提供、也不伪造：粉丝数（接口无该字段）、歌单歌曲数（接口只给播放量）、BPM/语种推断值。
+- 桌面端**没有** Android 的「本机听歌记录」与「评论预览」分区：听歌记录属于本地统计页、
+  评论走已有的 `comments.*` 命令与评论面板，百科面板不重复实现。
+
+```jsonc
+{
+  "available": true,
+  "encyclopedia": {
+    "songKey": "netease:186016|叶惠美|",
+    "source": "NETEASE",
+    "basicInfo": {"name": "晴天", "artists": ["周杰伦"], "album": "叶惠美"},
+    "musicInfo": {"genres": ["流行-华语流行"], "bpm": null, "language": null,
+                  "tags": ["思念"], "instruments": []},
+    "credits": {"lyricists": ["周杰伦"], "composers": ["周杰伦"],
+                "arrangers": ["周杰伦"], "producers": ["周杰伦"],
+                "otherRoles": [{"role": "吉他", "names": ["蔡科俊Again"]}]},
+    "awards": [{"title": "第2届hito流行音乐奖", "detail": "获 Hito年度华语歌曲"}],
+    "appearances": ["颁奖礼《第四届音乐风云榜》插曲"],
+    "publishTimeMs": 1059580800000, "albumCompany": "杰威尔",
+    "albumId": 18905, "albumPicUrl": "https://...", "artistId": 6452,
+    "artist": {"artistId": 6452, "name": "周杰伦", "picUrl": "https://...",
+               "briefDesc": "周杰伦（Jay Chou）…", "fansCount": null,
+               "albumSize": 49, "musicSize": 591},
+    "similarSongs": [{"songId": 288820, "name": "…", "artist": "…", "coverUrl": "https://..."}],
+    "relatedPlaylists": [{"playlistId": 3181639009, "name": "…", "coverUrl": "https://...",
+                          "playCount": 97123, "trackCount": null}],
+    "fetchedAtMs": 1795322409514
+  }
+}
+```
+
+QML 用法：
+
+```js
+Api.call("online.songEncyclopedia", { song: Player.song }).then(r => {
+    if (!r.available) { show(r.reason === "not_supported" ? "当前歌曲不支持百科" : "暂无资料"); return }
+    renderSections(r.encyclopedia)
+}).catch(e => showError(e.message))
+```
+
+## 9. 歌词与播放地址
 
 ### `online.lyrics`
 
@@ -302,6 +398,7 @@ B 站收藏夹列表。`url` 可省略：
       "timeMs": 15000,
       "text": "如果那两个字没有颤抖",
       "translation": "...",            // 已合并翻译；没有时为 null
+      "phonetic": "...",               // 音译行（网易云 romalrc / 同名 sidecar）；没有时为 null
       "endMs": 18760,                  // 行结束时间（yrc 才有；普通 LRC 为 0）
       "words": [                       // 逐词时间（yrc）；普通 LRC 为空数组
         {"startMs": 15000, "durationMs": 300, "text": "如"},
@@ -317,8 +414,10 @@ B 站收藏夹列表。`url` 可省略：
 - 走 `container.lyrics` 仓库：**本地 `.lrc` → 音频内嵌歌词 → 在线歌词** 的完整回退链，
   不是只查在线接口；结果带 LRU 缓存。
 - 网易云歌词优先走 eapi 的 `/eapi/song/lyric/v1` 取 **yrc 逐词时间**（`lines[].words` 与
-  `lines[].endMs`）；接口失败、歌曲没有 yrc 或 yrc 解析不出行时，自动回退普通 LRC，
-  `words` 为空、`endMs` 为 0，前端按整行时长线性推进。
+  `lines[].endMs`）；与安卓一致，eapi 没有 yrc 时再回退 **AMLL TTML 逐字稿**
+  （按网易云歌曲 id 检索并校验 ncmIds，转成 yrc 形状后走同一解析链），
+  两者都拿不到时才回退普通 LRC，此时 `words` 为空、`endMs` 为 0，前端按整行时长线性推进。
+- `raw` 始终是网易云的普通 LRC（下载歌词文件仍保存 LRC）；逐字时间只体现在 `lines[].words`。
 - 逐词高亮时翻译优先取与 yrc 行时间对齐的 `ytlrc`，没有则用 `tlyric` 按时间就近合并（容差 1.2s）。
 - QML 播放器页面已有 `player.lyrics` 事件推送，本命令用于**详情页/手动刷新**。
 - 本地歌曲没有歌词文件时，在线回退会用「标题 + 歌手」搜网易云最匹配的一首。
@@ -380,7 +479,7 @@ B 站收藏夹列表。`url` 可省略：
   它只用于调试/判断原始音源是否可播；
 - 除网易云外的音源（本地 / B 站 / YouTube）路径不受影响。
 
-## 9. 音源状态 `online.sources`
+## 10. 音源状态 `online.sources`
 
 ```jsonc
 {
@@ -398,7 +497,7 @@ B 站收藏夹列表。`url` 可省略：
 - `quality` 是设置里的 `qualityPreference`；`ffmpeg` 是 `FfmpegSupport.available`（影响播放器音效能力）。
 - 前端可用它渲染探索页的音源筛选、隐藏被禁用的平台。
 
-## 10. QML 使用示例
+## 11. QML 使用示例
 
 ```qml
 // 探索页：热门搜索 + 推荐歌单 + 风格标签
@@ -427,7 +526,7 @@ Api.call("online.collectionDetail", { source: src, id: id, kind: "playlist" })
 Player.playSongNow(song, songs)                 // 播放地址由后端播放器内部解析
 ```
 
-## 11. 遗留 / 限制
+## 12. 遗留 / 限制
 
 - B 站搜索走 WBI 签名并有风控，偶发返回空数组（核心内部已重试 3 次）；此时前端应提示
   「结果为空，可稍后重试」而不是报错。

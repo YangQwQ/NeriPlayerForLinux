@@ -3,7 +3,9 @@ import QtQuick.Effects
 import ".."
 
 // 播放页歌词栏（Refined Now Playing 风格）：
-// 当前行放大高亮、上下行渐隐、边缘淡出、翻译副行、点击行 seek、当前行自动滚到阅读位置。
+// 当前行放大高亮、上下行渐隐、边缘淡出、点击行 seek、当前行自动滚到阅读位置。
+// 每行是「音译 / 原文 / 翻译」的多行组合：按 lyricLineOrder 排序，关闭的类型不显示；
+// 原文开启时占主行（大字号 + 逐词高亮），原文关闭时由顺序里第一个可用行顶上。
 // 数据直接来自全局 Player / Settings，宽屏侧栏与全屏歌词共用。
 //
 // 滚动自己做：ListView 的 highlightRangeMode 在可变行高 + 上下留白时位置会算漂，
@@ -13,7 +15,9 @@ Item {
 
     /** 主行基础字号（未含 Settings 的歌词字号缩放）。 */
     property real baseFontSize: 22
-    /** 翻译行相对主行的字号比例。 */
+    /** 音译行相对主行的字号比例（可由 Settings.lyricPhoneticFontSizeScale 覆盖）。 */
+    property real phoneticScale: 0.58
+    /** 翻译行相对主行的字号比例（可由 Settings.lyricTranslationFontSizeScale 覆盖）。 */
     property real translationScale: 0.58
     /** 行水平内边距。 */
     property real horizontalPadding: 12
@@ -51,9 +55,25 @@ Item {
         return (typeof scale === "number" && scale > 0) ? scale : 1.0
     }
     readonly property bool showTranslation: Settings.get("showLyricTranslation", true) !== false
+    readonly property bool showPhonetic: Settings.get("showLyricPhonetic", false) === true
+    readonly property bool showOriginal: Settings.get("showLyricOriginal", true) !== false
+    /**
+     * 三类歌词行的显示顺序（默认 原文 → 翻译 → 音译，兼容只有 text/translation 的旧歌词）。
+     * 值来自后端设置 lyricLineOrder，如 "PHONETIC_ORIGINAL_TRANSLATION"。
+     */
+    readonly property string lineOrder: {
+        const v = Settings.get("lyricLineOrder", "ORIGINAL_TRANSLATION_PHONETIC")
+        return (typeof v === "string" && v.length > 0) ? v : "ORIGINAL_TRANSLATION_PHONETIC"
+    }
     readonly property bool wordHighlight: Settings.get("lyricsHighlight", "LINE") === "WORD"
     /** 当前行柔光；关掉后不再创建模糊效果，省 GPU。 */
     readonly property bool lyricsGlow: Settings.get("nowPlayingLyricsGlow", true) !== false
+    /** 非当前行模糊：设置里可开关并调强度，当前行永远清晰。 */
+    readonly property bool blurEnabled: Settings.get("lyricBlurEnabled", true) !== false
+    readonly property real blurAmount: {
+        const v = Settings.get("lyricBlurAmount", 1.5)
+        return (typeof v === "number" && v >= 0) ? v : 1.5
+    }
     readonly property int highlightDuration: {
         const d = Settings.get("lyricsHighlightDuration", 220)
         return (typeof d === "number" && d >= 0) ? d : 220
@@ -92,7 +112,18 @@ Item {
 
     readonly property real mainFontSize: Math.max(12, baseFontSize * fontScale)
     readonly property real mainLineHeight: Math.round(mainFontSize * 1.42)
-    readonly property real translationFontSize: Math.round(mainFontSize * translationScale)
+    /** 字幕行字号比例优先读后端设置，缺省时用组件属性（设计稿默认 0.58）。 */
+    readonly property real effectivePhoneticScale: {
+        const v = Settings.get("lyricPhoneticFontSizeScale", phoneticScale)
+        return (typeof v === "number" && v > 0 && v <= 1) ? v : phoneticScale
+    }
+    readonly property real effectiveTranslationScale: {
+        const v = Settings.get("lyricTranslationFontSizeScale", translationScale)
+        return (typeof v === "number" && v > 0 && v <= 1) ? v : translationScale
+    }
+    readonly property real phoneticFontSize: Math.max(10, Math.round(mainFontSize * effectivePhoneticScale))
+    readonly property real phoneticLineHeight: Math.round(phoneticFontSize * 1.34)
+    readonly property real translationFontSize: Math.max(10, Math.round(mainFontSize * effectiveTranslationScale))
     readonly property real translationLineHeight: Math.round(translationFontSize * 1.34)
 
     // 逐词高亮的宽度测量：当前行是 DemiBold 加粗，必须用同一字重测量才准。
@@ -166,6 +197,94 @@ Item {
         return pane.showTranslation && line
                 && line.translation !== undefined && line.translation !== null
                 && line.translation !== ""
+    }
+
+    function hasPhonetic(line) {
+        // 音译由后端新增，字段缺失（旧歌词/未下发）时优雅降级：不显示音译行
+        return pane.showPhonetic && line
+                && line.phonetic !== undefined && line.phonetic !== null
+                && line.phonetic !== ""
+    }
+
+    function hasOriginal(line) {
+        return pane.showOriginal && line
+                && line.text !== undefined && line.text !== null && line.text !== ""
+    }
+
+    /** 按 lyricLineOrder 返回本行实际要显示的行类型（ORIGINAL / TRANSLATION / PHONETIC）。 */
+    function orderedKinds() {
+        const order = pane.lineOrder.toUpperCase().split("_")
+        const kinds = []
+        for (let i = 0; i < order.length; i++) {
+            const k = order[i]
+            if (k === "ORIGINAL" || k === "TRANSLATION" || k === "PHONETIC") {
+                if (kinds.indexOf(k) < 0)
+                    kinds.push(k)
+            }
+        }
+        return kinds
+    }
+
+    /**
+     * 本行的主显示类型：原文开启时用原文（保留逐词高亮），
+     * 原文关闭时按 order 取第一个「已开启且有内容」的类型作为大字号主行；
+     * 全关时兜底用原文（visibleKinds 会保证仍渲染一行，避免歌词区空白）。
+     */
+    function primaryKind(line, kinds) {
+        if (pane.showOriginal && pane.hasOriginal(line))
+            return "ORIGINAL"
+        for (let i = 0; i < kinds.length; i++) {
+            const k = kinds[i]
+            if (k !== "ORIGINAL" && pane.kindEnabled(k) && pane.kindHasText(line, k))
+                return k
+        }
+        return "ORIGINAL"
+    }
+
+    function kindHasText(line, kind) {
+        if (!line)
+            return false
+        if (kind === "ORIGINAL")
+            return line.text !== undefined && line.text !== null && line.text !== ""
+        if (kind === "TRANSLATION")
+            return line.translation !== undefined && line.translation !== null && line.translation !== ""
+        if (kind === "PHONETIC")
+            return line.phonetic !== undefined && line.phonetic !== null && line.phonetic !== ""
+        return false
+    }
+
+    function kindEnabled(kind) {
+        if (kind === "ORIGINAL") return pane.showOriginal
+        if (kind === "TRANSLATION") return pane.showTranslation
+        if (kind === "PHONETIC") return pane.showPhonetic
+        return false
+    }
+
+    /** 本行实际要渲染的行类型，严格按 order 顺序，关闭 / 无内容的类型跳过。 */
+    function visibleKinds(line, kinds, primary) {
+        const result = []
+        for (let i = 0; i < kinds.length; i++) {
+            const k = kinds[i]
+            if (!pane.kindEnabled(k) || !pane.kindHasText(line, k))
+                continue
+            result.push(k)
+        }
+        // 三类全关 / 全无内容时仍保留一行，避免歌词区空白
+        if (result.length === 0 && primary)
+            result.push(primary)
+        return result
+    }
+
+    function kindText(line, kind) {
+        if (!line)
+            return ""
+        if (kind === "ORIGINAL")
+            return line.text !== undefined && line.text !== null && line.text !== "" ? line.text : "♪"
+        if (kind === "TRANSLATION")
+            return line.translation !== undefined && line.translation !== null ? line.translation : ""
+        if (kind === "PHONETIC")
+            return line.phonetic !== undefined && line.phonetic !== null ? line.phonetic : ""
+        return ""
     }
 
     // ---------------------------------------------------------------- 手动滚动
@@ -275,7 +394,9 @@ Item {
             required property int index
 
             readonly property bool active: index === pane.currentIndex
-            readonly property bool translated: pane.hasTranslation(modelData)
+            readonly property var lineKinds: pane.orderedKinds()
+            readonly property string primaryKind: pane.primaryKind(modelData, lineKinds)
+            readonly property var visibleKinds: pane.visibleKinds(modelData, lineKinds, primaryKind)
             readonly property real viewY: y - list.contentY
             readonly property real edgeOpacity: {
                 if (!pane.edgeFade)
@@ -324,126 +445,143 @@ Item {
                     NumberAnimation { duration: pane.highlightDuration + 180; easing.type: Easing.OutCubic }
                 }
 
-                Item {
-                    id: mainLine
+                // 按 lyricLineOrder 把每行拆成「音译 / 原文 / 翻译」的多行组合。
+                // primaryKind（原文开时=原文，否则=顺序里第一个可用行）渲染为大字号并带
+                // 柔光 / 逐词高亮；其余行按各自字号比例渲染为字幕行。
+                Repeater {
+                    model: lineDelegate.visibleKinds
 
-                    readonly property real glowPad: Math.round(pane.mainFontSize * 0.9)
-                    // 逐字高亮的裁切窗口要落在文字实际起始位置，否则中间/右对齐时会裁错边
-                    readonly property real textWidth: Math.min(width, mainText.contentWidth)
-                    readonly property real highlightX: pane.alignmentMode === 1
-                                                       ? Math.max(0, (width - textWidth) / 2)
-                                                       : (pane.alignmentMode === 2
-                                                          ? Math.max(0, width - textWidth) : 0)
-
-                    width: parent.width
-                    height: mainText.implicitHeight
-
-                    // 当前行柔光：把同一行文字用强调色画一份再模糊，仅当前行参与渲染。
                     Item {
-                        id: glowSource
+                        id: rowItem
 
-                        x: -mainLine.glowPad
-                        y: -mainLine.glowPad
-                        width: mainLine.width + mainLine.glowPad * 2
-                        height: mainLine.height + mainLine.glowPad * 2
-                        visible: false
-
-                        Text {
-                            x: mainLine.glowPad
-                            y: mainLine.glowPad
-                            width: mainLine.width
-                            text: lineDelegate.modelData.text !== "" ? lineDelegate.modelData.text : "♪"
-                            wrapMode: Text.Wrap
-                            textFormat: Text.PlainText
-                            horizontalAlignment: pane.textAlignment
-                            color: np.accent
-                            font.family: Prefs.effectiveLyricFont
-                            font.pixelSize: pane.mainFontSize
-                            font.weight: Font.DemiBold
-                            lineHeightMode: Text.FixedHeight
-                            lineHeight: pane.mainLineHeight
+                        required property string modelData
+                        readonly property bool isPrimary: modelData === lineDelegate.primaryKind
+                        readonly property int rowPixelSize: {
+                            if (isPrimary) return pane.mainFontSize
+                            if (modelData === "PHONETIC") return pane.phoneticFontSize
+                            return pane.translationFontSize
                         }
-                    }
-
-                    MultiEffect {
-                        anchors.fill: glowSource
-                        visible: pane.lyricsGlow && lineDelegate.active
-                        source: glowSource
-                        // 关掉自动 padding，避免效果项缩放整行文字（这里已经手动留了边）
-                        autoPaddingEnabled: false
-                        blurEnabled: true
-                        blur: 0.7
-                        blurMax: 22
-                        opacity: 0.6
-                    }
-
-                    Text {
-                        id: mainText
+                        readonly property int rowLineHeight: {
+                            if (isPrimary) return pane.mainLineHeight
+                            if (modelData === "PHONETIC") return pane.phoneticLineHeight
+                            return pane.translationLineHeight
+                        }
 
                         width: parent.width
-                        text: lineDelegate.modelData.text !== "" ? lineDelegate.modelData.text : "♪"
-                        wrapMode: Text.Wrap
-                        textFormat: Text.PlainText
-                        horizontalAlignment: pane.textAlignment
-                        color: Theme.withAlpha(np.foreground,
-                                              pane.wordHighlight && lineDelegate.active ? 0.42 : 1.0)
-                        font.family: Prefs.effectiveLyricFont
-                        font.pixelSize: pane.mainFontSize
-                        font.weight: lineDelegate.active ? Font.DemiBold : Font.Normal
-                        lineHeightMode: Text.FixedHeight
-                        lineHeight: pane.mainLineHeight
+                        height: rowText.implicitHeight
 
-                        Behavior on color {
-                            ColorAnimation { duration: pane.highlightDuration }
+                        // 逐字高亮的裁切窗口要落在文字实际起始位置，否则中间/右对齐时会裁错边
+                        readonly property real textWidth: Math.min(width, rowText.contentWidth)
+                        readonly property real highlightX: pane.alignmentMode === 1
+                                                           ? Math.max(0, (width - textWidth) / 2)
+                                                           : (pane.alignmentMode === 2
+                                                              ? Math.max(0, width - textWidth) : 0)
+
+                        // 当前行柔光：把同一行文字用强调色画一份再模糊，仅主行参与渲染。
+                        Item {
+                            id: glowSource
+
+                            x: -glowPad
+                            y: -glowPad
+                            width: rowItem.width + glowPad * 2
+                            height: rowItem.height + glowPad * 2
+                            visible: false
+
+                            readonly property int glowPad: Math.round(pane.mainFontSize * 0.9)
+
+                            Text {
+                                x: glowSource.glowPad
+                                y: glowSource.glowPad
+                                width: rowItem.width
+                                text: pane.kindText(lineDelegate.modelData, rowItem.modelData)
+                                wrapMode: Text.Wrap
+                                textFormat: Text.PlainText
+                                horizontalAlignment: pane.textAlignment
+                                color: np.accent
+                                font.family: Prefs.effectiveLyricFont
+                                font.pixelSize: rowItem.rowPixelSize
+                                font.weight: Font.DemiBold
+                                lineHeightMode: Text.FixedHeight
+                                lineHeight: rowItem.rowLineHeight
+                            }
                         }
-                    }
 
-                    // 逐字高亮：按文字实际宽度的比例裁切，模拟「唱到哪」
-                    // （按列宽算的话，短句会整行都被覆盖）
-                    //
-                    // 裁切窗口必须从 mainLine 的 x=0 开始：内层 Text 已经按 horizontalAlignment
-                    // 把文字排到了 highlightX，窗口若再整体右移 highlightX，居中/右对齐时文字会被
-                    // 偏移两次，高亮从句子中间才开始出现。宽度加回 highlightX 才能覆盖到文字起点。
-                    Item {
-                        visible: pane.wordHighlight && lineDelegate.active
-                        x: 0
-                        width: mainLine.highlightX + mainLine.textWidth * pane.lineProgress
-                        height: parent.height
-                        clip: true
+                        MultiEffect {
+                            anchors.fill: glowSource
+                            visible: pane.lyricsGlow && lineDelegate.active && rowItem.isPrimary
+                            source: glowSource
+                            // 关掉自动 padding，避免效果项缩放整行文字（这里已经手动留了边）
+                            autoPaddingEnabled: false
+                            blurEnabled: true
+                            blur: 0.7
+                            blurMax: 22
+                            opacity: 0.6
+                        }
 
                         Text {
-                            width: mainLine.width
-                            text: lineDelegate.modelData.text !== "" ? lineDelegate.modelData.text : "♪"
+                            id: rowText
+
+                            // 歌词模糊开启且不是当前行时，用下面的 MultiEffect 渲染模糊版本，
+                            // 原 Text 隐藏（仍参与几何测量，行高不会变）。
+                            visible: !rowItem.blurred
+                            width: parent.width
+                            text: pane.kindText(lineDelegate.modelData, rowItem.modelData)
                             wrapMode: Text.Wrap
                             textFormat: Text.PlainText
                             horizontalAlignment: pane.textAlignment
-                            color: np.accent
+                            color: rowItem.isPrimary
+                                   ? Theme.withAlpha(np.foreground,
+                                                     pane.wordHighlight && lineDelegate.active ? 0.42 : 1.0)
+                                   : (lineDelegate.active
+                                      ? Theme.withAlpha(np.foreground, 0.78)
+                                      : Theme.withAlpha(np.foreground, 0.45))
                             font.family: Prefs.effectiveLyricFont
-                            font.pixelSize: pane.mainFontSize
-                            font.weight: Font.DemiBold
+                            font.pixelSize: rowItem.rowPixelSize
+                            font.weight: rowItem.isPrimary && lineDelegate.active ? Font.DemiBold : Font.Normal
                             lineHeightMode: Text.FixedHeight
-                            lineHeight: pane.mainLineHeight
+                            lineHeight: rowItem.rowLineHeight
+
+                            Behavior on color {
+                                ColorAnimation { duration: pane.highlightDuration }
+                            }
                         }
-                    }
-                }
 
-                Text {
-                    width: parent.width
-                    visible: lineDelegate.translated
-                    text: lineDelegate.translated ? lineDelegate.modelData.translation : ""
-                    wrapMode: Text.Wrap
-                    textFormat: Text.PlainText
-                    horizontalAlignment: pane.textAlignment
-                    color: lineDelegate.active
-                           ? Theme.withAlpha(np.foreground, 0.78)
-                           : Theme.withAlpha(np.foreground, 0.45)
-                    font.family: Prefs.effectiveLyricFont
-                    font.pixelSize: pane.translationFontSize
-                    lineHeightMode: Text.FixedHeight
-                    lineHeight: pane.translationLineHeight
+                        // 非当前行的轻微模糊：强度来自设置，当前行永远保持清晰。
+                        readonly property bool blurred: pane.blurEnabled && !lineDelegate.active
+                        MultiEffect {
+                            anchors.fill: rowText
+                            visible: rowItem.blurred
+                            source: rowText
+                            autoPaddingEnabled: false
+                            blurEnabled: true
+                            blur: Math.min(1, pane.blurAmount / 4)
+                            blurMax: 16
+                        }
 
-                    Behavior on color {
-                        ColorAnimation { duration: pane.highlightDuration }
+                        // 逐字高亮：按文字实际宽度的比例裁切，模拟「唱到哪」
+                        // 词时间来自原文歌词，仅在原文为主行且开启逐词高亮时显示。
+                        Item {
+                            visible: pane.wordHighlight && lineDelegate.active
+                                     && rowItem.isPrimary && rowItem.modelData === "ORIGINAL"
+                            x: 0
+                            width: rowItem.highlightX + rowItem.textWidth * pane.lineProgress
+                            height: parent.height
+                            clip: true
+
+                            Text {
+                                width: rowItem.width
+                                text: pane.kindText(lineDelegate.modelData, rowItem.modelData)
+                                wrapMode: Text.Wrap
+                                textFormat: Text.PlainText
+                                horizontalAlignment: pane.textAlignment
+                                color: np.accent
+                                font.family: Prefs.effectiveLyricFont
+                                font.pixelSize: rowItem.rowPixelSize
+                                font.weight: Font.DemiBold
+                                lineHeightMode: Text.FixedHeight
+                                lineHeight: rowItem.rowLineHeight
+                            }
+                        }
                     }
                 }
             }

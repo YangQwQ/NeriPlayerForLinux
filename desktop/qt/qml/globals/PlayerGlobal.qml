@@ -51,6 +51,19 @@ QtObject {
     property real _smoothIgnoreUntil: 0
     readonly property real _smoothSnapThresholdMs: 400
 
+    /**
+     * 待确认的 seek 目标（>=0 表示仍在等后端真正定位）。
+     *
+     * 一起听房间里听众点进度条/歌词时，后端要先发 REQUEST_SEEK 并等 control_result
+     * （最长 4s），期间本地播放器还没有 seek，4Hz 的 player 快照仍报旧位置。若只按
+     * _smoothIgnoreUntil 忽略 400ms，旧快照随后就会把乐观显示拉回起点 —— 用户看到的
+     * 「跳到目标句→跳回去→再跳回来」。这里把乐观显示保持到真实位置追上目标为止。
+     * 控制者/不在房间是即时 seek，真实位置马上就到，holds 会立刻释放，无额外延迟。
+     */
+    property real _pendingSeekTargetMs: -1
+    property real _pendingSeekStartedAt: 0
+    readonly property real _pendingSeekTimeoutMs: 6000
+
     property Timer smoothTimer: Timer {
         interval: 33
         repeat: true
@@ -70,6 +83,14 @@ QtObject {
 
     /** 用一次真实进度校正平滑值：正常播放只纠偏一半，避免 4Hz 快照把动画拉回跳变。 */
     function _syncSmoothPosition(real) {
+        if (player._pendingSeekTargetMs >= 0) {
+            // 等确认期间真实位置还没到目标：旧快照一律不采信，保持乐观显示。
+            // 一旦真实位置追到目标附近（或超时兜底），释放 hold 交还给正常纠偏。
+            const reached = Math.abs(real - player._pendingSeekTargetMs) < player._smoothSnapThresholdMs
+            if (!reached && Date.now() - player._pendingSeekStartedAt < player._pendingSeekTimeoutMs)
+                return
+            player._pendingSeekTargetMs = -1
+        }
         if (Date.now() < player._smoothIgnoreUntil)
             return
         if (!player.playing
@@ -120,7 +141,23 @@ QtObject {
         _smoothBaseMs = target
         _smoothBaseStamp = Date.now()
         _smoothIgnoreUntil = Date.now() + 400
-        _send("player.seekTo", { positionMs: Math.round(target) })
+        // 乐观显示保持到真实位置追上目标：一起听听众要等房间确认（最长 4s），
+        // 控制者/本地即时 seek 的真实快照下一帧就到，hold 会立即释放。
+        _pendingSeekTargetMs = target
+        _pendingSeekStartedAt = Date.now()
+        const requestedAt = _pendingSeekStartedAt
+        Api.get("player.seekTo", { positionMs: Math.round(target) }, function(result, error) {
+            if (player._pendingSeekStartedAt !== requestedAt)
+                return
+            // 后端返回即代表请求已被仲裁完成：听众此时本地音频已 seek 到房间当前位置
+            // （房间在确认窗口里继续前进，所以真实位置约等于 target+已过时间，正好和
+            //  乐观显示同步推进的结果吻合）。解除 hold，交还正常 4Hz 纠偏。
+            player._pendingSeekTargetMs = -1
+            player._smoothBaseMs = player.smoothPositionMs
+            player._smoothBaseStamp = Date.now()
+            if (error && error.message)
+                Toast.show(error.message, "error")
+        })
     }
     function seekBy(deltaMs) { seekTo(positionMs + deltaMs) }
 

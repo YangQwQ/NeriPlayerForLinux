@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import "../components"
 import "../components/player"
+import "../components/panels"
 
 // 播放页（Refined Now Playing 风格）：
 // 封面模糊全屏背景 + 居中「左封面/信息 + 右滚动双语歌词」两栏 + 预留的底部控制区。
@@ -314,7 +315,7 @@ Item {
 
     // ---------------------------------------------------------------- 右上角竖排按钮
 
-    // 评论 / 一起听：从右上角的沉浸按钮往下竖排，鼠标移到这一列时淡入。
+    // 一起听：从右上角的沉浸按钮往下竖排，鼠标移到这一列时淡入。
     // 不放进 topBar 里，是因为 topBar 只有 64 高，子项溢出后点击热区会落在它外面。
     Item {
         id: topActions
@@ -363,22 +364,6 @@ Item {
 
             IconButton {
                 anchors.horizontalCenter: parent.horizontalCenter
-                icon: "comment"
-                iconSize: 20
-                size: 40
-                iconColor: np.foregroundDim
-                hoverColor: np.hoverFill
-                tooltip: I18n.tr("评论")
-                onClicked: {
-                    if (typeof Nav.openCommentsPanel === "function")
-                        Nav.openCommentsPanel()
-                    else
-                        Nav.openPanel("comments")
-                }
-            }
-
-            IconButton {
-                anchors.horizontalCenter: parent.horizontalCenter
                 icon: "group"
                 iconSize: 20
                 size: 40
@@ -391,6 +376,29 @@ Item {
                     else
                         Nav.openPanel("listenTogether")
                 }
+            }
+
+            // 更多：歌曲信息 / 编辑 / 获取 / 切换音质 / 收藏 / 统计 / 百科子菜单
+            IconButton {
+                id: moreButton
+
+                anchors.horizontalCenter: parent.horizontalCenter
+                icon: "more_vert"
+                iconSize: 20
+                size: 40
+                iconColor: np.foregroundDim
+                hoverColor: np.hoverFill
+                tooltip: I18n.tr("更多")
+                onClicked: songMoreMenu.openFor(moreButton)
+            }
+
+            SongMoreMenu {
+                id: songMoreMenu
+            }
+
+            // 原文 / 音译 / 翻译开关：与评论、一起听同列，放在一起听下方。
+            LyricDisplayToggleRow {
+                anchors.horizontalCenter: parent.horizontalCenter
             }
         }
     }
@@ -426,7 +434,7 @@ Item {
 
         anchors.fill: parent
         z: 20
-        visible: page.showFullLyrics
+        active: page.showFullLyrics
         onCloseRequested: page.showFullLyrics = false
     }
 }
