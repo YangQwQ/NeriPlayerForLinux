@@ -157,12 +157,14 @@ Item {
                                 id: navRow
                                 anchors.left: parent.left
                                 anchors.right: parent.right
-                                // 分类图标与上方搜索框图标对齐（搜索框图标在 x=spacingMd）；
-                                // 窄屏横条空间紧张，保持原样不加内边距。
-                                anchors.leftMargin: root.compact ? 0 : Theme.spacingMd
+                                // 分类图标与搜索框图标保持同一水位（搜索框图标在 x=spacingMd）。
+                                // 窄屏横条原来左边距为 0，图标几乎贴着容器边缘，看着局促；
+                                // 补上 spacingMd 的内边距，并把图标与文字的间距收紧一档，
+                                // 给 132 宽的按钮留出文字空间。宽屏保持原样。
+                                anchors.leftMargin: Theme.spacingMd
                                 anchors.rightMargin: root.compact ? 0 : Theme.spacingMd
                                 anchors.verticalCenter: parent.verticalCenter
-                                spacing: Theme.spacingMd
+                                spacing: root.compact ? Theme.spacingSm : Theme.spacingMd
 
                                 NeriIcon {
                                     width: 24

@@ -109,20 +109,26 @@ Item {
     // ---------------------------------------------------------------- 分类导航与搜索
 
     // 分类顺序参考上游：账号与同步（含音乐源登录）→ 常规（含语言）→ 外观与主题
-    // → 音效与倍速 → 播放设置 → 歌词 → 快捷键 → 下载与存储 → 备份与同步 → 关于。
-    // 快捷键条目最多、内容自成一屏，因此从「常规」里拆出独立分类。
+    // → 动效 → 音效与倍速 → 播放设置 → 歌词 → 悬浮歌词 → 快捷键 → 下载与存储
+    // → 备份与同步 → 关于。快捷键条目最多、内容自成一屏，因此从「常规」里拆出独立分类。
     //
     // 「音效与倍速」与「播放设置」原本是同一个分类：DSP 面板改成标签页后自带
     // 预设/均衡器/音色/空间/动态/扬声器/倍速八个 Tab，内容自成一屏，与「淡入淡出、
     // 音质、B 站跳过」这类播放行为没有共同语境，因此拆成两个分类
     // （上游安卓端同样是 AudioEffects 与 Playback 两个独立设置页）。
+    //
+    // 本次整理（与手机端一致）：新增「动效」分类，统一收纳页面/面板/主题切换、歌词滚动、
+    // 封面旋转、控制条自动隐藏等过渡设置；歌词拆成「歌词」与「悬浮歌词」两个独立分类，
+    // 普通歌词增加来源、显示行组合、预览与模糊；悬浮歌词增加显示组合与音译样式。
     readonly property var categoryDefs: [
         { id: "accountSync", title: I18n.tr("账号与同步"), description: I18n.tr("音乐源登录 · 一起听 · 云端同步"), icon: "account_circle", sectionIds: ["sources", "listenTogether", "sync"] },
         { id: "general", title: I18n.tr("常规"), description: I18n.tr("首页栏目 · 后台 · 语言"), icon: "tune", sectionIds: ["homeCards", "background", "language"] },
         { id: "appearance", title: I18n.tr("外观与主题"), description: I18n.tr("深浅色 · 字体 · 背景 · 播放页"), icon: "palette", sectionIds: ["theme", "appFonts", "appBackground", "playerDesign"] },
+        { id: "motion", title: I18n.tr("动效"), description: I18n.tr("页面切换 · 歌词滚动 · 封面旋转 · 进度条颜色"), icon: "animation", sectionIds: ["motion"] },
         { id: "audioEffects", title: I18n.tr("音效与倍速"), description: I18n.tr("均衡器 · 音色 · 空间 · 动态 · 扬声器 · 倍速"), icon: "graphic_eq", sectionIds: ["dsp"] },
         { id: "playback", title: I18n.tr("播放设置"), description: I18n.tr("倍速 · 淡入淡出 · 音质 · 跳过区间"), icon: "play_circle", sectionIds: ["playback", "fade", "quality", "biliSkip"] },
-        { id: "lyrics", title: I18n.tr("歌词"), description: I18n.tr("悬浮歌词样式 · 歌词字体"), icon: "lyrics", sectionIds: ["floatingLyrics"] },
+        { id: "lyrics", title: I18n.tr("歌词"), description: I18n.tr("来源 · 显示行组合 · 预览 · 模糊 · 对齐"), icon: "lyrics", sectionIds: ["lyrics"] },
+        { id: "floatingLyrics", title: I18n.tr("悬浮歌词"), description: I18n.tr("桌面歌词样式 · 显示组合 · 配色"), icon: "lyrics", sectionIds: ["floatingLyrics"] },
         { id: "shortcuts", title: I18n.tr("快捷键"), description: I18n.tr("应用内与全局快捷键"), icon: "keyboard", sectionIds: ["shortcuts"] },
         { id: "downloadStorage", title: I18n.tr("下载与存储"), description: I18n.tr("媒体库 · 下载 · 缓存清理"), icon: "download", sectionIds: ["library", "downloads", "dataCache"] },
         { id: "backupSync", title: I18n.tr("备份与同步"), description: I18n.tr("歌单 / 收藏备份与恢复"), icon: "backup", sectionIds: ["backupSync"] },
@@ -136,10 +142,10 @@ Item {
         "sources": musicSourceSection,
         "listenTogether": secListenTogether, "sync": secSync,
         "theme": secTheme, "appFonts": secAppFonts, "appBackground": secAppBackground,
-        "playerDesign": secPlayerDesign,
+        "playerDesign": secPlayerDesign, "motion": secMotion,
         "playback": secPlayback, "fade": secFade,
         "dsp": secDsp, "quality": secQuality, "biliSkip": secBiliSkip,
-        "floatingLyrics": secFloatingLyrics,
+        "lyrics": secLyrics, "floatingLyrics": secFloatingLyrics,
         "library": secLibrary, "downloads": secDownloads, "dataCache": secDataCache,
         "backupSync": secBackupSync,
         "homeCards": secHomeCards, "background": secBackground,
@@ -155,10 +161,13 @@ Item {
         { title: I18n.tr("播放"), keywords: "倍速 变调 播放速度 音调 播放行为", category: "playback", section: "playback" },
         { title: I18n.tr("淡入淡出"), keywords: "淡入 淡出 交叉淡入 渐变 crossfade fade 时长", category: "playback", section: "fade" },
         { title: I18n.tr("视频跳过区间"), keywords: "B站 跳过 片头 interval skip bilibili", category: "playback", section: "biliSkip" },
-        { title: I18n.tr("播放页"), keywords: "封面 控制条 歌词对齐 背景", category: "appearance", section: "playerDesign" },
+        { title: I18n.tr("播放页"), keywords: "封面 控制条 背景", category: "appearance", section: "playerDesign" },
+        { title: I18n.tr("动效"), keywords: "动画 过渡 页面切换 面板 主题切换 歌词滚动 封面旋转 控制条 进度条颜色 悬浮歌词显现", category: "motion", section: "motion" },
+        { title: I18n.tr("歌词"), keywords: "歌词 来源 显示行 音译 翻译 字号 顺序 预览 模糊 对齐 高亮", category: "lyrics", section: "lyrics" },
+        { title: I18n.tr("动态背景"), keywords: "背景 封面 缩放 平移 动态 APP 程序背景", category: "appearance", section: "appBackground" },
         { title: I18n.tr("在线播放音质"), keywords: "音质 码率 hires 无损 quality", category: "playback", section: "quality" },
         { title: I18n.tr("下载设置"), keywords: "下载目录 并发 通知", category: "downloadStorage", section: "downloads" },
-        { title: I18n.tr("悬浮歌词"), keywords: "桌面歌词 字体 颜色 透明度", category: "lyrics", section: "floatingLyrics" },
+        { title: I18n.tr("悬浮歌词"), keywords: "桌面歌词 字体 颜色 透明度 显示组合 音译 字号", category: "floatingLyrics", section: "floatingLyrics" },
         { title: I18n.tr("首页栏目"), keywords: "推荐 排行榜 歌单 私人FM 平铺 网格 homeGridMode", category: "general", section: "homeCards" },
         { title: I18n.tr("后台与系统控制"), keywords: "托盘 MPRIS 通知 启动", category: "general", section: "background" },
         { title: I18n.tr("音乐源"), keywords: "网易云 B站 bilibili YouTube 登录 退出 自动换源 账号", category: "accountSync", section: "sources" },
@@ -278,7 +287,8 @@ Item {
     property bool syncUnsupported: false
     property bool syncBusy: false
     property string syncStatusMessage: ""
-    property string appVersion: "1.4.7"
+    // 启动后由 bootstrap 的 snapshot.appVersion 覆盖（来自 desktop/VERSION）；这里只是占位。
+    property string appVersion: "…"
 
     // 前端本地偏好（字体 / 背景）：后端 AppSettings 无对应字段，settings.set 会静默忽略未知键。
     // 这里以内存态为准；Settings.set 仍按需求写入键名（若后续后端补齐字段即可自动持久化）。
@@ -1695,51 +1705,127 @@ Item {
                     width: parent.width
                     text: I18n.tr("图片路径、模糊与暗化会写入设置并在此预览；后端无对应字段且主窗口背景渲染尚未接线，全局效果待后续实现。")
                 }
+
+                Item { width: 1; height: 10 }
+
+                SettingsLabel {
+                    width: parent.width
+                    text: I18n.tr("动态背景")
+                }
+
+                SettingsSwitchRow {
+                    width: parent.width
+                    title: I18n.tr("动态背景")
+                    description: I18n.tr("让封面或背景图缓慢缩放平移，避免画面过于静止")
+                    checked: page.sb("dynamicBackground", false)
+                    onToggled: function(checked) { page.setSetting("dynamicBackground", checked) }
+                }
+
+                SettingsLabel {
+                    width: parent.width
+                    text: I18n.tr("背景来源")
+                    visible: page.sb("dynamicBackground", false)
+                }
+                SegmentedOptions {
+                    width: parent.width
+                    visible: page.sb("dynamicBackground", false)
+                    options: [
+                        { value: "COVER", label: I18n.tr("使用当前封面") },
+                        { value: "APP", label: I18n.tr("使用程序背景图") }
+                    ]
+                    value: page.sv("dynamicBackgroundSource", "COVER") === "APP" ? "APP" : "COVER"
+                    onSelected: function(value) { page.setSetting("dynamicBackgroundSource", value) }
+                }
+
+                SliderRow {
+                    width: parent.width
+                    visible: page.sb("dynamicBackground", false)
+                    label: I18n.tr("循环周期")
+                    from: 3
+                    to: 30
+                    decimals: 0
+                    externalValue: Number(page.sv("dynamicBackgroundSpeed", 8))
+                    formatValue: function(value) { return Math.round(value) + I18n.tr(" 秒") }
+                    onCommitted: function(value) {
+                        page.setSetting("dynamicBackgroundSpeed", Math.round(value))
+                    }
+                }
             }
 
             // ============================================================ 播放页
+            // 这里只保留非动效的播放页外观项；封面旋转、控制条自动隐藏已迁入「动效」分类，
+            // 歌词字号/对齐/高亮/显示等已迁入「歌词」分类，同一设置只出现一次。
             SettingsSection {
                 id: secPlayerDesign
                 width: parent.width - 24
                 x: 12
                 title: I18n.tr("播放页")
-                description: I18n.tr("封面、控制条、歌曲信息与歌词的显示方式")
+                description: I18n.tr("封面形状、背景与歌曲信息的显示方式")
                 icon: "fullscreen"
-
-                // 用 Loader 加载播放页外观组件；文件缺失时退化为空，避免设置页整体加载失败
-                Loader {
-                    width: parent.width
-                    source: Qt.resolvedUrl("../components/settings/PlayerDesignSettings.qml")
-                    active: true
-                    visible: status === Loader.Ready
-                    height: status === Loader.Ready && item ? item.implicitHeight : 0
-                }
-
-                Item {
-                    width: 1
-                    height: 12
-                }
 
                 SettingsLabel {
                     width: parent.width
-                    text: I18n.tr("歌曲信息与歌词")
+                    text: I18n.tr("封面形状")
+                }
+                SegmentedOptions {
+                    width: parent.width
+                    options: [
+                        { value: "CIRCLE", label: I18n.tr("圆形") },
+                        { value: "ROUNDED", label: I18n.tr("圆角") },
+                        { value: "SQUARE", label: I18n.tr("方形") }
+                    ]
+                    value: {
+                        const shape = page.sv("nowPlayingCoverShape", "ROUNDED")
+                        return (shape === "CIRCLE" || shape === "SQUARE") ? shape : "ROUNDED"
+                    }
+                    onSelected: function(value) { page.setSetting("nowPlayingCoverShape", value) }
                 }
 
-                SettingsSwitchRow {
+                Item { width: 1; height: 6 }
+
+                SettingsLabel {
                     width: parent.width
-                    title: I18n.tr("显示歌词翻译")
-                    description: I18n.tr("在线歌词包含翻译时同时显示")
-                    checked: page.sb("showLyricTranslation", true)
-                    onToggled: function(checked) { page.setSetting("showLyricTranslation", checked) }
+                    text: I18n.tr("背景样式")
+                }
+                SegmentedOptions {
+                    width: parent.width
+                    options: [
+                        { value: "BLUR", label: I18n.tr("封面模糊") },
+                        { value: "GRADIENT", label: I18n.tr("渐变") },
+                        { value: "SOLID", label: I18n.tr("纯色") }
+                    ]
+                    value: {
+                        const mode = page.sv("nowPlayingBackground", "BLUR")
+                        return (mode === "GRADIENT" || mode === "SOLID") ? mode : "BLUR"
+                    }
+                    onSelected: function(value) { page.setSetting("nowPlayingBackground", value) }
+                }
+                SettingsNote {
+                    width: parent.width
+                    text: I18n.tr("封面模糊取自当前歌曲封面并叠加暗色；渐变与纯色使用封面主色或主题色生成。")
                 }
 
-                SettingsSwitchRow {
+                Item { width: 1; height: 4 }
+
+                SettingsLabel {
                     width: parent.width
-                    title: I18n.tr("封面页显示歌词")
-                    description: I18n.tr("在播放页封面下方显示逐行歌词")
-                    checked: page.sb("coverShowsLyrics", true)
-                    onToggled: function(checked) { page.setSetting("coverShowsLyrics", checked) }
+                    text: I18n.tr("歌曲信息")
                 }
+                SegmentedOptions {
+                    width: parent.width
+                    options: [
+                        { value: "LEFT", label: I18n.tr("左对齐") },
+                        { value: "CENTER", label: I18n.tr("居中") },
+                        { value: "RIGHT", label: I18n.tr("右对齐") }
+                    ]
+                    value: {
+                        const align = page.sv("nowPlayingInfoAlignment", "LEFT")
+                        return (align === "CENTER" || align === "RIGHT") ? align : "LEFT"
+                    }
+                    onSelected: function(value) { page.setSetting("nowPlayingInfoAlignment", value) }
+                }
+
+                Item { width: 1; height: 4 }
 
                 SettingsSwitchRow {
                     width: parent.width
@@ -1757,83 +1843,40 @@ Item {
                     onToggled: function(checked) { page.setSetting("songTitleMarquee", checked) }
                 }
 
-                Item {
-                    width: 1
-                    height: 4
+                SettingsSwitchRow {
+                    width: parent.width
+                    title: I18n.tr("歌词辉光")
+                    description: I18n.tr("当前歌词行加一层柔和光晕，关闭后可省一点 GPU")
+                    checked: page.sb("nowPlayingLyricsGlow", true)
+                    onToggled: function(checked) { page.setSetting("nowPlayingLyricsGlow", checked) }
                 }
+            }
 
-                SliderRow {
-                    width: parent.width
-                    label: I18n.tr("歌词字号 ") + Number(page.sv("lyricsFontScale", 1.0)).toFixed(2) + "x"
-                    from: 0.7
-                    to: 1.8
-                    decimals: 2
-                    externalValue: Number(page.sv("lyricsFontScale", 1.0))
-                    onCommitted: function(value) { page.setSetting("lyricsFontScale", value) }
                 }
+            }
+            Item {
+                id: catMotion
+                width: parent.width
+                height: visible ? innerMotion.height + 12 : 0
+                visible: page.currentCategory === "motion"
 
-                SettingsLabel {
+                Column {
+                    id: innerMotion
                     width: parent.width
-                    text: I18n.tr("歌词对齐")
-                }
-                SegmentedOptions {
-                    width: parent.width
-                    options: [
-                        { value: "LEFT", label: I18n.tr("左对齐") },
-                        { value: "CENTER", label: I18n.tr("居中") },
-                        { value: "RIGHT", label: I18n.tr("右对齐") }
-                    ]
-                    value: page.sv("lyricsAlignment", "LEFT")
-                    onSelected: function(value) { page.setSetting("lyricsAlignment", value) }
-                }
+                    spacing: 12
 
-                SettingsLabel {
-                    width: parent.width
-                    text: I18n.tr("歌词高亮方式")
-                }
-                SegmentedOptions {
-                    width: parent.width
-                    options: [
-                        { value: "LINE", label: I18n.tr("整句亮起") },
-                        { value: "WORD", label: I18n.tr("逐字亮起") }
-                    ]
-                    value: page.sv("lyricsHighlight", "LINE")
-                    onSelected: function(value) { page.setSetting("lyricsHighlight", value) }
-                }
+            // ============================================================ 动效
+            SettingsSection {
+                id: secMotion
+                width: parent.width - 24
+                x: 12
+                title: I18n.tr("动效")
+                description: I18n.tr("页面切换 · 面板浮层 · 主题切换 · 歌词滚动 · 进度条颜色")
+                icon: "animation"
+                expanded: true
 
-                SliderRow {
+                MotionSettingsSection {
                     width: parent.width
-                    label: I18n.tr("高亮动画时长 ") + Math.round(page.sv("lyricsHighlightDuration", 220)) + "ms"
-                    from: 0
-                    to: 800
-                    decimals: 0
-                    externalValue: Number(page.sv("lyricsHighlightDuration", 220))
-                    onCommitted: function(value) { page.setSetting("lyricsHighlightDuration", Math.round(value)) }
-                }
-
-                SettingsLabel {
-                    width: parent.width
-                    text: I18n.tr("歌词滚动吸附动画")
-                }
-                SegmentedOptions {
-                    width: parent.width
-                    options: [
-                        { value: "CUBIC", label: I18n.tr("三次曲线") },
-                        { value: "QUAD", label: I18n.tr("二次曲线") },
-                        { value: "SINE", label: I18n.tr("正弦") },
-                        { value: "LINEAR", label: I18n.tr("线性") }
-                    ]
-                    value: page.sv("lyricsScrollEasing", "CUBIC")
-                    onSelected: function(value) { page.setSetting("lyricsScrollEasing", value) }
-                }
-                SliderRow {
-                    width: parent.width
-                    label: I18n.tr("滚动动画时长 ") + Math.round(page.sv("lyricsScrollDuration", 420)) + "ms"
-                    from: 80
-                    to: 1200
-                    decimals: 0
-                    externalValue: Number(page.sv("lyricsScrollDuration", 420))
-                    onCommitted: function(value) { page.setSetting("lyricsScrollDuration", Math.round(value)) }
                 }
             }
 
@@ -2103,251 +2146,46 @@ Item {
                     width: parent.width
                     spacing: 12
 
+            // ============================================================ 歌词（来源 / 显示组合 / 预览 / 模糊）
+            SettingsSection {
+                id: secLyrics
+                width: parent.width - 24
+                x: 12
+                title: I18n.tr("歌词")
+                description: I18n.tr("来源 · 显示行组合 · 效果预览 · 模糊 · 对齐高亮")
+                icon: "lyrics"
+                expanded: true
+
+                LyricSettingsCard {
+                    width: parent.width
+                }
+            }
+
+                }
+            }
+            Item {
+                id: catFloatingLyrics
+                width: parent.width
+                height: visible ? innerFloatingLyrics.height + 12 : 0
+                visible: page.currentCategory === "floatingLyrics"
+
+                Column {
+                    id: innerFloatingLyrics
+                    width: parent.width
+                    spacing: 12
+
             // ============================================================ 悬浮歌词
             SettingsSection {
                 id: secFloatingLyrics
                 width: parent.width - 24
                 x: 12
                 title: I18n.tr("悬浮歌词")
-                description: I18n.tr("桌面悬浮歌词的样式与配色")
+                description: I18n.tr("桌面悬浮歌词的样式、显示组合与配色")
                 icon: "lyrics"
+                expanded: true
 
-                SettingsSwitchRow {
+                FloatingLyricSettingsCard {
                     width: parent.width
-                    title: I18n.tr("启用悬浮歌词")
-                    description: I18n.tr("在桌面上显示轻量悬浮歌词（快捷键 Ctrl+L）")
-                    checked: page.sb("floatingLyricsEnabled", false)
-                    onToggled: function(checked) {
-                        page.setSetting("floatingLyricsEnabled", checked)
-                    }
-                }
-
-                SettingsSwitchRow {
-                    width: parent.width
-                    title: I18n.tr("应用内隐藏")
-                    description: I18n.tr("主窗口获得焦点时隐藏悬浮歌词，避免遮挡页面")
-                    checked: page.sb("floatingLyricsHideInApp", false)
-                    onToggled: function(checked) {
-                        page.setSetting("floatingLyricsHideInApp", checked)
-                    }
-                }
-
-                SettingsSwitchRow {
-                    width: parent.width
-                    title: I18n.tr("锁定位置")
-                    description: I18n.tr("锁定后无法拖动悬浮歌词")
-                    checked: page.sb("floatingLyricsLocked", false)
-                    onToggled: function(checked) {
-                        page.setSetting("floatingLyricsLocked", checked)
-                    }
-                }
-
-                SettingsSwitchRow {
-                    width: parent.width
-                    title: I18n.tr("显示翻译")
-                    description: I18n.tr("有翻译歌词时一起显示在第二行")
-                    checked: page.sb("floatingLyricsShowTranslation", true)
-                    onToggled: function(checked) {
-                        page.setSetting("floatingLyricsShowTranslation", checked)
-                    }
-                }
-
-                Item {
-                    width: 1
-                    height: 6
-                }
-
-                SettingsLabel {
-                    width: parent.width
-                    text: I18n.tr("窗口模式")
-                }
-
-                SegmentedOptions {
-                    width: parent.width
-                    options: page.floatingWindowModeOptions
-                    value: page.sv("floatingLyricsWindowMode", "LAYER")
-                    onSelected: function(value) {
-                        page.setSetting("floatingLyricsWindowMode", value)
-                    }
-                }
-
-                SettingsNote {
-                    width: parent.width
-                    text: I18n.tr("置顶覆盖层由桌面合成器直接托管，始终浮在最上层；普通窗口是常规窗口，可跨屏拖动但会进任务栏与窗口切换器。")
-                }
-
-                Item {
-                    width: 1
-                    height: 8
-                }
-
-                SliderRow {
-                    width: parent.width
-                    label: I18n.tr("字号")
-                    externalValue: page.sv("floatingLyricsFontSize", 30)
-                    from: 14
-                    to: 72
-                    decimals: 0
-                    formatValue: function(value) {
-                        return Math.round(value) + " px"
-                    }
-                    onCommitted: function(value) {
-                        page.setSetting("floatingLyricsFontSize", value)
-                    }
-                }
-
-                Item {
-                    width: 1
-                    height: 6
-                }
-
-                SettingsLabel {
-                    width: parent.width
-                    text: I18n.tr("渲染方式")
-                }
-
-                SegmentedOptions {
-                    width: parent.width
-                    options: page.renderStyleOptions
-                    value: page.sv("floatingLyricsRenderStyle", "SHADOW")
-                    onSelected: function(value) {
-                        page.setSetting("floatingLyricsRenderStyle", value)
-                    }
-                }
-
-                Item {
-                    width: 1
-                    height: 10
-                }
-
-                SettingsLabel {
-                    width: parent.width
-                    text: I18n.tr("歌词颜色")
-                }
-
-                Row {
-                    width: parent.width
-                    spacing: Theme.spacingSm
-
-                    Repeater {
-                        model: page.floatingLyricColors
-
-                        delegate: ColorSwatch {
-                            required property var modelData
-                            swatchSize: 28
-                            swatchColor: modelData.color
-                            selected: page.sv("floatingLyricsTextColor", "WHITE") === modelData.name
-                            onClicked: page.setSetting("floatingLyricsTextColor", modelData.name)
-                        }
-                    }
-                }
-
-                Item {
-                    width: 1
-                    height: 8
-                }
-
-                SliderRow {
-                    width: parent.width
-                    label: I18n.tr("主歌词不透明度")
-                    externalValue: page.sv("floatingLyricsLyricAlpha", 1.0)
-                    from: 0.1
-                    to: 1.0
-                    formatValue: function(value) {
-                        return Math.round(value * 100) + "%"
-                    }
-                    onCommitted: function(value) {
-                        page.setSetting("floatingLyricsLyricAlpha", value)
-                    }
-                }
-
-                SliderRow {
-                    width: parent.width
-                    label: I18n.tr("翻译不透明度")
-                    externalValue: page.sv("floatingLyricsTranslationAlpha", 0.75)
-                    from: 0.1
-                    to: 1.0
-                    formatValue: function(value) {
-                        return Math.round(value * 100) + "%"
-                    }
-                    onCommitted: function(value) {
-                        page.setSetting("floatingLyricsTranslationAlpha", value)
-                    }
-                }
-
-                Item {
-                    width: 1
-                    height: 8
-                }
-
-                SettingsLabel {
-                    width: parent.width
-                    text: I18n.tr("背景颜色")
-                }
-
-                Row {
-                    width: parent.width
-                    spacing: Theme.spacingSm
-
-                    Repeater {
-                        model: page.floatingLyricColors
-
-                        delegate: ColorSwatch {
-                            required property var modelData
-                            swatchSize: 28
-                            swatchColor: modelData.color
-                            selected: page.sv("floatingLyricsBackgroundColor", "BLACK") === modelData.name
-                            onClicked: page.setSetting("floatingLyricsBackgroundColor", modelData.name)
-                        }
-                    }
-                }
-
-                Item {
-                    width: 1
-                    height: 8
-                }
-
-                SliderRow {
-                    width: parent.width
-                    label: I18n.tr("背景不透明度")
-                    externalValue: page.sv("floatingLyricsBackgroundAlpha", 0.35)
-                    from: 0
-                    to: 1
-                    formatValue: function(value) {
-                        return Math.round(value * 100) + "%"
-                    }
-                    onCommitted: function(value) {
-                        page.setSetting("floatingLyricsBackgroundAlpha", value)
-                    }
-                }
-
-                Item {
-                    width: 1
-                    height: 6
-                }
-
-                SettingsLabel {
-                    width: parent.width
-                    text: I18n.tr("对齐方式")
-                }
-
-                SegmentedOptions {
-                    width: parent.width
-                    options: page.alignmentOptions
-                    value: page.sv("floatingLyricsAlignment", "CENTER")
-                    onSelected: function(value) {
-                        page.setSetting("floatingLyricsAlignment", value)
-                    }
-                }
-
-                Item {
-                    width: 1
-                    height: 6
-                }
-
-                SettingsNote {
-                    width: parent.width
-                    text: I18n.tr("悬浮歌词是独立的桌面窗口；未锁定时可直接拖动，锁定时鼠标穿透（Ctrl+Alt+L 解锁）。")
                 }
             }
 
