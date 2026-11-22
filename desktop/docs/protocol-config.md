@@ -50,7 +50,7 @@ UI：`qt/qml/components/settings/ConfigTransferDialog.qml`、`qt/qml/components/
 | --- | --- | --- | --- |
 | `config.export` | `{path?: string}` | `ConfigExportResult` | 导出当前设置为 JSON 文件；`path` 省略时写到 `~/neriplayer-settings-<时间戳>.json` |
 | `config.import` | `{path: string, dryRun?: bool}` | `ConfigImportResult` | 校验并（可选）应用快照；`dryRun=true` 只校验不替换 |
-| `debug.recentLogs` | `{limit?: int, minLevel?: string}` | `DebugLogsResult` | 最近日志，**新 → 旧**，已脱敏 |
+| `debug.recentLogs` | `{limit?: int, minLevel?: string}` | `DebugLogsResult` | 最近日志，**新 → 旧**，已脱敏；`limit` 默认取满整个环（1000） |
 
 三个命令都在 `ConfigTransferApi.register()` 里注册，`BackendMain.kt` 已统一接线。
 
@@ -168,6 +168,9 @@ UI：`qt/qml/components/settings/ConfigTransferDialog.qml`、`qt/qml/components/
 | `darkMode` | `AUTO` / `LIGHT` / `DARK` |
 | `paletteStyle` | `TonalSpot` / `Neutral` / `Vibrant` / `Expressive` / `Rainbow` / `FruitSalad` / `Monochrome` / `Fidelity` / `Content` |
 | `colorSpec` | `SPEC_2021` / `SPEC_2025` |
+| `progressColorMode` | `COVER`（封面派生色）/ `THEME`（主题 primary） |
+| `lyricSource` | `AUTO` / `NETEASE` / `LOCAL` |
+| `dynamicBackgroundSource` | `COVER` / `APP` |
 | `language` | `zh-CN` / `en` |
 | `qualityPreference`、`downloadQuality` | `standard` / `higher` / `exhigh` / `lossless` / `hires` |
 | `lyricsAlignment`、`nowPlayingInfoAlignment`、`floatingLyricsAlignment` | `LEFT` / `CENTER` / `RIGHT` |
@@ -187,7 +190,8 @@ UI：`qt/qml/components/settings/ConfigTransferDialog.qml`、`qt/qml/components/
 ### 数值字段（越界自动夹取，不报错）
 
 `volume` 0..1、`playbackSpeed` 0.5..3、`pitchSemitone` ±12、`lyricsFontScale` 0.5..3、
-`appBackgroundDim` 0..1、`appBackgroundBlur` 0..100、`fadeInMs`/`fadeOutMs` 0..10000、
+`lyricPhoneticFontSizeScale` / `lyricTranslationFontSizeScale` 0.3..1.5、`lyricBlurAmount` 0..8、
+`dynamicBackgroundSpeed` 2..60 秒、`appBackgroundDim` 0..1、`appBackgroundBlur` 0..100、`fadeInMs`/`fadeOutMs` 0..10000、
 `crossfadeMs` 0..20000、`lyricsHighlightDuration`/`lyricsScrollDuration` 0..5000、
 `nowPlayingAutoHideDelayMs` 0..60000、`sleepTimerMinutes` 0..1440、
 `cacheLimitMb` -1..1048576（-1 = 无上限，0 = 禁用在线音频缓存，正值 = MiB 上限），
@@ -195,6 +199,10 @@ UI：`qt/qml/components/settings/ConfigTransferDialog.qml`、`qt/qml/components/
 `floatingLyrics*` 的透明度/字号/描边/模糊/宽度/位置（见 `core/ConfigSnapshot.kt`）。
 
 `equalizerBands` 必须是 10 段；长度不对时补齐/截断，增益夹到 ±20 dB。
+
+`lyricLineOrder` / `floatingLyricsLineOrder` 必须由 `ORIGINAL` / `TRANSLATION` / `PHONETIC`
+三者各出现一次、用下划线连接（默认 `ORIGINAL_TRANSLATION_PHONETIC`），顺序可任意；
+非法取值在导入时回退默认值并记 warning。
 
 `themeSeedColor` / `customSeedColors` 必须是 6 位十六进制；非法的种子色回退默认色，
 非法的自定义色被丢弃（都记进 `warnings`）。
@@ -225,7 +233,7 @@ UI：`qt/qml/components/settings/ConfigTransferDialog.qml`、`qt/qml/components/
 
 ```jsonc
 // 请求（两个参数都可省）
-{ "limit": 200, "minLevel": "INFO" }   // limit 默认 200，夹在 1..1000；minLevel 省略=全部
+{ "limit": 1000, "minLevel": "INFO" }  // limit 默认 1000（整个环），夹在 1..1000；minLevel 省略=全部
 ```
 
 返回（**新 → 旧**，前端反转成时间正序展示）：
@@ -244,15 +252,18 @@ UI：`qt/qml/components/settings/ConfigTransferDialog.qml`、`qt/qml/components/
   "total": 128,                     // 当前环里的条数
   "recordedTotal": 4210,            // 进程启动以来累计入环条数（含被淘汰的）
   "capacity": 1000,
-  "truncatedMessageLength": 2000    // 单条消息的硬上限
+  "truncatedMessageLength": 2000,   // 单条消息的硬上限
+  "bridgeInstalled": true           // 标准流桥接是否生效（false 时终端 println 不会进环）
 }
 ```
 
 ### 缓冲语义（`core/AppLog.kt`）
 
 - 容量 **1000 条**，单条消息最多 **2000 字符**（超长截断并以 `…` 结尾）；
-- 2 秒窗口内**完全相同**的 `(level, target, message)` 合并成一条并累加 `repeat`，
-  避免高频日志（如播放器 4 Hz 状态输出）把环冲掉；
+- **350 毫秒**窗口内**完全相同**的 `(level, target, message)` 合并成一条并累加 `repeat`，
+  避免高频日志（如播放器 4 Hz 状态输出）把环冲掉；窗口从 2 秒缩短，是因为 2 秒会把
+  相隔数百毫秒的两次独立点击/请求合并成一条，让查看器里看起来「少了一条日志」；
+  合并条的时间戳会刷新到最近一次，保证排序与最新事件一致；
 - 内存有界、线程安全（`ArrayDeque` + 锁），不会因为长任务无限增长。
 
 ### 脱敏规则（**入环前**执行，无法关闭）
@@ -279,8 +290,9 @@ UI：`qt/qml/components/settings/ConfigTransferDialog.qml`、`qt/qml/components/
 ### 标准流桥接
 
 既有代码里有几十处 `println` / `System.err.println`。为了不改道那些调用点
-（它们分属别的模块，本功能无权修改），`ConfigTransferApi.register()` 会把 `System.out` /
-`System.err` 各 tee 一份进环形缓冲：
+（它们分属别的模块，本功能无权修改），`AppLog` 会在**自身首次被访问时**（`init`）就把
+`System.out` / `System.err` 各 tee 一份进环形缓冲，`ConfigTransferApi.register()` 再做兜底确认；
+这样桥接不再依赖它在 `BackendMain` 里排在第几个 register：
 
 - 原输出完全不变（`tools/dev.sh backend` 重定向的 `backend.log` 照常可读）；
 - 每行按 `\n` 切分后入环；`[core] …`、`[download] …` 这样的既有前缀会被提取成 `target`，
@@ -291,7 +303,7 @@ UI：`qt/qml/components/settings/ConfigTransferDialog.qml`、`qt/qml/components/
 
 ### 前端查看器的行为（`DebugLogViewer.qml`）
 
-- 1.5 s 轮询一次（只在对话框可见时）；`limit` 固定 500；
+- 1.5 s 轮询一次（只在对话框可见时）；`limit` 拉满 1000（与环形缓冲容量一致）；
 - 级别 chip **多选**筛选，双击 solo 单个级别；搜索框对 `target + message` 做大小写不敏感全文匹配；
 - 「暂停」冻结显示但继续轮询，「跟随」在用户上滑后自动关闭；
 - 「复制可见日志」复制当前筛选后的全部行；右键单行复制该行；

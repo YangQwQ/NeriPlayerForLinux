@@ -17,6 +17,14 @@ class AppContainer {
 
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
+    /**
+     * 播放控制（播放/暂停、上下一首、seek）的唯一入口。
+     *
+     * 命令层、全局快捷键、MPRIS 媒体键、托盘菜单都调它，由它判断「房间里是听众 → 转发房间 /
+     * 否则本地执行」。这些入口原先各自直接调 [PlayerManager]，导致房间转发只对走 IPC 的入口生效。
+     */
+    val playbackCommands = PlaybackCommandRouter(this)
+
     val settings = SettingsRepository()
     val library = LibraryRepository(settings)
     val playlists = PlaylistRepository()
@@ -42,14 +50,16 @@ class AppContainer {
                 playing = player.state.value == PlaybackState.PLAYING,
             )
         },
-        onPlayPause = { player.togglePlayPause() },
-        onPlay = { player.play() },
-        onPause = { player.pause() },
-        onNext = { player.next() },
-        onPrevious = { player.previous() },
-        onStop = { player.pause() },
-        onSeekBy = { deltaMs -> player.seekTo(player.positionMs.value + deltaMs) },
-        onSeekTo = { positionMs -> player.seekTo(positionMs) },
+        // MPRIS 回调是 D-Bus 线程上的同步接口，播放控制统一交给 playbackCommands 判断
+        // 「房间里是听众就转发房间」，不能直接调 player（否则房间里的媒体键会被同步覆盖）。
+        onPlayPause = { scope.launch { playbackCommands.togglePlayPause() } },
+        onPlay = { scope.launch { playbackCommands.play() } },
+        onPause = { scope.launch { playbackCommands.pause() } },
+        onNext = { scope.launch { playbackCommands.next() } },
+        onPrevious = { scope.launch { playbackCommands.previous() } },
+        onStop = { scope.launch { playbackCommands.pause() } },
+        onSeekBy = { deltaMs -> scope.launch { playbackCommands.seekBy(deltaMs) } },
+        onSeekTo = { positionMs -> scope.launch { playbackCommands.seekTo(positionMs) } },
         volumeProvider = { player.volume.value.toDouble() },
         onVolumeChange = { player.setVolume(it.toFloat()) },
         shuffleProvider = { player.shuffle.value },
@@ -67,7 +77,10 @@ class AppContainer {
     )
     val neteaseLogin = moe.ouom.neriplayer.desktop.net.NeteaseLogin(online.httpService)
     val biliLogin = moe.ouom.neriplayer.desktop.net.BiliLogin(online.httpService)
-    val lyrics = LyricsRepository { song -> online.lyricsStructured(song) }
+    val lyrics = LyricsRepository { song -> online.lyricsStructured(song) }.also {
+        // 来源策略每次 load 都读当前设置，让设置页切换「歌词来源」立即生效。
+        it.sourcePolicyProvider = { LyricSourcePolicy.from(settings) }
+    }
     val player = PlayerManager(
         settings = settings,
         history = history,
@@ -77,6 +90,13 @@ class AppContainer {
         scope = scope,
         downloads = downloadCatalog,
     )
+
+    /**
+     * 一起听管理器在 ListenTogetherApi 里创建（需要 broadcast 回调），那里随后回填到这里。
+     * PlayerApi 用它判断「当前是房间听众」并拦截本地队列直改，避免改动被同步静默覆盖。
+     */
+    @Volatile
+    var listenTogether: ListenTogetherManager? = null
 
     fun bootstrap(scanLibrary: Boolean = true) {
         library.load()

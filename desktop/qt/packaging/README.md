@@ -20,13 +20,16 @@
   下载 `appimagetool-x86_64.AppImage` 放到 PATH；运行时需要 `libfuse2`）。
 
 ```bash
-# 一次构建三种（耗时：cmake + gradle 只会跑一次）
-desktop/qt/packaging/build-packages.sh 2.0.0
+# 一次构建三种（版本号自动读取 desktop/VERSION；耗时：cmake + gradle 只会跑一次）
+desktop/qt/packaging/build-packages.sh
 
-# 只构建某一种
-desktop/qt/packaging/build-packages.sh 2.0.0 --only deb
-desktop/qt/packaging/build-packages.sh 2.0.0 --only rpm
-desktop/qt/packaging/build-packages.sh 2.0.0 --only appimage
+# 只构建某一种（版本同样取自 desktop/VERSION）
+desktop/qt/packaging/build-packages.sh --only deb
+desktop/qt/packaging/build-packages.sh --only rpm
+desktop/qt/packaging/build-packages.sh --only appimage
+
+# 纯修复的修订包：显式传第四段修订号，不改 VERSION
+desktop/qt/packaging/build-packages.sh 3.0.0.1 --only deb
 
 # 旧的 build-deb.sh 入口仍然可用，等价于 --only deb
 desktop/qt/packaging/build-deb.sh 2.0.0

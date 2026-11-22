@@ -9,10 +9,43 @@ plugins {
 }
 
 group = "moe.ouom.neriplayer"
-version = "2.1.0"
+// 版本号单一事实来源：desktop/VERSION（见 docs/versioning.md）。
+version = file("VERSION").readText().trim()
 
 kotlin {
     jvmToolchain(17)
+}
+
+// 把版本号生成为 Kotlin 常量，供 appVersion / 设置快照等处统一引用，
+// 避免后端再硬编码一份导致与包名不一致。
+val generatedVersionDir = layout.buildDirectory.dir("generated/sources/version/main/kotlin")
+val generateVersion by tasks.registering {
+    val outDir = generatedVersionDir.get().asFile
+    // 必须把 VERSION 文件声明成输入，否则任务会被判定为 UP-TO-DATE，
+    // 改了版本号却仍沿用上一次生成的内容（包名升级了、界面里还是旧版本）。
+    val versionFile = file("VERSION")
+    inputs.file(versionFile)
+    // 同时把版本字符串当输入：即使文件内容未变，project.version 变化也要重新生成。
+    inputs.property("appVersion", provider { project.version.toString() })
+    outputs.dir(outDir)
+    doLast {
+        val target = File(outDir, "moe/ouom/neriplayer/desktop/BuildVersion.kt")
+        target.parentFile.mkdirs()
+        target.writeText(
+            "package moe.ouom.neriplayer.desktop\n" +
+            "\n" +
+            "/** 由 Gradle 从 desktop/VERSION 生成，勿手工编辑。 */\n" +
+            "const val APP_VERSION: String = \"${project.version}\"\n"
+        )
+    }
+}
+sourceSets {
+    main {
+        kotlin.srcDir(generatedVersionDir)
+    }
+}
+tasks.named("compileKotlin") {
+    dependsOn(generateVersion)
 }
 
 dependencies {
