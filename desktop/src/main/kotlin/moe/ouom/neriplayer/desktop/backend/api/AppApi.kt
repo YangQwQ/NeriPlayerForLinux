@@ -20,6 +20,7 @@ import moe.ouom.neriplayer.desktop.backend.encodeJson
 import moe.ouom.neriplayer.desktop.backend.objectOrNull
 import moe.ouom.neriplayer.desktop.backend.stringOrNull
 import moe.ouom.neriplayer.desktop.core.AppContainer
+import moe.ouom.neriplayer.desktop.core.AppLog
 import moe.ouom.neriplayer.desktop.core.AppSettings
 import moe.ouom.neriplayer.desktop.core.DarkModeSetting
 import moe.ouom.neriplayer.desktop.core.Song
@@ -65,7 +66,13 @@ object AppApi {
         }
 
         server.on("app.bootstrap") {
-            bootstrapPayload(container)
+            val payload = bootstrapPayload(container)
+            // 首页等页面需要等快照应用完成后再取在线数据：用事件告知前端，
+            // 避免页面在 bootstrap 返回前就发请求、或永远等一个已经过去的 connected 信号。
+            server.broadcast("app.bootstrapDone", buildJsonObject {
+                put("protocol", PROTOCOL_VERSION)
+            })
+            payload
         }
 
         server.on("app.setSystemTheme") { params ->
@@ -138,6 +145,12 @@ object AppApi {
             server.broadcast("player", PlayerWire.state(container.player))
             server.broadcast("player.queue", PlayerWire.queue(container.player))
             server.broadcast("player.lyrics", PlayerWire.lyrics(container.player.lyrics.value))
+            AppLog.info(
+                "app",
+                "初始状态已推送：state=${container.player.state.value} " +
+                    "song=${container.player.currentSong.value?.key ?: "无"} " +
+                    "lyricsLines=${container.player.lyrics.value.lines.size}",
+            )
         }
     }
 
@@ -147,6 +160,11 @@ object AppApi {
         val scan = library.scanState.value
         val download = container.downloads
         val syncState = container.sync.state.value
+        AppLog.info(
+            "app",
+            "bootstrap 快照：state=${player.state.value} song=${player.currentSong.value?.key ?: "无"} " +
+                "lyricsLines=${player.lyrics.value.lines.size} source=${player.lyrics.value.source ?: "无"}",
+        )
         return buildJsonObject {
             put("protocol", PROTOCOL_VERSION)
             put("appVersion", APP_VERSION)

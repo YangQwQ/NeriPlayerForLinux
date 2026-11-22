@@ -21,6 +21,7 @@ import moe.ouom.neriplayer.desktop.backend.longOrNull
 import moe.ouom.neriplayer.desktop.backend.objectOrNull
 import moe.ouom.neriplayer.desktop.backend.stringOrNull
 import moe.ouom.neriplayer.desktop.core.AppContainer
+import moe.ouom.neriplayer.desktop.core.AppLog
 import moe.ouom.neriplayer.desktop.core.FfmpegSupport
 import moe.ouom.neriplayer.desktop.core.MediaSource
 import moe.ouom.neriplayer.desktop.core.OnlineArtist
@@ -74,9 +75,27 @@ object OnlineApi {
             // 首页聚合请求量大，HomeSections 内部有短 TTL 缓存；下拉刷新用 refresh=true 强制重取。
             val force = (params["refresh"] as? kotlinx.serialization.json.JsonPrimitive)
                 ?.content?.toBooleanStrictOrNull() ?: false
+            val settings = container.settings.current
+            AppLog.info(
+                "online.home",
+                "请求到达：force=$force netease=${settings.neteaseEnabled} bili=${settings.bilibiliEnabled}",
+            )
+            val startedAt = System.currentTimeMillis()
             val payload = withContext(Dispatchers.IO) {
-                HomeSections.load(container, force = force)
+                runCatching { HomeSections.load(container, force = force) }
+                    .onFailure { error ->
+                        AppLog.error(
+                            "online.home",
+                            "聚合失败：${error::class.simpleName}: ${error.message}（${System.currentTimeMillis() - startedAt}ms）",
+                        )
+                    }
+                    .getOrThrow()
             }
+            AppLog.info(
+                "online.home",
+                "聚合完成：${System.currentTimeMillis() - startedAt}ms sections=${payload.sections.size} " +
+                    "errors=${payload.errors.size}${if (payload.errors.isEmpty()) "" else " [${payload.errors.joinToString("；")}]"}",
+            )
             encodeJson(payload)
         }
 

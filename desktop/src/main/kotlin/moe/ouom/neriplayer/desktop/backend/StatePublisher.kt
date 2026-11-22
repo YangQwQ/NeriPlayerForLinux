@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import moe.ouom.neriplayer.desktop.backend.api.AppApi
 import moe.ouom.neriplayer.desktop.core.AppContainer
+import moe.ouom.neriplayer.desktop.core.AppLog
 
 /**
  * 把核心的 StateFlow 变化转成 IPC 事件：
@@ -94,12 +95,14 @@ class StatePublisher(
 
         scope.launch {
             container.player.lyrics.collectLatest { lyrics ->
+                AppLog.debug("state", "广播 player.lyrics：lines=${lyrics.lines.size} source=${lyrics.source ?: "无"}")
                 server.broadcast("player.lyrics", PlayerWire.lyrics(lyrics))
             }
         }
 
         scope.launch {
             container.player.lyricsLoading.collectLatest { loading ->
+                AppLog.debug("state", "广播 player.lyricsLoading：loading=$loading")
                 server.broadcastMap("player.lyricsLoading", mapOf("loading" to loading))
             }
         }

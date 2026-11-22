@@ -356,9 +356,12 @@ QtObject {
                 player.queue = data.songs || []
                 if (data.index !== undefined) player.queueIndex = data.index
             } else if (name === "player.lyrics") {
+                console.log("[player] player.lyrics 事件：lines=" + (data && data.lines ? data.lines.length : 0)
+                            + " source=" + (data && data.source ? data.source : "无"))
                 player.lyrics = data
                 player.lyricsLoading = false
             } else if (name === "player.lyricsLoading") {
+                console.log("[player] player.lyricsLoading 事件：" + (data && data.loading))
                 player.lyricsLoading = !!data.loading
             } else if (name === "player.coverSeed") {
                 player.coverSeed = data.seed || ""

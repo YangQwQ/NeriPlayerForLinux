@@ -69,9 +69,12 @@ Item {
 
     /** @param force 忽略后端短缓存（下拉刷新 / 登录态变化 / 音源开关变化）。 */
     function reload(force) {
+        console.log("[home] reload 触发：force=" + !!force + " connected=" + Api.connected
+                    + " loadedOnce=" + loadedOnce + " seq=" + (page._loadSeq + 1))
         if (!Api.connected) {
             // 后端还没连上：不发起请求，等 connected 变化后自动重载；已有内容时保留，
             // 首次加载则给出错误卡，避免一直转圈。
+            console.warn("[home] reload 跳过：后端未连接")
             if (!loadedOnce) {
                 loading = false
                 loadedOnce = true
@@ -90,8 +93,10 @@ Item {
         refreshContinuePlaying()
 
         Api.call("online.home", force ? { "refresh": true } : {}).then(function(result) {
-            if (seq !== page._loadSeq)
+            if (seq !== page._loadSeq) {
+                console.log("[home] online.home 结果作废：seq=" + seq + " 当前=" + page._loadSeq)
                 return
+            }
             loadTimeout.stop()
             homeData = result || null
             homeErrors = (result && result.errors) ? result.errors : []
@@ -99,6 +104,9 @@ Item {
             if ((!continueSongs || continueSongs.length === 0) && result
                     && result.continuePlaying && result.continuePlaying.songs)
                 continueSongs = result.continuePlaying.songs
+            console.log("[home] online.home 成功：seq=" + seq + " sections="
+                        + (result && result.sections ? result.sections.length : 0)
+                        + " errors=" + homeErrors.length)
             finishLoad()
         }).catch(function(error) {
             if (seq !== page._loadSeq)
@@ -107,6 +115,7 @@ Item {
             homeData = null
             homeErrors = []
             loadError = (error && error.message) ? error.message : I18n.tr("无法连接在线推荐服务")
+            console.warn("[home] online.home 失败：seq=" + seq + " error=" + loadError)
             finishLoad()
         })
     }
@@ -118,6 +127,7 @@ Item {
         onTriggered: {
             if (!page.loading && !page.refreshing)
                 return
+            console.warn("[home] online.home 超时：seq=" + page._loadSeq)
             ++page._loadSeq
             page.homeData = null
             page.homeErrors = []
@@ -397,6 +407,10 @@ Item {
 
     function subscribeEvents() {
         const handlers = [
+            // 启动时 connectedChanged 与 bootstrapDone 几乎同时到达，两者都触发 reload 会
+            // 互相作废请求序号（_loadSeq），造成多打一次网络且首个有效结果被丢弃。
+            // 启动首屏只靠 Component.onCompleted / onConnectedChanged 两处触发即可，
+            // 这里不再订阅 bootstrapDone。
             ["library.changed", function() { page.refreshContinuePlaying() }],
             ["collections.changed", function() { page.refreshContinuePlaying() }],
             ["history.changed", function() { page.refreshContinuePlaying() }],
@@ -446,6 +460,7 @@ Item {
         target: Backend
 
         function onConnectedChanged() {
+            console.log("[home] Backend.connected 变化：" + Backend.connected)
             if (Backend.connected) {
                 connectTimeout.stop()
                 page._sourceFlags = page.currentSourceFlags()
