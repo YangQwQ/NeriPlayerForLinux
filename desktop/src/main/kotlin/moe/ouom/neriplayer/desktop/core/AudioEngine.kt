@@ -894,7 +894,10 @@ class FfmpegAudioEngine : AudioEngine {
                     activeSonic.queueInput(ByteBuffer.wrap(buffer, 0, read))
                     sonicOut.clear()
                     activeSonic.getOutput(sonicOut)
-                    outLength = sonicOut.remaining()
+                    // getOutput 只前移 position 到写入字节数，limit 仍是容量；
+                    // 这里必须读 position 才是真实输出长度。用 remaining 会把缓冲区尾部的
+                    // 陈旧零字节一起送进声卡，变速时表现为每块音频后跟一段静音（停顿）。
+                    outLength = sonicOut.position()
                     outAddress = sonicOut.array()
                 }
                 producedFrames += outLength / BYTES_PER_FRAME
@@ -926,7 +929,7 @@ class FfmpegAudioEngine : AudioEngine {
                     activeSonic.queueEndOfStream()
                     sonicOut.clear()
                     activeSonic.getOutput(sonicOut)
-                    val tailLength = sonicOut.remaining()
+                    val tailLength = sonicOut.position()
                     producedFrames += tailLength / BYTES_PER_FRAME
                     var off = 0
                     while (off < tailLength) {
