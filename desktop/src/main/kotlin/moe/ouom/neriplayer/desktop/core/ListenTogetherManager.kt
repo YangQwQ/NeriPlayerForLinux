@@ -3184,8 +3184,9 @@ class ListenTogetherManager(
                 softSyncConvergedTicks = 0
                 lastSoftSyncRateAtMs = now
                 AppLog.info(TAG, "软同步收敛：drift=$driftMs signedDrift=${plan.signedDriftMs} 恢复用户倍速（原临时速率 ${player.listenTogetherSyncRate}）")
-                // 进度已经对齐，这次恢复不必重建流水线：参数先写回，等下一次自然重建
-                // （seek / 切歌）生效，避免在平稳播放时白卡一下。
+                // 收敛后立即热更新引擎速率。Sonic 下 setSpeed 不重建流水线，与 Android 的
+                // resetListenTogetherSyncPlaybackRate 对齐；不能只写参数等重建（deferred），
+                // 否则 Sonic 仍按临时倍速跑，进度会再次跑过头并被硬 seek 回拉。
                 player.finishSoftSyncDeferred()
             }
             return

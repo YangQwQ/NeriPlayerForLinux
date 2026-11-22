@@ -422,7 +422,14 @@ class PlayerManager(
             pendingPlayStartMs = 0L
             playCurrent(startMs)
         } else {
-            _currentSong.value = songs[_currentIndex.value]
+            val target = songs[_currentIndex.value]
+            _currentSong.value = target
+            // 只装填队列不自动播放时（一起听恢复暂停中的房间、纯队列重排），不会走
+            // playCurrent，歌词就永远停在初始空值。这里按缓存先渲染，再异步补一次加载；
+            // 代次取自当前值，随后的 playCurrent 会递增代次让这次结果自然失效。
+            _lyrics.value = lyricsRepository.cached(target) ?: Lyrics()
+            val lyricsGeneration = playbackGeneration
+            scope.launch { loadLyricsFor(target, lyricsGeneration) }
             // 暂存房态落点，等随后的 play() 真正打开音源时使用；纯队列重排（startMs=0）
             // 写 0 也无害。真正 open 音源时 playCurrent 会递增代次并清掉这个值。
             pendingPlayStartMs = startMs
@@ -1226,6 +1233,10 @@ class PlayerManager(
     }
 
     private suspend fun loadLyricsFor(song: Song, generation: Int) {
+        AppLog.debug(
+            "player",
+            "歌词加载开始：key=${song.key} 代次=$generation 当前代次=$playbackGeneration 音源=${song.source}",
+        )
         _lyricsLoading.value = true
         val loaded = lyricsRepository.load(song)
         // 歌词加载同样可能跨越一次切歌：用播放代次裁决，过期的加载既不写歌词，
@@ -1233,12 +1244,28 @@ class PlayerManager(
         if (generation != playbackGeneration) {
             AppLog.debug(
                 "player",
-                "丢弃过期歌词结果：key=${song.key} 当前代次=$playbackGeneration 本代次=$generation",
+                "丢弃过期歌词结果：key=${song.key} 当前代次=$playbackGeneration 本代次=$generation 行数=${loaded.lines.size}",
             )
             return
         }
         if (_currentSong.value?.key == song.key) {
             _lyrics.value = loaded
+            if (loaded.lines.isEmpty()) {
+                AppLog.info(
+                    "player",
+                    "歌词为空：key=${song.key} 本地文件=${song.filePath ?: "无"} 来源策略=${lyricsRepository.sourcePolicyProvider()}",
+                )
+            } else {
+                AppLog.info(
+                    "player",
+                    "歌词加载完成：key=${song.key} 行数=${loaded.lines.size} 来源=${loaded.source ?: "未知"}",
+                )
+            }
+        } else {
+            AppLog.debug(
+                "player",
+                "歌词结果丢弃：当前曲目已变 key=${_currentSong.value?.key ?: "无"} 结果 key=${song.key}",
+            )
         }
         _lyricsLoading.value = false
     }
@@ -1368,22 +1395,22 @@ class PlayerManager(
     }
 
     /**
-     * 软同步收敛后的倍速恢复：只把用户倍速写进引擎参数，等下一次自然重建（seek / 切歌）
-     * 再真正生效，本次不重建流水线。
+     * 软同步收敛后的倍速恢复：立刻把用户倍速热更新到引擎。
      *
-     * 收敛发生在音频平稳播放时，此时走 [resetListenTogetherRate] 会重建整条 ffmpeg
-     * 流水线（杀进程 + 重启 native DSP），用户会听到一瞬断声；而进度已经对齐，剩下的
-     * 倍速偏差完全可以等到下次本来就要重建的时机一起切过去。
+     * 方法名沿用历史（当时以为恢复必须等重建），现在语义是「立即生效」，不是 deferred。
      *
-     * 引擎侧 [AudioEngine.setSpeedDeferred] 只改参数、保留 pipelineSpeed，因此正在跑的
-     * 流水线仍按旧速率折算帧数——这与「参数已变但流水线没变」的实际状态一致，进度不会算错。
+     * Sonic 下 [AudioEngine.setSpeed] 只更新 sonicParam、不重建流水线，收敛时走这条路径
+     * 和 Android 的 `resetListenTogetherSyncPlaybackRate()` 一样即时生效、无卡顿。
      *
-     * 仅限「收敛」这一处使用：离开房间、暂停、成为控制者等之后不一定有重建的场合，
-     * 必须走 [resetListenTogetherRate] 立刻生效，否则会一直用旧速率播放。
+     * 不能走 [prepareSpeedForPipelineRestart] 的 deferred：那条路径只改引擎的 speed 参数、
+     * 不动 sonicParam，Sonic 实际仍按旧的临时倍速跑。Player 以为已经恢复用户倍速，
+     * Sonic 却还在加速 → 本地进度继续跑过头 → drift 反向增大 → 触发硬 seek 回拉 1~2 秒。
+     *
+     * 暂停场景的 deferred 由 [pause] 单独调用 [prepareSpeedForPipelineRestart] 保留，
+     * 避免淡出中的尾音被 setSpeed 重建/改写速率放大；两者调用点互不重叠。
      */
     fun finishSoftSyncDeferred() {
-        if (listenTogetherRate == 1f) return
-        prepareSpeedForPipelineRestart()
+        resetListenTogetherRate()
     }
 
     fun setPitch(semitones: Float) {
