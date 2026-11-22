@@ -37,11 +37,10 @@ object ConfigTransferApi {
     private const val MAX_LOGS = AppLog.CAPACITY
 
     fun register(server: CoreServer, container: AppContainer) {
-        // 把既有的 println / stderr 日志 tee 进环形缓冲，让日志查看器能看到真实输出。
-        // 放在这里是因为 BackendMain 已由集成负责人固定，本文件是唯一由本功能负责的注册点。
-        if (AppLog.installStdoutBridge()) {
-            AppLog.info("app-log", "标准流日志桥接已安装（NERI_APP_LOG_BRIDGE=0 可关闭）")
-        }
+        // AppLog 首次被访问时（init）就会装上标准流桥接，这里仅兜底并记一条可诊断的状态日志。
+        // 这样即使将来有人移走 AppLog 的 init，register 仍能补齐桥接。
+        val bridgeState = if (AppLog.installStdoutBridge()) "已安装" else "已启用（或在 register 前已安装）"
+        AppLog.info("app-log", "标准流日志桥接$bridgeState（NERI_APP_LOG_BRIDGE=0 可关闭）")
 
         // ---------------------------------------------------------------- 导出
         // 参数：path?（绝对路径，省略则写到 ~/neriplayer-settings-<时间戳>.json）
@@ -110,9 +109,11 @@ object ConfigTransferApi {
         }
 
         // ---------------------------------------------------------------- 日志
-        // 参数：limit?（默认 200，上限 1000）、minLevel?（DEBUG/INFO/WARN/ERROR，默认 DEBUG=全部）
+        // 参数：limit?（默认 1000=整个环）、minLevel?（DEBUG/INFO/WARN/ERROR，默认全部）
         server.on("debug.recentLogs") { params ->
-            val limit = (params.intOrNull("limit") ?: DEFAULT_LOG_LIMIT).coerceIn(1, MAX_LOGS)
+            // 默认取满整个环：后端若先截断到 200 再交给前端，用户会以为「日志没进来」。
+            // 过滤在 recent() 内部先于截断执行，不会因 minLevel 而漏条。
+            val limit = (params.intOrNull("limit") ?: MAX_LOGS).coerceIn(1, MAX_LOGS)
             val rawLevel = params.stringOrNull("minLevel")
             val minLevel = if (rawLevel.isNullOrBlank()) {
                 null
@@ -138,11 +139,10 @@ object ConfigTransferApi {
                 put("recordedTotal", AppLog.recordedCount())
                 put("capacity", AppLog.CAPACITY)
                 put("truncatedMessageLength", AppLog.MAX_MESSAGE_LENGTH)
+                put("bridgeInstalled", AppLog.isBridgeInstalled())
             }
         }
     }
-
-    private const val DEFAULT_LOG_LIMIT = 200
 
     // ------------------------------------------------------------------ 导入后的运行时生效
 

@@ -29,8 +29,13 @@ object AppLog {
     /** 单条消息上限；超长内容（例如整段 HTML/JSON）截断后入环。 */
     const val MAX_MESSAGE_LENGTH = 2000
 
-    /** 同一条消息在该窗口内重复出现时合并计数，避免高频日志把环冲掉。 */
-    private const val COALESCE_WINDOW_MS = 2000L
+    /**
+     * 同一条消息在该窗口内重复出现时合并计数，避免高频日志把环冲掉。
+     *
+     * 窗口要短：2 秒会把「用户点了两次按钮」这类相隔数百毫秒的独立事件合并成一条，
+     * 在日志查看器里看起来就是「一条日志消失」。高频日志靠 [CAPACITY] 和重复次数本身就能说明问题。
+     */
+    private const val COALESCE_WINDOW_MS = 350L
 
     private const val DEFAULT_TARGET = "app"
 
@@ -71,7 +76,7 @@ object AppLog {
     /** 环里的一条日志。字段名即协议字段名（见 protocol-config.md）。 */
     @Serializable
     data class Entry(
-        /** 首次出现的时间戳（毫秒）；合并计数时不会刷新，保证顺序稳定。 */
+        /** 首次出现的时间戳（毫秒）；合并计数时刷新为最近一次，保证展示顺序与最新事件一致。 */
         val timestampMs: Long,
         val level: String,
         val target: String,
@@ -95,6 +100,13 @@ object AppLog {
     private var bridgeInstalled = false
 
     private val bridgeLock = Any()
+
+    init {
+        // 尽可能早地接上标准流：只要有任何代码第一次碰到 AppLog（最早的 AppLog.info/warn、
+        // ConfigTransferApi.register 等），桥接就立即生效。BackendMain 里 register 排在第 15 位，
+        // 若只靠 register() 安装，前面十几个 register 与 AppContainer() 构造期间的 println 会永久丢失。
+        installStdoutBridge()
+    }
 
     // ------------------------------------------------------------------ 记录
 
@@ -130,7 +142,7 @@ object AppLog {
                 now - newest.timestampMs <= COALESCE_WINDOW_MS
             ) {
                 ring.removeLast()
-                ring.addLast(newest.copy(repeat = newest.repeat + 1))
+                ring.addLast(newest.copy(timestampMs = now, repeat = newest.repeat + 1))
                 return
             }
             if (ring.size >= CAPACITY) ring.removeFirst()
@@ -163,6 +175,9 @@ object AppLog {
 
     /** 累计入环条数（含被环淘汰的），用于前端显示「共记录了多少」。 */
     fun recordedCount(): Long = synchronized(lock) { recordedTotal }
+
+    /** 标准流桥接是否已装上，供 `debug.recentLogs` 回报给前端做可诊断性提示。 */
+    fun isBridgeInstalled(): Boolean = bridgeInstalled
 
     fun size(): Int = synchronized(lock) { ring.size }
 
@@ -259,19 +274,19 @@ object AppLog {
      */
     fun installStdoutBridge(): Boolean {
         if (System.getenv("NERI_APP_LOG_BRIDGE") == "0") return false
-        synchronized(bridgeLock) {
+        // 整段安装放在锁内，且只在两条流都替换成功后才置位：
+        // 否则并发调用方会在 setOut 成功、setErr 失败的瞬间看到「已安装」的假成功。
+        return synchronized(bridgeLock) {
             if (bridgeInstalled) return false
-            bridgeInstalled = true
+            val ok = runCatching {
+                System.setOut(PrintStream(LineTee(originalOut, "stdout"), true, StandardCharsets.UTF_8))
+                System.setErr(PrintStream(LineTee(originalErr, "stderr"), true, StandardCharsets.UTF_8))
+            }.onFailure {
+                originalErr.println("[app] 标准流日志桥接安装失败: ${it.message}")
+            }.isSuccess
+            if (ok) bridgeInstalled = true
+            ok
         }
-        runCatching {
-            System.setOut(PrintStream(LineTee(originalOut, "stdout"), true, StandardCharsets.UTF_8))
-            System.setErr(PrintStream(LineTee(originalErr, "stderr"), true, StandardCharsets.UTF_8))
-        }.onFailure {
-            bridgeInstalled = false
-            originalErr.println("[app] 标准流日志桥接安装失败: ${it.message}")
-            return false
-        }
-        return true
     }
 
     /**
@@ -287,26 +302,22 @@ object AppLog {
 
         private val buffer = ByteArrayOutputStream(256)
 
-        override fun write(value: Int) {
-            runCatching { delegate.write(value) }
-            val byte = value and 0xFF
-            synchronized(this) {
-                when {
-                    byte == '\n'.code -> flushLine()
-                    buffer.size() >= MAX_MESSAGE_LENGTH -> flushLine()
-                    else -> buffer.write(byte)
-                }
-            }
-        }
+        override fun write(value: Int) = write(byteArrayOf((value and 0xFF).toByte()), 0, 1)
 
         override fun write(bytes: ByteArray, offset: Int, length: Int) {
+            // 原输出优先：即便入环逻辑抛异常也不能影响真实 stdout/stderr 的内容。
             runCatching { delegate.write(bytes, offset, length) }
             synchronized(this) {
                 var index = offset
                 val end = offset + length
                 while (index < end) {
                     val byte = bytes[index].toInt() and 0xFF
-                    if (byte == '\n'.code || buffer.size() >= MAX_MESSAGE_LENGTH) flushLine() else buffer.write(byte)
+                    if (byte == '\n'.code || buffer.size() >= MAX_MESSAGE_LENGTH) {
+                        // 换行/超长都先把已攒的内容成行；当前字节本身不入下一行。
+                        flushLine()
+                    } else {
+                        buffer.write(byte)
+                    }
                     index += 1
                 }
             }

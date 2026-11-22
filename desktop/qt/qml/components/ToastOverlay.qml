@@ -36,7 +36,10 @@ Item {
                     id: toastText
                     anchors.centerIn: parent
                     width: Math.min(520, implicitWidth)
-                    text: toastItem.modelData.text
+                    // 后端错误文案是中文原文，英文界面下需要在这里翻译一层：
+                    // Toast 是唯一的展示出口，收口在这里可覆盖所有 `error.message` 路径
+                    // （PlayerGlobal / Api / 各页面），不必逐个调用点包 I18n.tr。
+                    text: I18n.tr(toastItem.modelData.text)
                     wrapMode: Text.Wrap
                     horizontalAlignment: Text.AlignHCenter
                     color: toastItem.isError ? Theme.onErrorContainerColor : Theme.inverseOnSurface

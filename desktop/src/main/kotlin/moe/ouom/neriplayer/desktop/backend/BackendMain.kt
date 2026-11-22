@@ -19,6 +19,7 @@ import moe.ouom.neriplayer.desktop.backend.api.PlayerApi
 import moe.ouom.neriplayer.desktop.backend.api.StorageApi
 import moe.ouom.neriplayer.desktop.backend.api.SyncApi
 import moe.ouom.neriplayer.desktop.core.AppContainer
+import moe.ouom.neriplayer.desktop.core.AppLog
 import java.net.StandardProtocolFamily
 import java.net.UnixDomainSocketAddress
 import java.nio.channels.SocketChannel
@@ -35,6 +36,10 @@ import java.nio.file.Paths
  *   --no-scan         启动时不扫描本地媒体库（调试/截图用）
  */
 fun main(args: Array<String>) {
+    // 尽早触发 AppLog 初始化以安装 stdout/stderr 桥接：BackendMain 的 early 日志、
+    // AppContainer 构造与各 register 都在 ConfigTransferApi.register() 之前，
+    // 不在这里先装桥接的话，这些启动日志会永久丢失在日志查看器里。
+    AppLog.isBridgeInstalled()
     val socketPath = resolveSocketPath(args)
     val noScan = args.contains("--no-scan") || System.getenv("NERIPLAYER_NO_SCAN") == "1"
     val parentPid = parentPidArg(args)
