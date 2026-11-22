@@ -110,7 +110,7 @@ class ListenTogetherHttpClient(private val http: HttpService) {
     suspend fun healthz(baseUrl: String): Boolean {
         val label = redactListenTogetherUrl("$baseUrl/healthz")
         val started = System.currentTimeMillis()
-        val response = runCatching { http.execute("GET", "$baseUrl/healthz", timeoutSeconds = 6) }
+        val response = runCatching { http.executeFresh("GET", "$baseUrl/healthz", timeoutSeconds = 6) }
             .getOrNull()
         if (response == null) {
             AppLog.warn(LT_CLIENT_TAG, "HTTP GET $label 健康检查无响应（${System.currentTimeMillis() - started}ms）")
@@ -131,12 +131,12 @@ class ListenTogetherHttpClient(private val http: HttpService) {
         val label = redactListenTogetherUrl(url)
         val started = System.currentTimeMillis()
         val response = runCatching {
-            http.execute("GET", url, headers = authHeaders(bearerToken), timeoutSeconds = 15)
+            http.executeFresh("GET", url, headers = authHeaders(bearerToken), timeoutSeconds = 15)
         }.getOrElse {
             AppLog.warn(LT_CLIENT_TAG, "HTTP GET $label 失败：${it.message ?: it::class.simpleName}（${System.currentTimeMillis() - started}ms）")
             return networkFailure(it)
         } ?: run {
-            AppLog.warn(LT_CLIENT_TAG, "HTTP GET $label 无响应（${System.currentTimeMillis() - started}ms）")
+            AppLog.warn(LT_CLIENT_TAG, "HTTP GET $label 无响应（${System.currentTimeMillis() - started}ms，已尝试独立连接重试）")
             return Result(null, 0, "无法连接一起听服务端")
         }
         val result: Result<T> = decode(url, response.status, response.text())
@@ -152,7 +152,7 @@ class ListenTogetherHttpClient(private val http: HttpService) {
         val label = redactListenTogetherUrl(url)
         val started = System.currentTimeMillis()
         val response = runCatching {
-            http.execute(
+            http.executeFresh(
                 method = "POST",
                 url = url,
                 body = body,
@@ -163,7 +163,7 @@ class ListenTogetherHttpClient(private val http: HttpService) {
             AppLog.warn(LT_CLIENT_TAG, "HTTP POST $label 失败：${it.message ?: it::class.simpleName}（${System.currentTimeMillis() - started}ms）")
             return networkFailure(it)
         } ?: run {
-            AppLog.warn(LT_CLIENT_TAG, "HTTP POST $label 无响应（${System.currentTimeMillis() - started}ms）")
+            AppLog.warn(LT_CLIENT_TAG, "HTTP POST $label 无响应（${System.currentTimeMillis() - started}ms，已尝试独立连接重试）")
             return Result(null, 0, "无法连接一起听服务端")
         }
         val result: Result<T> = decode(url, response.status, response.text())

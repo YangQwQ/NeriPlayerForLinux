@@ -76,6 +76,17 @@ class HttpService {
         .connectTimeout(Duration.ofSeconds(12))
         .build()
 
+    /**
+     * 长空闲后复用的 HTTP/2 连接池里可能留下服务端已单方面关闭、但客户端仍认为可用的连接：
+     * 请求会在上面挂到超时，且后续请求继续命中同一条连接，表现为「所有请求都卡住」。
+     * 超时后用一条独立的 HTTP/1.1 客户端重试，绕开被污染的连接池。
+     */
+    private val freshClient: HttpClient = HttpClient.newBuilder()
+        .version(HttpClient.Version.HTTP_1_1)
+        .followRedirects(HttpClient.Redirect.NORMAL)
+        .connectTimeout(Duration.ofSeconds(12))
+        .build()
+
     private val cookieJar = ConcurrentHashMap<String, MutableMap<String, String>>()
 
     /** Cookie 按平台分组，让登录态可以在同一平台的子域之间共享。 */
@@ -118,6 +129,56 @@ class HttpService {
         cookieJar[jarKeyFor(host)]?.takeIf { it.isNotEmpty() }
             ?.entries?.joinToString("; ") { "${it.key}=${it.value}" }
 
+    /**
+     * 与 [execute] 相同，但走独立的 HTTP/1.1 客户端，不复用共享连接池。
+     * 用于一起听这类「长时间空闲后突然发起、且必须可靠」的控制请求：
+     * 共享连接池里的 HTTP/2 连接可能在空闲期间被服务端单方面关闭，复用会挂到超时。
+     */
+    fun executeFresh(
+        method: String,
+        url: String,
+        body: String? = null,
+        headers: Map<String, String> = emptyMap(),
+        timeoutSeconds: Long = 30,
+    ): RawResponse? = runCatching {
+        val host = runCatching { URI(url).host }.getOrNull().orEmpty()
+        val builder = HttpRequest.newBuilder(URI(url))
+            .timeout(Duration.ofSeconds(timeoutSeconds))
+            .header("User-Agent", DESKTOP_USER_AGENT)
+            .header("Accept-Encoding", "gzip")
+        headers.forEach { (key, value) -> builder.header(key, value) }
+        cookieHeaderFor(host)?.let { builder.header("Cookie", it) }
+        val publisher = if (body == null) {
+            HttpRequest.BodyPublishers.noBody()
+        } else {
+            HttpRequest.BodyPublishers.ofString(body)
+        }
+        when (method.uppercase()) {
+            "GET" -> builder.GET()
+            "POST" -> builder.POST(publisher)
+            "PUT" -> builder.PUT(publisher)
+            "PATCH" -> builder.method("PATCH", publisher)
+            "DELETE" -> builder.DELETE()
+            else -> builder.method(method.uppercase(), publisher)
+        }
+        val response = freshClient.send(builder.build(), HttpResponse.BodyHandlers.ofByteArray())
+        storeCookies(host, response)
+        val raw = response.body() ?: ByteArray(0)
+        val bytes = if (
+            response.headers().firstValue("Content-Encoding").orElse("").contains("gzip") &&
+            raw.size > 2 && raw[0] == 0x1F.toByte() && raw[1] == 0x8B.toByte()
+        ) {
+            gunzipOrRaw(raw)
+        } else {
+            raw
+        }
+        RawResponse(
+            status = response.statusCode(),
+            bytes = bytes,
+            header = { name -> response.headers().firstValue(name).orElse(null) },
+        )
+    }.getOrNull()
+
     fun get(
         url: String,
         headers: Map<String, String> = emptyMap(),
@@ -152,8 +213,8 @@ class HttpService {
         headers: Map<String, String>,
         timeoutSeconds: Long,
     ): String? {
-        return runCatching {
-            val host = runCatching { URI(url).host }.getOrNull().orEmpty()
+        val host = runCatching { URI(url).host }.getOrNull().orEmpty()
+        fun buildRequest(): HttpRequest {
             val builder = HttpRequest.newBuilder(URI(url))
                 .timeout(Duration.ofSeconds(timeoutSeconds))
                 .header("User-Agent", DESKTOP_USER_AGENT)
@@ -166,15 +227,24 @@ class HttpService {
             } else {
                 builder.GET()
             }
-            val response = client.send(builder.build(), HttpResponse.BodyHandlers.ofByteArray())
+            return builder.build()
+        }
+        fun sendWith(connectionClient: HttpClient): Pair<ByteArray?, Boolean> {
+            val response = connectionClient.send(buildRequest(), HttpResponse.BodyHandlers.ofByteArray())
             storeCookies(host, response)
-            val bytes = response.body() ?: return@runCatching null
-            val decoded = if (response.headers().firstValue("Content-Encoding").orElse("").contains("gzip")) {
-                gunzipOrRaw(bytes)
-            } else {
-                bytes
+            val gzipped = response.headers().firstValue("Content-Encoding").orElse("").contains("gzip")
+            return response.body() to gzipped
+        }
+        return runCatching {
+            val (bytes, gzipped) = try {
+                sendWith(client)
+            } catch (timeout: java.net.http.HttpTimeoutException) {
+                // 复用连接卡死：换一条全新 HTTP/1.1 连接重试，避免请求永远超时
+                sendWith(freshClient)
             }
-            decoded.decodeToString()
+            bytes?.let { raw ->
+                if (gzipped) gunzipOrRaw(raw).decodeToString() else raw.decodeToString()
+            }
         }.getOrNull()
     }
 
@@ -207,27 +277,39 @@ class HttpService {
         timeoutSeconds: Long = 30,
     ): RawResponse? = runCatching {
         val host = runCatching { URI(url).host }.getOrNull().orEmpty()
-        val builder = HttpRequest.newBuilder(URI(url))
-            .timeout(Duration.ofSeconds(timeoutSeconds))
-            .header("User-Agent", DESKTOP_USER_AGENT)
-            .header("Accept-Encoding", "gzip")
-        headers.forEach { (key, value) -> builder.header(key, value) }
-        cookieHeaderFor(host)?.let { builder.header("Cookie", it) }
-        val publisher = if (body == null) {
-            HttpRequest.BodyPublishers.noBody()
-        } else {
-            HttpRequest.BodyPublishers.ofString(body)
+        fun buildRequest(): HttpRequest {
+            val builder = HttpRequest.newBuilder(URI(url))
+                .timeout(Duration.ofSeconds(timeoutSeconds))
+                .header("User-Agent", DESKTOP_USER_AGENT)
+                .header("Accept-Encoding", "gzip")
+            headers.forEach { (key, value) -> builder.header(key, value) }
+            cookieHeaderFor(host)?.let { builder.header("Cookie", it) }
+            val publisher = if (body == null) {
+                HttpRequest.BodyPublishers.noBody()
+            } else {
+                HttpRequest.BodyPublishers.ofString(body)
+            }
+            when (method.uppercase()) {
+                "GET" -> builder.GET()
+                "POST" -> builder.POST(publisher)
+                "PUT" -> builder.PUT(publisher)
+                "PATCH" -> builder.method("PATCH", publisher)
+                "DELETE" -> builder.DELETE()
+                else -> builder.method(method.uppercase(), publisher)
+            }
+            return builder.build()
         }
-        when (method.uppercase()) {
-            "GET" -> builder.GET()
-            "POST" -> builder.POST(publisher)
-            "PUT" -> builder.PUT(publisher)
-            "PATCH" -> builder.method("PATCH", publisher)
-            "DELETE" -> builder.DELETE()
-            else -> builder.method(method.uppercase(), publisher)
+        fun sendWith(connectionClient: HttpClient): HttpResponse<ByteArray> {
+            val response = connectionClient.send(buildRequest(), HttpResponse.BodyHandlers.ofByteArray())
+            storeCookies(host, response)
+            return response
         }
-        val response = client.send(builder.build(), HttpResponse.BodyHandlers.ofByteArray())
-        storeCookies(host, response)
+        val response = try {
+            sendWith(client)
+        } catch (timeout: java.net.http.HttpTimeoutException) {
+            // 复用连接卡死：换一条全新 HTTP/1.1 连接重试，避免请求永远超时
+            sendWith(freshClient)
+        }
         val raw = response.body() ?: ByteArray(0)
         // 声明了 Accept-Encoding: gzip，就必须自行解压，否则 JSON 会解析失败
         val bytes = if (
