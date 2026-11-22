@@ -1,9 +1,13 @@
 package moe.ouom.neriplayer.desktop.core
 
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,6 +35,9 @@ import kotlin.random.Random
 /** 网易云不可播、自动切到哔哩哔哩成功后的提示。 */
 private const val NETEASE_AUTO_SOURCE_FALLBACK_MESSAGE =
     "网易云音源不可用，已自动切换到哔哩哔哩音源"
+
+/** 下一首预解析的超时预算：超时放弃，不阻塞也不拖累切歌。 */
+private const val PREFETCH_TIMEOUT_MS = 15_000L
 
 data class SleepTimerState(
     val active: Boolean = false,
@@ -142,10 +149,62 @@ class PlayerManager(
 
     private var shuffleOrder: List<Int> = emptyList()
     private var currentPlayingKey: String? = null
+    /**
+     * 每次 playCurrent 递增的代次。音源解析是异步的，快速连续切歌会有多个解析协程在飞；
+     * 回调里只有代次仍是最新才允许 open/写 currentPlayingKey，过期结果直接丢弃，
+     * 否则先完成的旧歌解析会把音频覆盖成已经不是当前的歌曲（界面新歌、声音旧歌）。
+     */
+    private var playbackGeneration = 0
+    /**
+     * setQueue(autoPlay=false, startMs=...) 收下的起始进度。一起听切歌时房态已经给出落点，
+     * 但重建队列刻意不 autoPlay、改由后续 play() 触发 playCurrent；startMs 必须经这里
+     * 传给那次 playCurrent，否则新歌会从 0 开始播，与房间进度错位。
+     */
+    private var pendingPlayStartMs = 0L
     private var playbackStartedAt = 0L
     private var sleepTimerJob: Job? = null
     private val resolveMutex = Mutex()
     private val resolvedCache = ConcurrentHashMap<String, AudioInput>()
+
+    /**
+     * 下一首播放地址的预解析缓存（按 song.key + TTL）。Android 在当前曲目进入 READY
+     * 时就解析下一首的最终播放地址，桌面端对齐这一时机，切歌时命中缓存直接 open，
+     * 省掉网易云失败再串行去 B 站搜索的等待。与 [resolvedCache] 分开：这里带 TTL，
+     * 网易云直链短时效，过期后必须重新解析。
+     */
+    private val nextPrefetchCache = NextSongPrefetchCache()
+    /** 当前在飞的下一次解析任务；目标变化时取消，防止旧的解析覆盖新目标。 */
+    private var nextPrefetchJob: Job? = null
+    @Volatile private var nextPrefetchKey: String? = null
+
+    /** 按歌曲 key 记录的临时音质档位（播放页「切换音质」，不写全局偏好，不落盘）。 */
+    private val qualityOverrides = ConcurrentHashMap<String, String>()
+    private val _currentQuality = MutableStateFlow<String?>(null)
+    /** 当前曲目实际使用的音质档位（临时覆盖优先，否则为全局默认）；null 表示尚无当前曲目。 */
+    val currentQuality: StateFlow<String?> = _currentQuality.asStateFlow()
+
+    /**
+     * 本次播放实际使用的音源：控制者据此把直链上传到一起听房间。
+     * 只在 engine.open 成功后写入，切歌/清空队列时清掉；仅暴露只读快照。
+     */
+    private val _currentAudioInput = AtomicReference<AudioInput?>(null)
+    val currentAudioInput: AudioInput? get() = _currentAudioInput.get()
+
+    /**
+     * 实际出声的曲目是否就是当前界面曲目。
+     * setQueue(autoPlay=false) 只换 _currentSong（界面/歌词依据），不会真正 open 音频，
+     * 于是会出现「界面已是新歌、引擎还在放旧歌」的中间态。一起听补播判定必须读这个，
+     * 不能只看 state 里残留的 PLAYING，否则缺一次 play() 就永远停在旧歌。
+     */
+    val isAudioOnCurrentTrack: Boolean
+        get() = currentPlayingKey != null && currentPlayingKey == _currentSong.value?.key
+
+    /**
+     * 一起听：本地直链解析失败回调。由 ListenTogetherManager 注入，听众侧据此发 REQUEST_LINK。
+     * 参数用 Song 而非 URL，避免把可能为空的解析结果误当成失败通知。
+     */
+    @Volatile
+    var onPlaybackResolveFailed: ((Song) -> Unit)? = null
 
     /** 在线音频磁盘 LRU 缓存；与 /dev/shm 的播放加速缓存相互独立。 */
     private val musicCache = MusicCache(settings)
@@ -169,21 +228,60 @@ class PlayerManager(
     @Volatile private var audioCachedKey: String? = null
     private val audioCacheFile: File get() = File(audioCacheDir, "current.audio")
 
+    /**
+     * seek 用的缓存快照（[audioCacheFile] 的硬链接）。
+     *
+     * current.audio 会被切歌预取/换源随时删掉重建，直接把它的路径交给 ffmpeg 是典型 TOCTOU：
+     * 判定时 isFile=true，等新进程真正 open 时文件已经不在，于是 ffmpeg 报
+     * `No such file or directory` → 播放流中断 → 回退换源 → 进度被打回 0。
+     * 硬链接在创建的瞬间就固定了 inode，之后原路径被删/改名也不影响它，且不用整首复制。
+     *
+     * 每次 seek 只保留一份快照：下一次 seek 时删除上一次的链接（那一刻旧 ffmpeg 早已打开 fd，
+     * 删除链接不影响它继续读），把磁盘占用限定在一首歌。
+     */
+    @Volatile private var seekSnapshotFile: File? = null
+    private var seekSnapshotSeq = 0L
+
+    /**
+     * 预取时记录的「远端音频应有多大」，键是歌曲 key。
+     *
+     * seek 路径不联网，只能靠这份下载时记下的大小判断缓存是否完整；
+     * 值为 -1 表示远端没给出长度，此时不做完整性限制。
+     */
+    private val expectedAudioBytes = ConcurrentHashMap<String, Long>()
+
     /** 后台流式下载指定歌曲到唯一的内存缓存文件；成功记录 audioCachedKey。 */
     private suspend fun prefetchAudio(song: Song, input: AudioInput) {
         val url = input.url ?: return
         val ok = withContext(Dispatchers.IO) {
             val tmp = File(audioCacheDir, "current.audio.tmp")
             audioCachedKey = null   // 先作废旧缓存，避免切歌时读到半写文件
+            // 下载服务端也会在传输中途正常关闭连接（CDN 截断、连接被中间设备回收），这时
+            // read 只返回 -1 而不是抛异常。必须拿已下载字节数与 Content-Length 对账，
+            // 否则半截文件会被当成完整缓存：之后用它 seek 长音频就会一拖进度条就 EOF。
+            var expectedBytes = -1L
+            var downloadedBytes = 0L
             // 流式下载，避免整首歌以 ByteArray 驻留堆内存；失败时工具方法会删除半成品
-            if (!online.httpService.downloadToFile(url, input.headers, tmp) { _, _ -> }) {
+            val transferred = online.httpService.downloadToFile(url, input.headers, tmp) { done, total ->
+                downloadedBytes = done
+                if (total > 0L) expectedBytes = total
+            }
+            val complete = transferred && (expectedBytes <= 0L || downloadedBytes >= expectedBytes)
+            if (!complete) {
+                println(
+                    "[cache] 音频缓存不完整，丢弃：downloaded=$downloadedBytes expected=$expectedBytes " +
+                        "（${song.displayName()}）",
+                )
                 false
             } else {
                 runCatching {
                     if (audioCacheFile.exists()) audioCacheFile.delete()
                     tmp.renameTo(audioCacheFile)
                     audioCacheFile.length() > 0L
-                }.getOrDefault(false)
+                }.getOrDefault(false).also { renamed ->
+                    // 记下远端大小：seek 路径不联网，靠这份记录判断缓存是否完整
+                    if (renamed) expectedAudioBytes[song.key] = expectedBytes
+                }
             }
         }
         audioCachedKey = if (ok) song.key else null
@@ -194,6 +292,29 @@ class PlayerManager(
     private val neteaseAutoSource = NeteaseAutoSource(online)
 
     val supportsEffects: Boolean get() = engine.supportsEffects
+
+    /** 当前引擎是否真的能变速；不能变速时一起听软同步会退回硬 seek。 */
+    val supportsSpeedChange: Boolean get() = engine.supportsSpeedChange
+
+    /**
+     * 一起听软同步用的临时播放速率（0.95~1.05），**只作用于引擎，不写用户设置**。
+     *
+     * 与 [setSpeed] 的区别：那个是用户偏好（会落盘），这个是同步期间的临时倍率。
+     * 引擎拿到的是「用户倍速 × 同步倍率」，所以软校正结束必须调
+     * [resetListenTogetherRate]，否则会一直停在非 1.0 速率上。
+     */
+    @Volatile
+    private var listenTogetherRate: Float = 1f
+
+    /** 当前生效的同步倍率（1f 表示没有软校正）；给一起听管理器做节流判断。 */
+    val listenTogetherSyncRate: Float get() = listenTogetherRate
+
+    /** 真正下发给引擎的倍速 = 用户偏好倍速 × 一起听临时同步倍率。 */
+    private val effectiveSpeed: Float get() = _speed.value * listenTogetherRate
+
+    private fun applyEffectiveSpeedToEngine() {
+        if (engine.supportsSpeedChange) engine.setSpeed(effectiveSpeed)
+    }
 
     init {
         val saved = settings.current
@@ -207,7 +328,7 @@ class PlayerManager(
         bindEngineCallbacks(engine)
         engine.setVolume(_volume.value)
         if (engine.supportsEffects) {
-            engine.setSpeed(_speed.value)
+            engine.setSpeed(effectiveSpeed)
             engine.setPitch(_pitch.value)
             engine.setLoudness(_loudness.value)
         }
@@ -256,7 +377,7 @@ class PlayerManager(
         }
         target.setVolume(_volume.value)
         if (target.supportsEffects) {
-            target.setSpeed(_speed.value)
+            target.setSpeed(effectiveSpeed)
             target.setPitch(_pitch.value)
             target.setLoudness(_loudness.value)
             target.setAudioEffects(_audioEffects.value)
@@ -282,7 +403,12 @@ class PlayerManager(
 
     // ---------------- 队列与播放控制 ----------------
 
-    fun setQueue(songs: List<Song>, startIndex: Int, autoPlay: Boolean = true) {
+    fun setQueue(
+        songs: List<Song>,
+        startIndex: Int,
+        autoPlay: Boolean = true,
+        startMs: Long = 0L,
+    ) {
         if (songs.isEmpty()) {
             clearQueue()
             return
@@ -291,9 +417,15 @@ class PlayerManager(
         rebuildShuffleOrder(startIndex.coerceIn(0, songs.lastIndex))
         _currentIndex.value = startIndex.coerceIn(0, songs.lastIndex)
         if (autoPlay) {
-            playCurrent()
+            // 一起听切歌时房间已经给出目标进度：直接带着它打开，先播 0 再 seek
+            // 会让界面看到一次进度归零又跳回来的跳动。
+            pendingPlayStartMs = 0L
+            playCurrent(startMs)
         } else {
             _currentSong.value = songs[_currentIndex.value]
+            // 暂存房态落点，等随后的 play() 真正打开音源时使用；纯队列重排（startMs=0）
+            // 写 0 也无害。真正 open 音源时 playCurrent 会递增代次并清掉这个值。
+            pendingPlayStartMs = startMs
         }
     }
 
@@ -305,28 +437,43 @@ class PlayerManager(
 
     fun enqueueNext(songs: List<Song>) {
         if (songs.isEmpty()) return
-        val current = _currentSong.value
-        val list = _queue.value.toMutableList()
-        if (current == null) {
-            setQueue(songs, 0, autoPlay = true)
+        if (_currentSong.value == null) {
+            setQueue(PlayerQueueEdit.dedupe(songs), 0, autoPlay = true)
             return
         }
-        val insertAt = (_currentIndex.value + 1).coerceIn(0, list.size)
-        list.addAll(insertAt, songs)
-        _queue.value = list
-        rebuildShuffleOrder(_currentIndex.value)
-        scope.launch { _messages.emit("已添加到下一首播放") }
+        applyQueueEdit(songs, QueueInsertPlacement.NEXT, "已添加到下一首播放")
     }
 
     fun enqueue(songs: List<Song>) {
         if (songs.isEmpty()) return
         if (_currentSong.value == null) {
-            setQueue(songs, 0, autoPlay = true)
+            setQueue(PlayerQueueEdit.dedupe(songs), 0, autoPlay = true)
             return
         }
-        _queue.value = _queue.value + songs
-        rebuildShuffleOrder(_currentIndex.value)
-        scope.launch { _messages.emit("已添加到播放队列") }
+        applyQueueEdit(songs, QueueInsertPlacement.END, "已添加到播放队列")
+    }
+
+    /** 按曲目身份去重后加歌（规则见 [PlayerQueueEdit]）；正在播放的曲目保持不变。 */
+    private fun applyQueueEdit(
+        songs: List<Song>,
+        placement: QueueInsertPlacement,
+        message: String,
+    ) {
+        val playing = _currentSong.value ?: return
+        val edit = PlayerQueueEdit.insert(
+            queue = _queue.value,
+            songs = songs,
+            currentIndex = _currentIndex.value,
+            playingKey = playing.key,
+            placement = placement,
+        )
+        _queue.value = edit.queue
+        _currentIndex.value = edit.currentIndex
+        rebuildShuffleOrder(edit.currentIndex)
+        // 队列改动可能换掉了"下一首"，旧的预解析目标不再适用
+        cancelNextPrefetch("queue_edited")
+        nextPrefetchCache.clear()
+        scope.launch { _messages.emit(message) }
     }
 
     fun removeFromQueue(index: Int) {
@@ -355,11 +502,14 @@ class PlayerManager(
 
     fun clearQueue() {
         stopPlaybackInternal()
+        cancelNextPrefetch("queue_cleared")
+        nextPrefetchCache.clear()
         _queue.value = emptyList()
         _currentIndex.value = -1
         _currentSong.value = null
         _state.value = PlaybackState.IDLE
         _lyrics.value = Lyrics()
+        _currentAudioInput.set(null)
     }
 
     fun play() {
@@ -377,9 +527,12 @@ class PlayerManager(
             _state.value == PlaybackState.ERROR ||
             engine.snapshot.value.error != null
         ) {
-            playCurrent()
+            val startMs = pendingPlayStartMs
+            pendingPlayStartMs = 0L
+            playCurrent(startMs)
             return
         }
+        pendingPlayStartMs = 0L
         engine.play()
         _state.value = PlaybackState.PLAYING
         playbackStartedAt = System.currentTimeMillis()
@@ -388,6 +541,11 @@ class PlayerManager(
     fun pause() {
         flushListeningTime()
         engine.pause()
+        // 暂停时只复位同步倍率参数、不立即改引擎速率：engine.pause() 会先做一段淡出，
+        // 此时 setSpeed 可能重建流水线（音效回退路径）或改写 Sonic 的速率换算，
+        // 让还没淡完的那一小段声音又响出来。用 deferred 语义等下次 play/seek 重建再生效。
+        // 离开房间/被提升控制者等"不紧跟重建"的场景仍用 resetListenTogetherRate 立即生效。
+        prepareSpeedForPipelineRestart()
         _state.value = PlaybackState.PAUSED
     }
 
@@ -425,13 +583,81 @@ class PlayerManager(
     }
 
     fun seekTo(positionMs: Long) {
+        // 硬定位后原来的软校正已经没有意义：只写速率参数、不额外重启流水线，
+        // seek 本身就会重建解码器，届时读到的正是用户倍速。
+        prepareSpeedForPipelineRestart()
         engine.fadeReset(if (_state.value == PlaybackState.PLAYING) 1f else 0f)
         // 当前歌的内存缓存就绪时用本地文件 seek（瞬时）；否则维持 URL 直连 seek。
+        // 缓存文件必须证明自己是完整的：半截文件（下载中断、磁盘满、旧版本留下的）能解析出
+        // 正确时长，却读不到后半段，用它 seek 长音频就会立刻 EOF —— 正是「一拖进度条就切歌」
+        // 的现场之一。判定只用本地已掌握的信息，不在 seek 路径上发网络请求：
+        // 拖动进度条是高频操作，卡一次网络就会让界面明显迟滞。
         val song = _currentSong.value
         val cached = audioCachedKey
-        val seekInput = if (song != null && cached == song.key && audioCacheFile.isFile)
-            AudioInput(path = audioCacheFile.absolutePath) else null
+        val cacheUsable = song != null && cached == song.key && audioCacheFile.isFile
+        // 用硬链接快照而不是 current.audio 本身：快照一旦建立，即便预取/切歌随后删掉原路径，
+        // 已经打开的 ffmpeg 依然能完整读到这份 inode，杜绝 TOCTOU 引起的「文件不存在」中断。
+        // 建快照失败（跨文件系统/权限）时退回 null —— URL 直连 seek 慢但可靠。
+        val seekInput = if (cacheUsable && isAudioCacheComplete()) {
+            createSeekCacheSnapshot()?.let { AudioInput(path = it.absolutePath) }
+        } else {
+            if (cacheUsable) invalidateAudioCache(song, "seek 时发现缓存不完整")
+            null
+        }
         engine.seekTo(positionMs, seekInput)
+    }
+
+    /**
+     * 为一次 seek 建立缓存文件的硬链接快照；失败返回 null（调用方退回 URL 直连）。
+     *
+     * 硬链接与 current.audio 同一 inode，不占额外空间；原路径被删后快照仍有效，
+     * 直到下一次 seek 主动删除它。长度再次对账，避免两次判定之间文件被换成半截文件。
+     */
+    private fun createSeekCacheSnapshot(): File? {
+        val key = audioCachedKey ?: return null
+        val snapshot = File(audioCacheDir, "seek-${key.hashCode()}-${++seekSnapshotSeq}.audio")
+        val ok = runCatching {
+            if (snapshot.exists()) snapshot.delete()
+            Files.createLink(snapshot.toPath(), audioCacheFile.toPath())
+            // 建立链接后再核对长度：预取若在两次检查之间替换了文件，宁可这次不用缓存
+            val expected = expectedAudioBytes[key] ?: -1L
+            snapshot.length() > 0L && (expected <= 0L || snapshot.length() >= expected)
+        }.getOrDefault(false)
+        if (!ok) {
+            runCatching { snapshot.delete() }
+            return null
+        }
+        // 上一次的快照此时已无 ffmpeg 在读（新一次 seek 会先停掉旧流水线），可以安全删除
+        seekSnapshotFile?.let { old -> if (old != snapshot) runCatching { old.delete() } }
+        seekSnapshotFile = snapshot
+        return snapshot
+    }
+
+    /** 本地缓存的已下载字节数。 */
+    private val audioCacheBytes: Long get() = runCatching { audioCacheFile.length() }.getOrDefault(0L)
+
+    /**
+     * 内存缓存是否完整：本地字节数与预取时记录的远端大小对账。
+     *
+     * 大小未知（预取时远端没给 Content-Length）时只能按「文件非空」判断，
+     * 这种情况交给解码器侧的结尾判定兜底，不会静默切歌。
+     */
+    private fun isAudioCacheComplete(): Boolean {
+        val localBytes = audioCacheBytes
+        if (localBytes <= 0L) return false
+        val expected = expectedAudioBytes[_currentSong.value?.key] ?: return true
+        if (expected <= 0L) return true
+        if (localBytes >= expected) return true
+        println("[cache] 缓存不完整：local=$localBytes expected=$expected")
+        return false
+    }
+
+    /** 缓存被判为不可用时清掉标记与文件，下次 seek 直接走远端直链。 */
+    private fun invalidateAudioCache(song: Song, reason: String) {
+        println("[cache] $reason，改用远端直链 seek：${song.displayName()}")
+        audioCachedKey = null
+        expectedAudioBytes.remove(song.key)
+        runCatching { audioCacheFile.delete() }
     }
 
     /** 直接播放队列中指定下标（Qt 前端的队列点击用）。 */
@@ -442,6 +668,65 @@ class PlayerManager(
     }
 
     fun restartCurrent() {
+        playCurrent()
+    }
+
+    /**
+     * 临时切换当前（或指定）曲目的播放音质。
+     *
+     * 与设置页的全局 qualityPreference 不同：这里的档位只记在 [qualityOverrides] 里，
+     * 按 Song.key 生效，既不写设置也不落盘。切歌后这首再次被播放时仍用新档位，
+     * 切到其他歌不受影响。音源不支持/无权限时解析失败会由调用方拿到明确文案。
+     */
+    suspend fun switchQuality(quality: String, song: Song? = null): Boolean {
+        val target = song ?: _currentSong.value ?: return false
+        val key = target.key
+        val previous = qualityOverrides.put(key, quality)
+        resolvedCache.remove(key)
+        nextPrefetchCache.invalidate(key)
+        if (audioCachedKey == key) audioCachedKey = null
+        runCatching { audioCacheFile.delete() }
+        expectedAudioBytes.remove(key)
+        // 解析新档位（网络 IO），失败时回滚覆盖，避免整首歌后续都卡在不可用的档位上
+        val input = resolveInput(target)
+        if (input == null) {
+            if (previous == null) qualityOverrides.remove(key) else qualityOverrides[key] = previous
+            return false
+        }
+        resolvedCache[key] = input
+        if (target.key == _currentSong.value?.key) {
+            _currentQuality.value = quality
+            // 续播：以当前引擎进度重新 open 新音源；open 会清掉播放请求，正在播时要恢复。
+            val wasPlaying = _state.value == PlaybackState.PLAYING
+            val position = engine.snapshot.value.positionMs
+            engine.open(input, position, durationMs.value)
+            _currentAudioInput.set(input)
+            if (wasPlaying) {
+                engine.play()
+                _state.value = PlaybackState.PLAYING
+                playbackStartedAt = System.currentTimeMillis()
+            }
+        }
+        return true
+    }
+
+    /** 当前曲目生效的音质档位：临时覆盖优先，否则用全局默认。 */
+    fun qualityFor(song: Song): String =
+        qualityOverrides[song.key] ?: settings.current.qualityPreference
+
+    /**
+     * 一起听：权威流到达后让当前曲目重新解析并打开音频。
+     *
+     * 只在当前曲目身份匹配、且当前确实已经 open 过音源时重载；清掉已解析缓存，
+     * 让 [resolveInput] 重新走 [OnlineRepository.resolvePlayback]（那边已优先使用共享流）。
+     * 进度由 ListenTogetherManager 在重载后按房态重新定位，这里只负责换音源。
+     */
+    fun reloadCurrentForSharedStream() {
+        val song = _currentSong.value ?: return
+        if (currentPlayingKey == null || _currentAudioInput.get() == null) return
+        resolvedCache.remove(song.key)
+        nextPrefetchCache.invalidate(song.key)
+        _currentAudioInput.set(null)
         playCurrent()
     }
 
@@ -474,8 +759,27 @@ class PlayerManager(
         return if (current > 0) current - 1 else queue.lastIndex
     }
 
+    /**
+     * 引擎报告「播放结束」。
+     *
+     * 引擎侧已经用「实际解出多少音频 vs 已知时长」筛掉了远端直链提前 EOF 的情况，
+     * 这里再按播放位置复核一次：位置明显没到结尾就不是真的播完，绝不能静默切下一首。
+     * 复核只对「时长已知」的曲目生效 —— 时长未知时没有任何依据，只能相信引擎。
+     */
     suspend fun handleTrackCompleted() {
+        // 先结账：中断那条路径也不该丢掉这一段已经听过的时间
         flushListeningTime()
+        val snapshot = engine.snapshot.value
+        val durationMs = snapshot.durationMs.takeIf { it > 0 } ?: _currentSong.value?.durationMs ?: 0L
+        val positionMs = snapshot.positionMs
+        if (!PlaybackEndPolicy.isCompletionConfirmed(positionMs, durationMs)) {
+            val message = PlaybackEndPolicy.interruptedMessage(positionMs, durationMs, null)
+            println("[player] 收到播放结束但没有播到结尾（position=${positionMs}ms duration=${durationMs}ms），按中断处理")
+            _state.value = PlaybackState.ERROR
+            _buffering.value = false
+            _messages.emit(message)
+            return
+        }
         if (_sleepTimer.value.stopAfterCurrent) {
             stopAfterCurrentFinished()
             return
@@ -522,34 +826,77 @@ class PlayerManager(
 
     // ---------------- 播放核心 ----------------
 
-    private fun playCurrent() {
+    private fun playCurrent(startMs: Long = 0L) {
         val queue = _queue.value
         val index = _currentIndex.value
         if (index !in queue.indices) return
+        // 落点是一次性的：setQueue(autoPlay=false, startMs) 暂存后由紧随的 play() 取出，
+        // 其它路径（next/previous/换源）不带落点，不能让上一次遗留的值污染新曲目的起点。
+        pendingPlayStartMs = 0L
         val song = queue[index]
         val switchingTrack = currentPlayingKey != null && currentPlayingKey != song.key
+        // 用户手动切到别的歌时，旧目标已无效：取消在飞任务，防止它写入过期结果。
+        // 注意不能在这里清掉 song.key 的缓存——自然轮播到预解析目标时，
+        // song.key 正是被预解析的下一首，清掉就失去了预解析的意义。
+        // resolveInput 里 consume 是一次性的，命中即移除，不会重复误用。
+        if (nextPrefetchKey != null && nextPrefetchKey != song.key) {
+            cancelNextPrefetch("target_changed")
+        }
+        // 切歌同样会重建流水线：只写参数，让 open 之后的流水线直接用用户倍速
+        prepareSpeedForPipelineRestart()
+        // 递增代次：此后任何旧解析协程回来时只要代次已变，就丢弃它的结果。
+        // 快速连续切歌时会有多个 resolveInput 在飞，代次是「最后一次请求胜出」的唯一裁决。
+        val generation = ++playbackGeneration
         _currentSong.value = song
         _state.value = PlaybackState.PREPARING
         _buffering.value = true
         beginCrossfadeIfNeeded(switchingTrack)
-        engine.prepare(song.durationMs)
+        // prepare 用目标进度初始化快照：界面从第一帧就显示房态位置，不再闪一下 0。
+        engine.prepare(song.durationMs, startMs)
         _lyrics.value = lyricsRepository.cached(song) ?: Lyrics()
-        scope.launch { loadLyricsFor(song) }
+        scope.launch { loadLyricsFor(song, generation) }
         scope.launch { updateCoverSeed(song) }
         scope.launch {
             val input = resolveInput(song)
-            if (input == null) {
-                _state.value = PlaybackState.ERROR
-                _buffering.value = false
-                _messages.emit("无法获取播放地址，请稍后重试")
+            // 解析是挂起调用，期间可能已经又切了歌；不是最新代次就丢弃结果，
+            // 绝不能 open 旧音源、也不能把 currentPlayingKey 写成过期 key。
+            if (generation != playbackGeneration) {
+                AppLog.debug(
+                    "player",
+                    "丢弃过期音源解析结果：key=${song.key} 当前代次=$playbackGeneration 本代次=$generation",
+                )
                 return@launch
             }
+            if (input == null) {
+                val reason = online.biliFailureReason(song) ?: "无法获取播放地址"
+                AppLog.error("player", "音源解析失败：key=${song.key} 歌名=${song.displayName()} 原因=$reason")
+                _state.value = PlaybackState.ERROR
+                _buffering.value = false
+                // 解析失败时不再保留上一次成功的音源：控制者据此避免把失效直链再上报给房间
+                _currentAudioInput.set(null)
+                // 一起听：本地解析失败时通知管理器（听众据此请求控制者直链），
+                // 不直接报错就结束——控制者若在线会补发共享流，稍后 reload 无缝接上。
+                onPlaybackResolveFailed?.invoke(song)
+                // B 站解析链路会记录具体失败原因（durl 缺失 / cid 不配套 / 试看片段等），
+                // 直接透出比笼统的「请稍后重试」更有用。
+                _messages.emit("$reason，请稍后重试")
+                return@launch
+            }
+            // probeDurationMs 同样是挂起式外部进程调用，期间也可能切歌；open 前再校验一次。
             val duration = song.durationMs.takeIf { it > 0 }
                 ?: FfmpegSupport.probeDurationMs(input)
-            engine.open(input, 0L, duration)
+            if (generation != playbackGeneration) {
+                AppLog.debug(
+                    "player",
+                    "丢弃过期音源解析结果（时长探测后）：key=${song.key} 当前代次=$playbackGeneration 本代次=$generation",
+                )
+                return@launch
+            }
+            engine.open(input, startMs, duration)
+            _currentAudioInput.set(input)
             engine.setVolume(_volume.value)
             if (engine.supportsEffects) {
-                engine.setSpeed(_speed.value)
+                engine.setSpeed(effectiveSpeed)
                 engine.setPitch(_pitch.value)
                 engine.setLoudness(_loudness.value)
                 engine.setAudioEffects(_audioEffects.value)
@@ -558,12 +905,18 @@ class PlayerManager(
             currentPlayingKey = song.key
             playbackStartedAt = System.currentTimeMillis()
             _state.value = PlaybackState.PLAYING
+            AppLog.info(
+                "player",
+                "音频已切到目标曲目：key=${song.key} 代次=$generation target=${input.displayTarget()}",
+            )
             history.record(song)
             stats.recordPlay(song)
             persistQueueState()
-            // 播放稳定后：后台下载当前歌到内存缓存（供 seek 瞬时切换），
-            // 并预解析下一首直链（切歌时省去网络解析）。都不阻塞当前播放。
+            // 播放稳定后：后台下载当前歌到内存缓存（供 seek 瞬时切换），不阻塞当前播放。
             scope.launch { cacheCurrentForSeek() }
+            // 对齐 Android：当前曲目开始播放（READY）即预解析下一首的最终播放地址，
+            // 不等整首歌下载完，也不阻塞当前播放。切歌命中缓存即可直接 open。
+            prefetchNextSongUrl()
             // 把在线音频流式缓存到磁盘 LRU（后台进行，切歌即取消），不阻塞播放。
             musicCacheApplyLimit()
             cacheOnlineSong(song, input)
@@ -614,8 +967,11 @@ class PlayerManager(
     }
 
     /**
-     * 后台缓存当前歌音频到唯一的内存文件（供 seek 使用），并预解析下一首直链。
+     * 后台缓存当前歌音频到唯一的内存文件（供 seek 使用）。
      * 缓存文件同时只存在一首：切歌后会被新的当前歌覆盖，不会累积占用。
+     *
+     * 下一首地址解析已经拆到 [prefetchNextSongUrl]，在播放开始时就并发启动，
+     * 不再排在整首歌下载之后——否则大文件下载会把地址预解析拖到切歌之后。
      */
     private suspend fun cacheCurrentForSeek() {
         val song = _currentSong.value ?: return
@@ -623,22 +979,93 @@ class PlayerManager(
         if (input.url != null && (audioCachedKey != song.key || !audioCacheFile.isFile)) {
             prefetchAudio(song, input)
         }
-        // 预解析下一首直链，切歌更快（不下载音频，仅缓存地址）
+    }
+
+    /**
+     * 在当前曲目开始播放时预解析下一首的最终播放地址（对齐 Android 的 READY 时机）。
+     *
+     * 与旧的 `cacheCurrentForSeek` 里顺序解析不同：
+     * - 独立协程，不与当前歌的整曲下载互相等待；
+     * - 走 [resolveInputForPrefetch]，会把网易云失败后的 B 站兜底也算进去，
+     *   这样切歌时不会现场串行「网易云失败 → B 站搜索」；
+     * - 有 TTL（[NextSongPrefetchCache]）、song.key 校验和超时；
+     * - 目标变化时取消在飞任务，用户手点另一首不会误用旧的预解析结果。
+     */
+    private fun prefetchNextSongUrl() {
         val queue = _queue.value
         val current = _currentIndex.value
         val nextIndex = resolveNextIndex(userInitiated = false)?.takeIf { it != current } ?: return
         val next = queue.getOrNull(nextIndex) ?: return
-        if (!resolvedCache.containsKey(next.key)) runCatching { resolveInput(next) }
-        trimResolvedCache(current, setOf(nextIndex))
+        if (next.isLocalFile() || next.source == MediaSource.LOCAL) return
+        // 一起听：有人在一起听时用房间共享流，不能预解析本地来源覆盖它。
+        // 共享流是"当前曲目"的权威流，下一首共享流尚未到达时不猜它的地址。
+        if (online.hasSharedStreamFor(next)) return
+
+        val key = next.key
+        if (nextPrefetchCache.containsFresh(key)) return
+        if (nextPrefetchJob?.isActive == true && nextPrefetchKey == key) return
+        cancelNextPrefetch("replace_target")
+
+        nextPrefetchKey = key
+        val durationMs = _currentSong.value?.durationMs ?: 0L
+        val launched = scope.launch(Dispatchers.IO) {
+            try {
+                // 与 Android 的解析预算一致：预解析不阻塞播放，超时就放弃，
+                // 让切歌时走正常的串行解析（届时由用户看到明确的等待/报错）。
+                val input = withTimeout(PREFETCH_TIMEOUT_MS) {
+                    resolveInputForPrefetch(next)
+                }
+                if (input != null && currentCoroutineContext().isActive) {
+                    // 解析途中共享流到达时丢弃本地结果，避免把过时地址留给切歌使用
+                    if (online.hasSharedStreamFor(next)) return@launch
+                    nextPrefetchCache.put(
+                        songKey = key,
+                        input = input,
+                        ttlMs = resolveNextPrefetchTtlMs(durationMs),
+                    )
+                    println("[prefetch] 下一首地址预解析完成：${next.displayName()} key=$key")
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                // 预解析失败不影响播放：切歌时走原来的同步解析兜底
+                println("[prefetch] 下一首地址预解析失败：${next.displayName()} error=${error.message}")
+            }
+        }
+        nextPrefetchJob = launched
+        launched.invokeOnCompletion {
+            if (nextPrefetchJob === launched) {
+                nextPrefetchJob = null
+                nextPrefetchKey = null
+            }
+        }
     }
 
-    /** 只保留当前与下一首的音源地址缓存（音频缓存始终只有一个文件）。 */
-    private fun trimResolvedCache(current: Int, neighbors: Set<Int>) {
-        val queue = _queue.value
-        val keep = HashSet<String>()
-        keep += queue.getOrNull(current)?.key ?: ""
-        neighbors.forEach { index -> queue.getOrNull(index)?.key?.let(keep::add) }
-        resolvedCache.keys.removeIf { it !in keep }
+    /** 切换目标、清空队列或切歌时取消在飞的下一次解析。 */
+    private fun cancelNextPrefetch(reason: String) {
+        val job = nextPrefetchJob ?: return
+        nextPrefetchJob = null
+        nextPrefetchKey = null
+        job.cancel(CancellationException("next prefetch cancelled: $reason"))
+    }
+
+    /**
+     * 预解析专用解析：与 [resolveInput] 的区别是"网易云直链不可用时当场走 B 站兜底"，
+     * 而不是把兜底留给真正切歌时做。只写预解析缓存，不写 [resolvedCache]/[currentQuality]
+     * 等播放态，避免影响正在播放的曲目。
+     */
+    private suspend fun resolveInputForPrefetch(song: Song): AudioInput? {
+        // 已下载的本地副本优先（等价于 resolveInput 的前两级缓存）
+        downloads.fileFor(song.key)?.let { return AudioInput(path = it.absolutePath) }
+        if (settings.current.cacheLimitMb != 0) {
+            musicCache.fileFor(song.key)?.let { return AudioInput(path = it.absolutePath) }
+        }
+        online.resolvePlayback(song, qualityFor(song))?.let { return it }
+        // 网易云直链解析失败（VIP/无权限）时提前跑 B 站搜索，这才是桌面端比手机端慢的根源。
+        if (song.source == MediaSource.NETEASE && settings.current.neteaseAutoSourceSwitch) {
+            return neteaseAutoSource.resolve(song)
+        }
+        return null
     }
 
     /**
@@ -677,11 +1104,17 @@ class PlayerManager(
 
     private fun stopPlaybackInternal() {
         flushListeningTime()
+        // 引擎即将释放：只清同步倍率标记，不再向已释放的引擎下发速率
+        discardListenTogetherRate()
         crossfadeJob?.cancel()
         finishCrossfade()
         engine.release()
+        // 清空/停止时让在飞的解析与歌词加载（共用播放代次）全部作废，避免它们的回调
+        // 在队列清空后又 open 音频、写 currentPlayingKey 或歌词，出现「空队列却在播旧歌」。
+        playbackGeneration++
         currentPlayingKey = null
         playbackStartedAt = 0L
+        _currentAudioInput.set(null)
     }
 
     /** 把当前播放片段的时长写入统计，并重新开始计时。 */
@@ -719,6 +1152,16 @@ class PlayerManager(
         val engineFailureRetry = song.source == MediaSource.NETEASE &&
             neteaseAutoSource.consumeEngineFailureRetry(song.key)
         if (!engineFailureRetry) {
+            // 命中预解析结果：切歌省去同步解析/换源等待。缓存带 TTL 与 song.key 校验，
+            // 过期或目标变化时 consume 返回 null，自然回退到下面的完整解析链路。
+            // 一起听：有房间共享流时绝不用本地预解析地址覆盖——共享流是权威来源，
+            // 且它的直链可能与本地解析结果不同（控制者版本/源不同）。
+            val prefetched = if (online.hasSharedStreamFor(song)) null else nextPrefetchCache.consume(song.key)
+            prefetched?.let { hit ->
+                println("[prefetch] 命中下一首预解析地址：${song.displayName()} key=${song.key}")
+                resolvedCache[song.key] = hit
+                return@withLock hit
+            }
             resolvedCache[song.key]?.let { cached ->
                 val path = cached.path
                 if (path != null) {
@@ -734,9 +1177,12 @@ class PlayerManager(
             }
         }
         if (!engineFailureRetry) {
-            val resolved = online.resolvePlayback(song, settings.current.qualityPreference)
+            // 播放页「切换音质」的临时档位只作用于这首歌（按 key），不写全局偏好
+            val effectiveQuality = qualityFor(song)
+            val resolved = online.resolvePlayback(song, effectiveQuality)
             if (resolved != null) {
                 resolvedCache[song.key] = resolved
+                if (song.key == _currentSong.value?.key) _currentQuality.value = effectiveQuality
                 // 首播/切歌照常走 URL 直连，不等待缓存；本地缓存只在 seek 时使用
                 return@withLock resolved
             }
@@ -756,7 +1202,7 @@ class PlayerManager(
         }
         if (engineFailureRetry) {
             // B 站也没找到时把直链再交给引擎试一次，避免一次偶发失败就彻底不播
-            val resolved = online.resolvePlayback(song, settings.current.qualityPreference)
+            val resolved = online.resolvePlayback(song, qualityFor(song))
             if (resolved != null) {
                 resolvedCache[song.key] = resolved
                 return@withLock resolved
@@ -772,12 +1218,25 @@ class PlayerManager(
         if (!settings.current.neteaseAutoSourceSwitch) return
         if (!neteaseAutoSource.requestEngineFailureRetry(song.key)) return
         println("[fallback] 网易云直链播放失败，尝试哔哩哔哩音源：${song.displayName()}")
-        scope.launch { playCurrent() }
+        // 换源重建必须带着中断前的进度：seek 失败触发的 fallback 若从 0 重新 open，
+        // 听众会被房间房态重新对齐、显示「跳回 0 再跳回来」。engine 快照的断点已被
+        // 中断处理写在 positionMs 上，直接用它续播，用户几乎无感。
+        val resumeMs = engine.snapshot.value.positionMs.coerceAtLeast(0L)
+        scope.launch { playCurrent(startMs = resumeMs) }
     }
 
-    private suspend fun loadLyricsFor(song: Song) {
+    private suspend fun loadLyricsFor(song: Song, generation: Int) {
         _lyricsLoading.value = true
         val loaded = lyricsRepository.load(song)
+        // 歌词加载同样可能跨越一次切歌：用播放代次裁决，过期的加载既不写歌词，
+        // 也不能把 loading 标志清成 false 覆盖新一轮的加载中状态。
+        if (generation != playbackGeneration) {
+            AppLog.debug(
+                "player",
+                "丢弃过期歌词结果：key=${song.key} 当前代次=$playbackGeneration 本代次=$generation",
+            )
+            return
+        }
         if (_currentSong.value?.key == song.key) {
             _lyrics.value = loaded
         }
@@ -787,7 +1246,7 @@ class PlayerManager(
     fun reloadLyrics() {
         val song = _currentSong.value ?: return
         lyricsRepository.invalidate(song)
-        scope.launch { loadLyricsFor(song) }
+        scope.launch { loadLyricsFor(song, playbackGeneration) }
     }
 
     private suspend fun updateCoverSeed(song: Song) {
@@ -865,8 +1324,66 @@ class PlayerManager(
     fun setSpeed(value: Float) {
         val clamped = value.coerceIn(0.5f, 3f)
         _speed.value = clamped
-        engine.setSpeed(clamped)
+        // 一起听软校正期间引擎跑的是「用户倍速 × 同步倍率」，用户改倍速时不能把同步抹掉。
+        engine.setSpeed(effectiveSpeed)
         settings.updateDeferred { it.copy(playbackSpeed = clamped) }
+    }
+
+    /**
+     * 一起听软同步：把临时同步倍率叠到用户倍速上。
+     *
+     * **不写 settings**——这是同步态，不是用户偏好；离开房间/暂停/切歌时必须调
+     * [resetListenTogetherRate] 恢复。引擎不支持变速时直接忽略（调用方应改走硬 seek）。
+     */
+    fun applyListenTogetherRate(rate: Float) {
+        val clamped = rate.coerceIn(
+            ListenTogetherSyncPolicy.SOFT_SYNC_RATE_MIN,
+            ListenTogetherSyncPolicy.SOFT_SYNC_RATE_MAX,
+        )
+        listenTogetherRate = clamped
+        applyEffectiveSpeedToEngine()
+    }
+
+    /** 只清软校正标记，不碰引擎；用于「引擎即将重建/释放」的场合。 */
+    private fun discardListenTogetherRate() {
+        listenTogetherRate = 1f
+    }
+
+    /**
+     * 结束软校正，同时把用户倍速写进引擎参数但**不重启**流水线。
+     *
+     * 调用方紧接着一定会 seek / 切歌触发重建，那才是速率真正生效的时机；
+     * 这里要是走 [resetListenTogetherRate] 就会多一次重启（卡顿 + 爆音）。
+     */
+    private fun prepareSpeedForPipelineRestart() {
+        listenTogetherRate = 1f
+        if (engine.supportsSpeedChange) engine.setSpeedDeferred(effectiveSpeed)
+    }
+
+    /** 结束软校正，恢复到用户的倍速设置；重复调用无副作用。 */
+    fun resetListenTogetherRate() {
+        if (listenTogetherRate == 1f) return
+        listenTogetherRate = 1f
+        applyEffectiveSpeedToEngine()
+    }
+
+    /**
+     * 软同步收敛后的倍速恢复：只把用户倍速写进引擎参数，等下一次自然重建（seek / 切歌）
+     * 再真正生效，本次不重建流水线。
+     *
+     * 收敛发生在音频平稳播放时，此时走 [resetListenTogetherRate] 会重建整条 ffmpeg
+     * 流水线（杀进程 + 重启 native DSP），用户会听到一瞬断声；而进度已经对齐，剩下的
+     * 倍速偏差完全可以等到下次本来就要重建的时机一起切过去。
+     *
+     * 引擎侧 [AudioEngine.setSpeedDeferred] 只改参数、保留 pipelineSpeed，因此正在跑的
+     * 流水线仍按旧速率折算帧数——这与「参数已变但流水线没变」的实际状态一致，进度不会算错。
+     *
+     * 仅限「收敛」这一处使用：离开房间、暂停、成为控制者等之后不一定有重建的场合，
+     * 必须走 [resetListenTogetherRate] 立刻生效，否则会一直用旧速率播放。
+     */
+    fun finishSoftSyncDeferred() {
+        if (listenTogetherRate == 1f) return
+        prepareSpeedForPipelineRestart()
     }
 
     fun setPitch(semitones: Float) {

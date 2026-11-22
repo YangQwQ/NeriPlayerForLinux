@@ -1,11 +1,13 @@
 package moe.ouom.neriplayer.desktop.core
 
+import moe.ouom.neriplayer.desktop.audio.Sonic
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.io.BufferedInputStream
 import java.io.File
 import java.io.InputStream
+import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import javax.sound.sampled.AudioFormat
@@ -36,19 +38,43 @@ data class AudioInput(
 interface AudioEngine {
     val snapshot: StateFlow<EngineSnapshot>
     val supportsEffects: Boolean
+
+    /**
+     * [setSpeed] 是否真的能改变播放速率。
+     *
+     * 这里不能用 [supportsEffects] 代替：它表达的是「有没有 DSP 音效」，
+     * 而一起听的软同步只关心速率能不能变（JavaSound 回退引擎的 [setSpeed] 是空实现，
+     * 软校正下发过去完全没效果，调用方必须改走硬 seek）。
+     */
+    val supportsSpeedChange: Boolean get() = supportsEffects
+
     var onCompleted: (() -> Unit)?
     var onError: ((String) -> Unit)?
 
     fun open(input: AudioInput, startMs: Long, durationMs: Long)
 
-    /** 切歌时先重置进度与时长，避免界面短暂显示上一首的进度信息。 */
-    fun prepare(durationMs: Long)
+    /**
+     * 切歌时先重置进度与时长，避免界面短暂显示上一首的进度信息。
+     *
+     * [startMs] 用于一起听：房态已经给出目标进度时，prepare 直接把进度设到目标，
+     * 不再先显示 0、等音频打开后再 seek 一次（那正是「切歌时进度条回到 0 又跳回来」）。
+     */
+    fun prepare(durationMs: Long, startMs: Long = 0L)
     fun play()
     fun pause()
     fun release()
     fun seekTo(positionMs: Long, input: AudioInput? = null)
     fun setVolume(volume: Float)
     fun setSpeed(speed: Float)
+
+    /**
+     * 只更新速率参数，**不重启**当前解码流水线；下一次重建（seek / 切歌）才会生效。
+     *
+     * 一起听要立刻硬定位时用它：先复位速率再 seek，可以避免「为改速率重启一次、
+     * seek 又重启一次」的双重重启（会卡顿/爆音）。默认退化为 [setSpeed]。
+     */
+    fun setSpeedDeferred(speed: Float) = setSpeed(speed)
+
     fun setPitch(semitones: Float)
     fun setLoudness(enabled: Boolean)
 
@@ -88,6 +114,24 @@ private const val BYTES_PER_FRAME = CHANNELS * 2
 
 /** 每次从 ffmpeg 管道读的块大小（32 KiB ≈ 170 ms 音频）。 */
 private const val READ_BLOCK_BYTES = 1 shl 15
+
+/**
+ * seek 实现方式。
+ *
+ * [Input]（`-ss` 在 `-i` 之前）是输入侧快速定位，只需一次带偏移的 Range 请求就能跳到目标位置，
+ * 但远端直链若拒绝这类请求就会退化甚至直接读不到数据；[Decode]（`-ss` 在 `-i` 之后）先把流
+ * 顺序读过去再丢弃前面的帧，慢但只依赖最普通的顺序读，作为定位失败后的回退。
+ */
+internal enum class SeekMode { Input, Decode }
+
+/**
+ * 解码侧 seek 回退的起点上限。
+ *
+ * 解码侧 seek 的代价约等于「顺序读完起点之前的全部数据」：全程约 0.2 倍实时，实测 10 小时远端
+ * 音频跳 300 秒要 60 秒才出声，跳 80% 就是几十分钟 —— 对长音频完全没有意义。只有近距跳转才
+ * 值得这样兜底，更远的失败应当直接上报，由上层重新解析音源（换一条新直链）再试。
+ */
+private const val DECODE_SEEK_MAX_START_MS = 120_000L
 object FfmpegSupport {
     val available: Boolean by lazy {
         runCatching {
@@ -127,6 +171,9 @@ class FfmpegAudioEngine : AudioEngine {
 
     override val supportsEffects: Boolean = true
 
+    /** ffmpeg 的 atempo 滤镜支持变速，一起听软同步可用。 */
+    override val supportsSpeedChange: Boolean = true
+
     private val _snapshot = MutableStateFlow(EngineSnapshot())
     override val snapshot: StateFlow<EngineSnapshot> = _snapshot.asStateFlow()
 
@@ -145,11 +192,42 @@ class FfmpegAudioEngine : AudioEngine {
     // 这组参数由命令线程写、音频线程读；volatile 保证调节即时生效，不能依赖锁的偶发 happens-before。
     @Volatile private var volume: Float = 0.85f
     @Volatile private var speed: Float = 1.0f
+    /**
+     * 当前解码流水线实际使用的时间伸缩比。
+     *
+     * [speed] 可以被 [setSpeedDeferred] 提前改写（下一次重建才生效），此时正在跑的
+     * ffmpeg 仍是旧速率。位置换算只能读这个值，否则「参数已改、流水线没改」的那段时间
+     * 会把帧数按新速率折算，进度凭空快进/倒退。
+     */
+    @Volatile private var pipelineSpeed: Float = 1.0f
     @Volatile private var pitch: Float = 0.0f
     @Volatile private var loudness: Boolean = false
 
     /** 当前 DSP 音效参数；`null` 表示旁路。由命令线程写、滤镜构建时读。 */
     @Volatile private var audioEffects: AudioEffectsSound? = null
+
+    /**
+     * 本条流水线由 Sonic 在 PCM 阶段承担变速/变调时才非 null。
+     *
+     * Sonic 的速度与音高在运行期可改，因此 `setSpeed`/`setPitch` 不会再重建 ffmpeg；
+     * 它不是线程安全的状态机，只由 reader 线程访问，参数通过 [sonicParam] 交接。
+     */
+    @Volatile private var sonic: Sonic? = null
+
+    /** 下一条流水线是否由 Sonic 处理变速/变调（命令线程写、reader 线程读）。 */
+    @Volatile private var sonicEnabled: Boolean = true
+
+    /** 命令线程 → 音频线程的 Sonic 参数（speed、pitch 倍率）。 */
+    private val sonicParam = java.util.concurrent.atomic.AtomicReference<Pair<Float, Float>?>(null)
+
+    /**
+     * 本条流水线已写入音频线的输出帧折算成的**媒体时间帧数**。
+     *
+     * 每写一块就按当时的 [pipelineSpeed] 累加：`媒体帧 += 输出帧 * 倍速`。
+     * 这样运行中改倍速不需要改 offset，也不会因为「累计差值被重复相加」而让进度乱跳；
+     * `line.write` 本身按实时速度阻塞，计数天然跟着实际播放走，不会超前。
+     */
+    @Volatile private var mediaFramesWritten: Long = 0L
 
     /**
      * 手递给音频线程的 native DSP 参数快照（SPSC：命令线程写、音频线程读）。
@@ -180,6 +258,14 @@ class FfmpegAudioEngine : AudioEngine {
     @Volatile
     private var paused = false
 
+    /**
+     * 上一次「输入侧 seek 失败 → 改用解码侧 seek 重试」的起点。
+     *
+     * 同一个起点只重试一次：解码侧 seek 是把流从头顺序读过去，再失败说明这条路也不通，
+     * 继续重试只会无限重建流水线。
+     */
+    private var decodeSeekRetryAt: Long = Long.MIN_VALUE
+
     override fun open(input: AudioInput, startMs: Long, durationMs: Long) {
         synchronized(lock) {
             stopPipelineLocked()
@@ -188,6 +274,7 @@ class FfmpegAudioEngine : AudioEngine {
             this.durationMs = durationMs
             playRequested = false
             paused = false
+            decodeSeekRetryAt = Long.MIN_VALUE
             fadeGain.reset(1f)
             mixSource.set(null)
             _snapshot.value = EngineSnapshot(
@@ -200,13 +287,17 @@ class FfmpegAudioEngine : AudioEngine {
         startPipeline(startMs = offsetMs, autoPlay = false)
     }
 
-    override fun prepare(durationMs: Long) {
+    override fun prepare(durationMs: Long, startMs: Long) {
+        val start = startMs.coerceAtLeast(0L).let { if (durationMs > 0) it.coerceAtMost(durationMs) else it }
         synchronized(lock) {
-            offsetMs = 0L
+            // 带着目标进度切歌时旧流水线必须停下：否则 tickLoop 会把「新 offset + 旧流水线
+            // 已输出的帧数」当成进度推给界面，目标位置瞬间被顶到时长之外。
+            if (start > 0L) stopPipelineLocked()
+            offsetMs = start
             this.durationMs = durationMs
         }
         _snapshot.value = EngineSnapshot(
-            positionMs = 0L,
+            positionMs = start,
             durationMs = durationMs,
             playing = false,
             buffering = true,
@@ -277,6 +368,8 @@ class FfmpegAudioEngine : AudioEngine {
         val shouldPlay = synchronized(lock) {
             offsetMs = target
             if (input != null) this@FfmpegAudioEngine.input = input
+            // 主动 seek 到新位置：上一次的重试记录不再适用
+            decodeSeekRetryAt = Long.MIN_VALUE
             playRequested
         }
         startPipeline(startMs = target, autoPlay = shouldPlay, input = input)
@@ -290,14 +383,36 @@ class FfmpegAudioEngine : AudioEngine {
         val clamped = speed.coerceIn(0.5f, 3.0f)
         if (abs(clamped - this.speed) < 0.0001f) return
         this.speed = clamped
-        restartPreservingPosition()
+        val active = sonic
+        if (active != null) {
+            // 热更新 Sonic：不重建 ffmpeg、不重建音频线，软同步调速不再断声。
+            // mediaFramesWritten 按每块写入时的速率累加，这里只改参数即可，进度天然连续。
+            sonicParam.set(clamped to pitchRatio(pitch))
+            // 输出帧 → 媒体时间的换算系数同步切到新倍速。
+            pipelineSpeed = clamped
+        } else {
+            // 回退路径（native DSP / ffmpeg 滤镜链）仍需重建才能让 atempo 生效。
+            restartPreservingPosition()
+        }
+    }
+
+    override fun setSpeedDeferred(speed: Float) {
+        // 只改参数：调用方紧接着会 seek/切歌重建流水线，这里重启一次纯属浪费。
+        // pipelineSpeed 保持旧值，直到 startPipeline 用新 [speed] 建出新流水线。
+        this.speed = speed.coerceIn(0.5f, 3.0f)
     }
 
     override fun setPitch(semitones: Float) {
         val clamped = semitones.coerceIn(-12f, 12f)
         if (abs(clamped - this.pitch) < 0.0001f) return
         this.pitch = clamped
-        restartPreservingPosition()
+        val active = sonic
+        if (active != null) {
+            // Sonic 的 pitch 是「倍率」而界面参数是半音；2^(n/12) 与 ffmpeg asetrate 一致。
+            sonicParam.set(speed to pitchRatio(clamped))
+        } else {
+            restartPreservingPosition()
+        }
     }
 
     override fun setLoudness(enabled: Boolean) {
@@ -382,9 +497,17 @@ class FfmpegAudioEngine : AudioEngine {
         startPipeline(startMs = position, autoPlay = shouldPlay, input = current)
     }
 
+    /** 半音 → 音高倍率（与 buildFilterChain 的 asetrate 计算一致）。 */
+    private fun pitchRatio(semitones: Float): Float = 2.0.pow(semitones / 12.0).toFloat()
+
+    /**
+     * 媒体时间线位置。
+     *
+     * 输出帧数由 [mediaFramesWritten] 按每块写入时的 [pipelineSpeed] 折算成媒体帧累计，
+     * 因此运行中热改倍速不会让进度凭空跳变：软同步下发 1.03/1.05 时界面进度会按新倍速增长。
+     */
     private fun currentPositionMs(): Long = synchronized(lock) {
-        val frames = runCatching { line?.longFramePosition?.toLong() ?: 0L }.getOrDefault(0L)
-        offsetMs + frames * 1000L / SAMPLE_RATE
+        offsetMs + mediaFramesWritten * 1000L / SAMPLE_RATE
     }
 
     /**
@@ -402,14 +525,18 @@ class FfmpegAudioEngine : AudioEngine {
 
     private fun buildFilterChain(): String {
         val filters = mutableListOf<String>()
-        val pitchRatio = 2.0.pow(pitch / 12.0)
-        if (abs(pitchRatio - 1.0) > 1e-3) {
-            filters += "asetrate=${(SAMPLE_RATE * pitchRatio).toInt()}"
-            filters += "aresample=$SAMPLE_RATE"
+        // Sonic 接管变速/变调后，ffmpeg 只负责解码成干净的 s16le；
+        // 滤镜链里若还留着 atempo/asetrate 就会被处理两遍（速度/音高都错）。
+        if (!sonicEnabled) {
+            val pitchRatio = 2.0.pow(pitch / 12.0)
+            if (abs(pitchRatio - 1.0) > 1e-3) {
+                filters += "asetrate=${(SAMPLE_RATE * pitchRatio).toInt()}"
+                filters += "aresample=$SAMPLE_RATE"
+            }
+            var tempo = speed.toDouble()
+            if (abs(pitchRatio - 1.0) > 1e-3) tempo /= pitchRatio
+            filters += tempoChain(tempo)
         }
-        var tempo = speed.toDouble()
-        if (abs(pitchRatio - 1.0) > 1e-3) tempo /= pitchRatio
-        filters += tempoChain(tempo)
         if (loudness) {
             filters += "dynaudnorm=f=250:g=15:p=0.9"
         }
@@ -565,13 +692,20 @@ class FfmpegAudioEngine : AudioEngine {
         return out
     }
 
-    private fun buildCommand(input: AudioInput, startMs: Long): List<String> {
+    private fun buildCommand(input: AudioInput, startMs: Long, seekMode: SeekMode): List<String> {
         val command = mutableListOf(
             "ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin",
         )
-        if (startMs > 0) {
-            command += listOf("-ss", "%.3f".format(startMs / 1000.0))
+        val seekArgs = if (startMs > 0) {
+            listOf("-ss", "%.3f".format(startMs / 1000.0))
+        } else {
+            emptyList()
         }
+        // 输入侧 -ss 依赖「带偏移的 Range 请求」才能落到目标位置：远端直链若不接受这类请求
+        // （403/空 206/只允许顺序读），ffmpeg 会退回顺序解复用，从 0 读到目标位置之前就可能
+        // 遇到流截断并直接 EOF。解码侧 -ss（-i 之后）先把流按顺序读，慢但只需要最普通的请求，
+        // 因此作为定位失败后的回退。
+        if (seekMode == SeekMode.Input) command += seekArgs
         if (input.headers.isNotEmpty()) {
             command += listOf(
                 "-headers",
@@ -580,6 +714,7 @@ class FfmpegAudioEngine : AudioEngine {
         }
         command += "-i"
         command += input.target
+        if (seekMode == SeekMode.Decode) command += seekArgs
         command += listOf("-vn", "-sn", "-dn")
         val filters = buildFilterChain()
         if (filters.isNotEmpty()) {
@@ -589,18 +724,43 @@ class FfmpegAudioEngine : AudioEngine {
         return command
     }
 
-    private fun startPipeline(startMs: Long, autoPlay: Boolean, input: AudioInput? = null) {
+    private fun startPipeline(
+        startMs: Long,
+        autoPlay: Boolean,
+        input: AudioInput? = null,
+        seekMode: SeekMode = SeekMode.Input,
+    ) {
         val target = input ?: synchronized(lock) { this.input } ?: return
+        // 落点防御：start 应当是与 duration 同量纲的毫秒。曾出现 start=1543132ms 而
+        // duration=366640ms 的异常值（多一位数/单位混淆），若直接下给 ffmpeg 的 -ss，
+        // 会落到音频之外、解不出数据，被误判成流中断。这里统一夹到 [0, duration]，
+        // 并把异常值打出来，便于从日志定位是哪个上游塞进来的脏数据。
+        val durationAtStart = synchronized(lock) { durationMs }
+        val safeStartMs = startMs.coerceAtLeast(0L)
+            .let { if (durationAtStart > 0L) it.coerceAtMost(durationAtStart) else it }
+        if (safeStartMs != startMs) {
+            println("[audio] seek 落点越界已夹取：start=${startMs}ms duration=${durationAtStart}ms → ${safeStartMs}ms")
+        }
         val myGeneration: Int
         synchronized(lock) {
             stopPipelineLocked()
             generation += 1
             myGeneration = generation
-            offsetMs = startMs.coerceAtLeast(0L)
+            offsetMs = safeStartMs
+            // 本条流水线真正使用的倍速必须在建命令行时锁定：setSpeedDeferred 会提前改
+            // [speed]（下一次重建才生效），而 EOF 判定/进度换算必须按当前这条流水线
+            // 实际跑的速率来算，否则「参数已改、流水线没改」的间隙会误判播完/误报进度。
+            pipelineSpeed = speed
             playRequested = autoPlay || playRequested
             // 音效走哪条路必须在建 ffmpeg 命令行**之前**定好：滤镜链与 native 处理环
             // 是二选一，同一条流水线上不允许两边都生效。
             nativeDsp = resolveNativeDspLocked()
+            // Sonic 在 PCM 阶段做时间/音高伸缩，可与 native DSP 共存（native 只处理样本）。
+            // 只有必须走 ffmpeg 滤镜链（EQ/响度回退）时才让 atempo/asetrate 接管，
+            // 否则同一段音频会被两边各处理一次。
+            sonicEnabled = !loudness && !(audioEffects?.enabled == true && !nativeDsp)
+            mediaFramesWritten = 0L
+            sonicParam.set(speed to pitchRatio(pitch))
             // 新流水线要从当前参数起步：native 首次加载可能发生在 setAudioEffects 之后，
             // 那时快照还是空的，这里补一次，避免"接了 DSP 但参数没送到"。
             if (nativeDsp) publishDspParams(audioEffects)
@@ -617,8 +777,21 @@ class FfmpegAudioEngine : AudioEngine {
             onError?.invoke(message)
             return
         }
+        // Sonic 绑定这条解码流水线（速度/音高可变，只在 reader 线程使用）。
+        val pipelineSonic = if (sonicEnabled) {
+            runCatching { Sonic(SAMPLE_RATE, CHANNELS, speed, pitchRatio(pitch), SAMPLE_RATE, false) }
+                .getOrElse { null }
+        } else {
+            null
+        }
+        // Sonic 初始化失败时回退到原 atempo 路径：重建命令行前同步决定，不带着半吊子状态启动。
+        if (sonicEnabled && pipelineSonic == null) {
+            synchronized(lock) { sonicEnabled = false }
+        }
+        sonic = pipelineSonic
+
         val newProcess = runCatching {
-            ProcessBuilder(buildCommand(target, startMs)).start()
+            ProcessBuilder(buildCommand(target, safeStartMs, seekMode)).start()
         }.getOrElse { error ->
             runCatching { newLine.close() }
             val message = "无法启动解码器：${error.message ?: error.javaClass.simpleName}"
@@ -631,7 +804,7 @@ class FfmpegAudioEngine : AudioEngine {
             line = newLine
             process = newProcess
             _snapshot.value = _snapshot.value.copy(
-                positionMs = startMs,
+                positionMs = safeStartMs,
                 durationMs = durationMs,
                 buffering = true,
                 playing = false,
@@ -658,7 +831,10 @@ class FfmpegAudioEngine : AudioEngine {
             null
         }
 
-        val reader = Thread({ readLoop(myGeneration, newProcess, newLine, startMs, dspStage) }, "neri-audio-reader")
+        val reader = Thread(
+            { readLoop(myGeneration, newProcess, newLine, safeStartMs, dspStage, seekMode) },
+            "neri-audio-reader",
+        )
         reader.isDaemon = true
         readerThread = reader
         reader.start()
@@ -677,10 +853,19 @@ class FfmpegAudioEngine : AudioEngine {
         line: SourceDataLine,
         startMs: Long,
         dspStage: NeriDspStage?,
+        seekMode: SeekMode,
     ) {
         val inputStream: InputStream = BufferedInputStream(process.inputStream, 1 shl 16)
         val buffer = ByteArray(READ_BLOCK_BYTES)
         var finishedNormally = false
+        val activeSonic = sonic
+        // 堆缓冲：getOutput 后的 array() 可直接交给 line.write，避免每块多一次拷贝。
+        val sonicOut = ByteBuffer.allocate(READ_BLOCK_BYTES * 2)
+        var mediaFrames = 0L
+        // 这条流水线解出的音频总长：判断 EOF 是「真的播完」还是「流被中途掐断」的唯一依据。
+        // 不能用播放位置代替：它含 offsetMs，而主动 seek 后 offsetMs 已经跳到目标位置，
+        // 一旦流当场失败就会得到「位置 = 目标点」的假象，正是旧的 EOF 判定误切歌的来源。
+        var producedFrames = 0L
         try {
             while (true) {
                 if (synchronized(lock) { generation != myGeneration || restarting }) break
@@ -696,19 +881,38 @@ class FfmpegAudioEngine : AudioEngine {
                     break
                 }
                 if (read == 0) continue
+                mediaFrames += read / BYTES_PER_FRAME
+                var outAddress: ByteArray = buffer
+                var outLength = read
+                if (activeSonic != null) {
+                    // Sonic 先做时间/音高伸缩：给 native DSP 的仍是 48k/2ch/s16le 干净流，
+                    // 且输出帧数变化对 DSP 透明（它只逐样本处理）。
+                    sonicParam.getAndSet(null)?.let { (s, p) ->
+                        activeSonic.setSpeed(s)
+                        activeSonic.setPitch(p)
+                    }
+                    activeSonic.queueInput(ByteBuffer.wrap(buffer, 0, read))
+                    sonicOut.clear()
+                    activeSonic.getOutput(sonicOut)
+                    outLength = sonicOut.remaining()
+                    outAddress = sonicOut.array()
+                }
+                producedFrames += outLength / BYTES_PER_FRAME
+                // 按写入时的速率把输出帧折算成媒体帧（Sonic 变速后两者不再一一对应）。
+                mediaFramesWritten += (outLength / BYTES_PER_FRAME * pipelineSpeed).toLong()
                 // DSP 必须在 applyVolume 之前：压缩器/限幅器的阈值按 dBFS 判定，对绝对电平敏感。
                 // 放在音量之后的话，用户把音量拉到 20% 就等于让压缩器彻底失效。
-                if (dspStage != null && !dspStage.process(buffer, read)) {
+                if (dspStage != null && !dspStage.process(outAddress, outLength)) {
                     // native 在这条流上失效了，而这条流水线没有挂滤镜 —— 重建一次，
                     // 让新流水线走 applyAudioEffectsToFilters 的回退路径，别让声音变成未处理。
                     onNativeDspFailed()
                     return
                 }
-                applyVolume(buffer, read)
+                applyVolume(outAddress, outLength)
                 var written = 0
-                while (written < read) {
+                while (written < outLength) {
                     if (synchronized(lock) { generation != myGeneration }) return
-                    val count = line.write(buffer, written, read - written)
+                    val count = line.write(outAddress, written, outLength - written)
                     if (count <= 0) break
                     written += count
                 }
@@ -716,27 +920,171 @@ class FfmpegAudioEngine : AudioEngine {
         } catch (_: Throwable) {
             // 管道被主动关闭时忽略
         } finally {
+            if (activeSonic != null && finishedNormally && synchronized(lock) { generation == myGeneration }) {
+                // 把 Sonic 缓冲的尾音推出去，避免变慢速时结尾几个音被吞掉。
+                runCatching {
+                    activeSonic.queueEndOfStream()
+                    sonicOut.clear()
+                    activeSonic.getOutput(sonicOut)
+                    val tailLength = sonicOut.remaining()
+                    producedFrames += tailLength / BYTES_PER_FRAME
+                    var off = 0
+                    while (off < tailLength) {
+                        val count = line.write(sonicOut.array(), off, tailLength - off)
+                        if (count <= 0) break
+                        off += count
+                    }
+                    activeSonic.flush()
+                }
+            }
             // JNI 句柄必须在本线程销毁（引擎不保证跨线程安全），跟随读线程一起收尾
             dspStage?.close()
             runCatching { inputStream.close() }
             val stillCurrent = synchronized(lock) { generation == myGeneration }
             if (finishedNormally && stillCurrent) {
-                runCatching { line.drain() }
-                runCatching { line.stop() }
+                // 进程这时通常已经退出，stderr 可以安全读完；它既是诊断信息也是判定依据之一
+                val errorText = runCatching {
+                    process.errorStream.readBytes().decodeToString().trim()
+                }.getOrDefault("")
+                settleFinishedPipeline(
+                    myGeneration = myGeneration,
+                    line = line,
+                    startMs = startMs,
+                    seekMode = seekMode,
+                    playedFrames = if (activeSonic != null) mediaFrames else producedFrames,
+                    sonicPath = activeSonic != null,
+                    stderrText = errorText,
+                )
+            }
+        }
+    }
+
+    /**
+     * 解码器停下来了：判定这是「真的播完了」还是「流被中断」，再决定回调哪个。
+     *
+     * 只看 EOF 是不够的 —— 远端直链在 seek 请求被拒、被 CDN 截断、签名过期时都会让 ffmpeg
+     * 提前关闭 stdout，其中不少还是以 0 正常退出，光看退出码分不出来。所以这里比较
+     * 「这条流水线实际解出多少音频」与「已知时长还差多少」，差额超过容差就当异常中断：
+     * 上报错误（不回调 onCompleted，上层因此不会切歌），必要时换一种 seek 方式重试一次。
+     *
+     * 调用方已确认 generation 仍有效：主动 seek / 切歌造成的 EOF 在更早的检查里就返回了，
+     * 不会走到这里被误报成错误。
+     */
+    private fun settleFinishedPipeline(
+        myGeneration: Int,
+        line: SourceDataLine,
+        startMs: Long,
+        seekMode: SeekMode,
+        playedFrames: Long,
+        sonicPath: Boolean,
+        stderrText: String,
+    ) {
+        val (knownDurationMs, activeSpeed) = synchronized(lock) { durationMs to pipelineSpeed }
+        val playedOutMs = if (sonicPath) {
+            // Sonic 路径：playedFrames 是媒体帧，按最终倍速折算成输出时间线供策略判定。
+            (playedFrames * 1000L / SAMPLE_RATE / maxOf(activeSpeed, 0.01f)).toLong()
+        } else {
+            playedFrames * 1000L / SAMPLE_RATE
+        }
+        val outcome = PlaybackEndPolicy.check(
+            startMs = startMs,
+            playedOutMs = playedOutMs,
+            durationMs = knownDurationMs,
+            speed = activeSpeed,
+            producedAudio = playedFrames > 0L,
+            stderr = stderrText,
+        )
+        if (outcome.isCompleted) {
+            runCatching { line.drain() }
+            runCatching { line.stop() }
+            _snapshot.value = _snapshot.value.copy(
+                playing = false,
+                buffering = false,
+                positionMs = durationMs.takeIf { it > 0 } ?: currentPositionMs(),
+            )
+            if (outcome.verdict == PlaybackEndPolicy.Verdict.UNKNOWN_DURATION && stderrText.isNotBlank()) {
+                // 时长未知：没法用位置证明播完，只能相信 EOF，但把 stderr 留作诊断
+                println("[audio] 时长未知，按解码结束收尾：${stderrText.take(200)}")
+            }
+            onCompleted?.invoke()
+            return
+        }
+
+        // ---- 到这里是「中途断了」，不是播放结束 ----
+        // 输入侧 -ss 落到目标位置需要一条带偏移的 Range 请求，远端拒绝时最先牺牲的就是这种 seek；
+        // 换解码侧 seek 重来一次（进度会短暂回退到 startMs，但声音能继续）。
+        if (retryWithDecodeSeek(myGeneration, startMs, seekMode, stderrText)) return
+
+        val detail = diagnoseInterruptedStream(stderrText, outcome.producedNothing)
+        val message = PlaybackEndPolicy.interruptedMessage(outcome.breakpointMs, knownDurationMs, detail)
+        println(
+            "[audio] 播放流提前中断（start=${startMs}ms played=${playedOutMs}ms duration=${knownDurationMs}ms " +
+                "seek=$seekMode 缺口=${outcome.remainingMs}ms stderr=${stderrText.take(400)}）",
+        )
+        runCatching { line.stop() }
+        synchronized(lock) {
+            // 位置停在断点而不是时长末尾：界面不会假装已经播完
+            if (generation == myGeneration) {
+                // 流水线已经死了，但 playRequested 还是 true 的话 ticker 会继续把
+                // playing=true 推给界面（显示在播放、其实没声音）。停在断点即视为暂停。
+                playRequested = false
                 _snapshot.value = _snapshot.value.copy(
                     playing = false,
                     buffering = false,
-                    positionMs = durationMs.takeIf { it > 0 } ?: currentPositionMs(),
+                    positionMs = outcome.breakpointMs,
+                    error = message,
                 )
-                val errorText = runCatching { process.errorStream.readBytes().decodeToString().trim() }.getOrDefault("")
-                if (errorText.isNotBlank() && _snapshot.value.durationMs == 0L && offsetMs == 0L) {
-                    _snapshot.value = _snapshot.value.copy(error = errorText.take(300))
-                    onError?.invoke(errorText.take(300))
-                } else {
-                    onCompleted?.invoke()
-                }
             }
         }
+        onError?.invoke(message)
+    }
+
+    /**
+     * 输入侧 seek 失败后换解码侧 seek 重试一次。
+     *
+     * 返回 true 表示已经重建了流水线、后续收尾交给新流水线，调用方不应再上报错误。
+     *
+     * 只对「起点较近、且能便宜地重来一次」的流水线生效：
+     * - 起点超过 [DECODE_SEEK_MAX_START_MS]，解码侧 seek 要先顺序读完前面全部数据，长音频要几十分钟，
+     *   不如直接把错误交给上层去换一条新直链；
+     * - 同一个起点最多重试一次（记在 [decodeSeekRetryAt]），避免「定位失败 → 重试 → 又失败」的循环。
+     */
+    private fun retryWithDecodeSeek(
+        myGeneration: Int,
+        startMs: Long,
+        seekMode: SeekMode,
+        stderrText: String,
+    ): Boolean {
+        if (seekMode != SeekMode.Input || startMs <= 0L) return false
+        if (startMs > DECODE_SEEK_MAX_START_MS) {
+            println("[audio] 起点 ${startMs}ms 超出解码侧 seek 的可用范围，直接上报中断")
+            return false
+        }
+        val target = synchronized(lock) {
+            if (generation != myGeneration) return false
+            if (decodeSeekRetryAt == startMs) {
+                println(
+                    "[audio] 解码侧 seek 重试仍失败（start=${startMs}ms），停止重试：" +
+                        stderrText.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty().take(200),
+                )
+                return false
+            }
+            decodeSeekRetryAt = startMs
+            input
+        } ?: return false
+        println("[audio] 输入侧 seek 后流提前中断，改用解码侧 seek 重试（start=${startMs}ms）")
+        startPipeline(startMs = startMs, autoPlay = true, input = target, seekMode = SeekMode.Decode)
+        return true
+    }
+
+    /** 从 ffmpeg stderr 提炼一句诊断；空白时给出按场景的推断。 */
+    private fun diagnoseInterruptedStream(stderrText: String, producedNothing: Boolean): String? {
+        val firstLine = stderrText.lineSequence().map { it.trim() }.firstOrNull { it.isNotBlank() }
+        if (firstLine != null) {
+            // ffmpeg 的 banner 前缀对用户没意义，只留 [模块 @ 地址] 之后的部分
+            return firstLine.substringAfterLast("] ", firstLine).take(160)
+        }
+        return if (producedNothing) "无法从该位置读取音频（音源链接可能已失效或不允许断点续传）" else null
     }
 
     private fun applyVolume(buffer: ByteArray, length: Int) {
@@ -800,6 +1148,9 @@ class JavaSoundAudioEngine : AudioEngine {
 
     override val supportsEffects: Boolean = false
 
+    /** 回退引擎的 [setSpeed] 是空实现，变速请求一律无效；一起听只能硬 seek。 */
+    override val supportsSpeedChange: Boolean = false
+
     private val _snapshot = MutableStateFlow(EngineSnapshot())
     override val snapshot: StateFlow<EngineSnapshot> = _snapshot.asStateFlow()
 
@@ -842,13 +1193,15 @@ class JavaSoundAudioEngine : AudioEngine {
         _snapshot.value = EngineSnapshot(positionMs = startMs, durationMs = durationMs, buffering = true)
     }
 
-    override fun prepare(durationMs: Long) {
+    override fun prepare(durationMs: Long, startMs: Long) {
+        val start = startMs.coerceAtLeast(0L).let { if (durationMs > 0) it.coerceAtMost(durationMs) else it }
         synchronized(lock) {
-            offsetMs = 0L
+            if (start > 0L) closeLocked()
+            offsetMs = start
             this.durationMs = durationMs
         }
         _snapshot.value = EngineSnapshot(
-            positionMs = 0L,
+            positionMs = start,
             durationMs = durationMs,
             playing = false,
             buffering = true,
@@ -990,6 +1343,7 @@ class JavaSoundAudioEngine : AudioEngine {
         val worker = Thread({
             val buffer = ByteArray(1 shl 15)
             var finished = false
+            var producedFrames = 0L
             try {
                 while (true) {
                     if (synchronized(lock) { generation != myGeneration }) return@Thread
@@ -1003,6 +1357,7 @@ class JavaSoundAudioEngine : AudioEngine {
                         break
                     }
                     applyVolume(buffer, read)
+                    producedFrames += read / frameBytes
                     var written = 0
                     while (written < read) {
                         val count = newLine.write(buffer, written, read - written)
@@ -1015,10 +1370,37 @@ class JavaSoundAudioEngine : AudioEngine {
             } finally {
                 runCatching { decoded.close() }
                 if (finished && synchronized(lock) { generation == myGeneration }) {
+                    // 与 FfmpegAudioEngine 同一套判定：缓存文件没下完/流被截断时 EOF 不是播放结束，
+                    // 不能让它变成 onCompleted。回退引擎没有 stderr 可用，只按解出的长度判断；
+                    // 它的 setSpeed 也是空实现，倍速恒为 1。
+                    val knownDurationMs = synchronized(lock) { durationMs }
+                    val outcome = PlaybackEndPolicy.check(
+                        startMs = skipMs,
+                        playedOutMs = producedFrames * 1000L / sampleRate.coerceAtLeast(1),
+                        durationMs = knownDurationMs,
+                        speed = 1f,
+                        producedAudio = producedFrames > 0L,
+                        stderr = "",
+                    )
                     runCatching { newLine.drain() }
                     runCatching { newLine.stop() }
-                    _snapshot.value = _snapshot.value.copy(playing = false, buffering = false)
-                    onCompleted?.invoke()
+                    if (outcome.isCompleted) {
+                        _snapshot.value = _snapshot.value.copy(playing = false, buffering = false)
+                        onCompleted?.invoke()
+                    } else {
+                        val message = PlaybackEndPolicy.interruptedMessage(
+                            outcome.breakpointMs,
+                            knownDurationMs,
+                            "本地缓存可能不完整",
+                        )
+                        _snapshot.value = _snapshot.value.copy(
+                            playing = false,
+                            buffering = false,
+                            positionMs = outcome.breakpointMs,
+                            error = message,
+                        )
+                        onError?.invoke(message)
+                    }
                 }
             }
         }, "neri-javasound-reader")

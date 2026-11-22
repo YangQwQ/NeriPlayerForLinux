@@ -22,6 +22,9 @@ class TrayService(
     val running: Boolean get() = notifier?.running == true
 
     fun start(scope: CoroutineScope) {
+        // 托盘菜单的回调是 DBus 线程上的同步接口，播放控制统一交给 playbackCommands
+        // （房间里是听众时它会转发给房间，与界面按钮、媒体键、全局快捷键同一路径）。
+        val playback = container.playbackCommands
         val service = StatusNotifierService(
             title = {
                 container.player.currentSong.value?.let { "NeriPlayer · ${it.title}" } ?: "NeriPlayer"
@@ -29,9 +32,9 @@ class TrayService(
             playing = { container.player.state.value == PlaybackState.PLAYING },
             floatingLyricsEnabled = { container.settings.current.floatingLyricsEnabled },
             floatingLyricsLocked = { container.settings.current.floatingLyricsLocked },
-            onTogglePlay = { container.player.togglePlayPause() },
-            onPrevious = { container.player.previous() },
-            onNext = { container.player.next() },
+            onTogglePlay = { scope.launch { playback.togglePlayPause() } },
+            onPrevious = { scope.launch { playback.previous() } },
+            onNext = { scope.launch { playback.next() } },
             onShowWindow = { emit("showWindow") },
             onToggleFloatingLyrics = {
                 val next = !container.settings.current.floatingLyricsEnabled
