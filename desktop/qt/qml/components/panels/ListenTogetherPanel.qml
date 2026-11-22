@@ -2,13 +2,15 @@ import QtQuick
 import QtQuick.Controls
 import ".."
 import "../player"
+import "../library"
 import "../listentogether"
 
 // 一起听（Listen Together）面板。
 //
 // 打开方式：Nav.openPanel("listenTogether")（集成方在 PlayerOverlays 里按名字挂载本文件）。
 // 交互全部在这里完成：服务端地址配置 / 创建或加入房间 / 成员与角色 / 当前歌曲 /
-// 控制按钮 / 房间设置 / 连接状态与错误。协议见 desktop/docs/protocol-listen-together.md。
+// 控制按钮 / 房间队列增删序 / 房间设置 / 连接状态与错误。
+// 协议见 desktop/docs/protocol-listen-together.md。
 PanelShell {
     id: panel
 
@@ -54,6 +56,39 @@ PanelShell {
     readonly property bool autoPauseOnMemberChange: panel.settings !== null
                                                     && panel.settings.autoPauseOnMemberChange === true
     readonly property bool shareAudioLinks: panel.settings !== null && panel.settings.shareAudioLinks === true
+
+    // 房间共享流状态：后端在 ListenTogetherSnapshot 里暴露（字段名见汇报）。
+    // usingSharedStream = true 表示听众当前正用控制者分享的播放地址；
+    // sharedStreamAvailable = false 表示控制者开启了共享但当前曲目没有可用地址（已回退本机解析）。
+    readonly property bool usingSharedStream: panel.status.usingSharedStream === true
+                                              || panel.status.usingSharedAudioUrl === true
+    readonly property bool sharedStreamAvailable: panel.status.sharedStreamAvailable === true
+                                                  || panel.status.sharedAudioUrlAvailable === true
+    // 房间当前曲目是否带共享地址（快照字段缺失时用 streamUrl / streamUrls 兜底判断）。
+    readonly property bool trackHasSharedUrl: {
+        if (panel.track === null)
+            return false
+        if (panel.track.streamUrl !== undefined && panel.track.streamUrl !== null
+                && String(panel.track.streamUrl) !== "")
+            return true
+        return panel.toArray(panel.track.streamUrls).length > 0
+    }
+    readonly property bool sharedStreamRequested: !panel.isController && panel.shareAudioLinks && panel.track !== null
+    readonly property bool sharedStreamUnavailable: panel.sharedStreamRequested
+                                                    && panel.sharedStreamAvailable === false
+    readonly property bool sharedStreamInUse: panel.sharedStreamRequested
+                                              && (panel.usingSharedStream || (panel.sharedStreamAvailable && panel.trackHasSharedUrl))
+    readonly property string sharedStreamHint: {
+        if (!panel.sharedStreamRequested)
+            return ""
+        if (panel.usingSharedStream)
+            return I18n.tr("正在使用房间共享的音频地址")
+        if (panel.sharedStreamUnavailable)
+            return I18n.tr("共享地址不可用，已回退本机解析")
+        if (panel.sharedStreamAvailable && panel.trackHasSharedUrl)
+            return I18n.tr("正在使用房间共享的音频地址")
+        return ""
+    }
 
     readonly property string trackTitle: panel.track !== null && panel.track.name !== undefined
                                          ? String(panel.track.name) : I18n.tr("暂无歌曲")
@@ -235,6 +270,146 @@ PanelShell {
         Toast.show(I18n.tr("邀请链接已复制"), "info")
     }
 
+    // ---------------------------------------------------------------- 房间队列增删
+
+    /**
+     * 房间队列是否可编辑：控制者改本地队列后由后端 publishLocalState 同步，
+     * 听众则需要服务端允许成员控制（action 只对听众有效，控制者调会被拒绝）。
+     */
+    readonly property bool roomQueueEditable: panel.connection === "connected" && panel.inRoom
+                                              && (panel.isController || panel.allowMemberControl)
+
+    /** 房间曲目 / 播放器歌曲的来源 → 一起听协议的 channelId。 */
+    function queueChannel(source) {
+        switch (String(source || "").toUpperCase()) {
+        case "NETEASE":
+            return "netease"
+        case "BILIBILI":
+            return "bilibili"
+        case "YOUTUBE":
+            return "youtubeMusic"
+        default:
+            return "local"
+        }
+    }
+
+    /**
+     * 歌曲身份 "channelId:audioId"，用于判断是否已在房间队列里。
+     * 房间曲目用 channelId/audioId，播放器歌曲用 source/remoteId，两者在此对齐。
+     */
+    function songIdentity(item) {
+        if (!item)
+            return ""
+        const channel = item.channelId !== undefined && item.channelId !== null
+                        ? String(item.channelId) : panel.queueChannel(item.source)
+        const audio = item.audioId !== undefined && item.audioId !== null
+                      ? String(item.audioId) : String(item.remoteId || "")
+        return channel + ":" + audio
+    }
+
+    /** 本地歌曲、缺远端 ID 的歌曲以及 YouTube 歌曲不能进入房间（后端会直接拒绝）。 */
+    function canShareToRoom(song) {
+        if (!song)
+            return false
+        const source = String(song.source || "LOCAL").toUpperCase()
+        if (source === "LOCAL" || source === "YOUTUBE")
+            return false
+        return String(song.remoteId || "") !== ""
+    }
+
+    readonly property var roomQueueIdentities: {
+        const list = []
+        for (let i = 0; i < panel.roomQueue.length; ++i)
+            list.push(panel.songIdentity(panel.roomQueue[i]))
+        return list
+    }
+
+    /**
+     * 房间曲目 → 本地播放队列下标。
+     * 控制者的房间队列是从本地队列里过滤出来的（本地歌曲不入房间），
+     * 所以房间下标与本地下标通常不同，改本地队列前必须先换算。
+     */
+    function localQueueIndexOf(track) {
+        if (!track)
+            return -1
+        const identity = panel.songIdentity(track)
+        const queue = Player.queue !== undefined && Player.queue !== null ? Player.queue : []
+        for (let i = 0; i < queue.length; ++i) {
+            if (panel.songIdentity(queue[i]) === identity)
+                return i
+        }
+        return -1
+    }
+
+    function addToRoomQueue(song) {
+        if (!song || panel.busy)
+            return
+        if (!panel.canShareToRoom(song)) {
+            Toast.show(I18n.tr("该歌曲不能加入一起听（本地歌曲或缺少远端 ID）"), "error")
+            return
+        }
+        if (panel.roomQueueIdentities.indexOf(panel.songIdentity(song)) >= 0) {
+            Toast.show(I18n.tr("该歌曲已在房间队列中"), "info")
+            return
+        }
+        if (panel.isController) {
+            Player.enqueue([song])
+            Toast.show(I18n.tr("已添加到房间队列"), "info")
+            return
+        }
+        // 听众走 requestControl，成功提示等后端快照回来再给
+        panel.run("listenTogether.requestControl",
+                  { "action": "addToQueue", "track": song },
+                  function(result) {
+                      if (result)
+                          Toast.show(I18n.tr("已添加到房间队列"), "info")
+                  })
+    }
+
+    function removeFromRoomQueue(index) {
+        if (panel.busy || index < 0 || index >= panel.roomQueue.length || panel.roomQueue.length <= 1)
+            return
+        if (panel.isController) {
+            const localIndex = panel.localQueueIndexOf(panel.roomQueue[index])
+            if (localIndex < 0)
+                return
+            Player.removeFromQueue(localIndex)
+            return
+        }
+        panel.run("listenTogether.requestControl", { "action": "removeFromQueue", "index": index })
+    }
+
+    function moveInRoomQueue(from, to) {
+        if (panel.busy || from === to || from < 0 || to < 0
+                || from >= panel.roomQueue.length || to >= panel.roomQueue.length)
+            return
+        if (panel.isController) {
+            const localFrom = panel.localQueueIndexOf(panel.roomQueue[from])
+            const localTo = panel.localQueueIndexOf(panel.roomQueue[to])
+            if (localFrom < 0 || localTo < 0)
+                return
+            Player.moveInQueue(localFrom, localTo)
+            return
+        }
+        panel.run("listenTogether.requestControl",
+                  { "action": "moveInQueue", "fromIndex": from, "toIndex": to })
+    }
+
+    /** 只展示队列前 5 首；「查看全部」在面板内展开完整列表。 */
+    property bool queueExpanded: false
+
+    function openAddSongs() {
+        addSongsPanel.openFor()
+    }
+
+    function confirmLeaveRoom() {
+        leaveConfirm.openFor(I18n.tr("离开房间"),
+                             panel.isController
+                             ? I18n.tr("你是控制者，离开后房间将由服务端关闭，其他成员会断开。确定要离开吗？")
+                             : I18n.tr("确定要离开这个房间吗？离开后需要重新加入才能继续一起听。"),
+                             I18n.tr("离开"))
+    }
+
     // ---------------------------------------------------------------- 生命周期
 
     title: I18n.tr("一起听")
@@ -245,7 +420,7 @@ PanelShell {
         text: I18n.tr("离开")
         chip: true
         enabledButton: !panel.busy
-        onClicked: panel.leaveRoom()
+        onClicked: panel.confirmLeaveRoom()
     }
 
     Component.onCompleted: {
@@ -286,6 +461,29 @@ PanelShell {
         contentWidth: width
         contentHeight: contentColumn.height + Theme.spacingLg * 2
         boundsBehavior: Flickable.StopAtBounds
+
+        // 房间队列增删 / 离开房间的弹窗。PanelShell 的默认属性是标题栏操作区，
+        // 所以这两个 Popup 挂在 content 内部，避免被当成标题栏按钮。
+        Item {
+            id: dialogHost
+
+            width: 0
+            height: 0
+
+            ListenTogetherAddSongsPanel {
+                id: addSongsPanel
+
+                host: panel
+                canAdd: panel.roomQueueEditable
+                onAddRequested: function(song) { panel.addToRoomQueue(song) }
+            }
+
+            ConfirmDialog {
+                id: leaveConfirm
+
+                onConfirmed: panel.leaveRoom()
+            }
+        }
 
         Column {
             id: contentColumn
@@ -860,22 +1058,20 @@ PanelShell {
                             }
                         }
 
-                        Row {
+                        Item {
                             width: parent.width
-                            spacing: Theme.spacingSm
-                            layoutDirection: Qt.LeftToRight
-
-                            Item {
-                                width: Math.max(0, (parent.width - controlRow.implicitWidth) / 2)
-                                height: 1
-                            }
+                            // 行高取最高按钮（播放键 56），再把每个按钮垂直居中：
+                            // Row 按子项顶部对齐，混用 44/56/40 的尺寸时中心会错开。
+                            height: 56
 
                             Row {
                                 id: controlRow
 
+                                anchors.centerIn: parent
                                 spacing: Theme.spacingSm
 
                                 IconButton {
+                                    anchors.verticalCenter: parent.verticalCenter
                                     icon: "skip_previous"
                                     iconSize: 26
                                     size: 44
@@ -885,6 +1081,7 @@ PanelShell {
                                 }
 
                                 IconButton {
+                                    anchors.verticalCenter: parent.verticalCenter
                                     icon: panel.roomPlaying ? "pause" : "play_arrow"
                                     iconFilled: true
                                     iconSize: 32
@@ -897,6 +1094,7 @@ PanelShell {
                                 }
 
                                 IconButton {
+                                    anchors.verticalCenter: parent.verticalCenter
                                     icon: "skip_next"
                                     iconSize: 26
                                     size: 44
@@ -906,6 +1104,7 @@ PanelShell {
                                 }
 
                                 IconButton {
+                                    anchors.verticalCenter: parent.verticalCenter
                                     icon: "sync"
                                     iconSize: 22
                                     size: 40
@@ -927,16 +1126,27 @@ PanelShell {
                             font.pixelSize: Theme.textStyle("labelSmall").size
                             wrapMode: Text.WordWrap
                         }
+
+                        // 听众侧的共享流状态提示：跟随房间设置与快照状态变化。
+                        Text {
+                            width: parent.width
+                            visible: !panel.isController && panel.sharedStreamHint !== ""
+                            text: panel.sharedStreamHint
+                            color: panel.sharedStreamUnavailable ? Theme.tertiary
+                                                                 : Theme.primary
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.textStyle("labelSmall").size
+                            wrapMode: Text.WordWrap
+                        }
                     }
                 }
 
-                // 队列（仅显示前几首，帮助确认切歌目标）
+                // 房间队列：默认展示前 5 首，可展开全部；控制者与（被授权的）听众都能增删与换序
                 Rectangle {
                     width: parent.width
                     height: queueColumn.implicitHeight + Theme.spacingMd * 2
                     radius: Theme.radiusLg
                     color: Theme.surfaceContainerHigh
-                    visible: panel.roomQueue.length > 0
 
                     Column {
                         id: queueColumn
@@ -944,47 +1154,136 @@ PanelShell {
                         x: Theme.spacingMd
                         y: Theme.spacingMd
                         width: parent.width - Theme.spacingMd * 2
-                        spacing: 4
+                        spacing: Theme.spacingXs
 
-                        Text {
-                            text: I18n.tr("房间队列（") + panel.roomQueue.length + "）"
-                            color: Theme.onSurfaceColor
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.textStyle("titleSmall").size
-                            font.weight: Font.DemiBold
-                        }
+                        Item {
+                            width: parent.width
+                            height: 32
 
-                        Repeater {
-                            model: Math.min(panel.roomQueue.length, 5)
+                            Text {
+                                anchors.left: parent.left
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: I18n.tr("房间队列（") + panel.roomQueue.length + "）"
+                                color: Theme.onSurfaceColor
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.textStyle("titleSmall").size
+                                font.weight: Font.DemiBold
+                            }
 
-                            delegate: Item {
-                                width: queueColumn.width
-                                height: 30
+                            PanelButton {
+                                id: addSongsButton
 
-                                readonly property var item: panel.roomQueue[index]
-
-                                Text {
-                                    anchors.left: parent.left
-                                    anchors.right: parent.right
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: (index + 1) + ". " + (item && item.name !== undefined ? item.name : "")
-                                          + (item && item.artist !== undefined ? " - " + item.artist : "")
-                                    color: index === panel.status.currentIndex ? Theme.primary
-                                                                               : Theme.onSurfaceVariantColor
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: Theme.textStyle("bodySmall").size
-                                    elide: Text.ElideRight
-                                    font.weight: index === panel.status.currentIndex ? Font.Medium : Font.Normal
-                                }
+                                anchors.right: parent.right
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: I18n.tr("添加歌曲")
+                                chip: true
+                                enabledButton: panel.roomQueueEditable && !panel.busy
+                                onClicked: panel.openAddSongs()
                             }
                         }
 
                         Text {
-                            visible: panel.roomQueue.length > 5
-                            text: I18n.tr("…共 ") + panel.roomQueue.length + I18n.tr(" 首")
+                            width: parent.width
+                            visible: panel.roomQueue.length === 0
+                            text: panel.isController
+                                  ? I18n.tr("房间队列是空的，添加一首在线歌曲开始一起听")
+                                  : I18n.tr("房间队列是空的")
+                            color: Theme.onSurfaceVariantColor
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.textStyle("bodySmall").size
+                            wrapMode: Text.WordWrap
+                        }
+
+                        Text {
+                            width: parent.width
+                            visible: !panel.isController && !panel.allowMemberControl
+                            text: I18n.tr("控制者已关闭听众控制，暂时不能修改房间队列")
                             color: Theme.onSurfaceVariantColor
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.textStyle("labelSmall").size
+                            wrapMode: Text.WordWrap
+                        }
+
+                        Repeater {
+                            model: panel.queueExpanded ? panel.roomQueue.length
+                                                       : Math.min(panel.roomQueue.length, 5)
+
+                            delegate: Item {
+                                id: queueRow
+
+                                width: queueColumn.width
+                                height: 32
+
+                                readonly property var item: panel.roomQueue[index]
+                                readonly property bool current: index === panel.status.currentIndex
+                                readonly property bool editable: panel.roomQueueEditable && !panel.busy
+
+                                Text {
+                                    anchors.left: parent.left
+                                    anchors.right: rowActions.left
+                                    anchors.rightMargin: Theme.spacingSm
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: (index + 1) + ". " + (item && item.name !== undefined ? item.name : "")
+                                          + (item && item.artist !== undefined && item.artist !== ""
+                                             ? " - " + item.artist : "")
+                                    color: queueRow.current ? Theme.primary : Theme.onSurfaceVariantColor
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.textStyle("bodySmall").size
+                                    elide: Text.ElideRight
+                                    font.weight: queueRow.current ? Font.Medium : Font.Normal
+                                }
+
+                                Row {
+                                    id: rowActions
+
+                                    anchors.right: parent.right
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    spacing: 0
+
+                                    IconButton {
+                                        icon: "arrow_upward"
+                                        iconSize: 15
+                                        size: 28
+                                        visible: queueRow.editable
+                                        enabled: queueRow.editable && index > 0
+                                        opacity: enabled ? 1 : 0.35
+                                        tooltip: I18n.tr("上移")
+                                        onClicked: panel.moveInRoomQueue(index, index - 1)
+                                    }
+
+                                    IconButton {
+                                        icon: "arrow_downward"
+                                        iconSize: 15
+                                        size: 28
+                                        visible: queueRow.editable
+                                        enabled: queueRow.editable && index < panel.roomQueue.length - 1
+                                        opacity: enabled ? 1 : 0.35
+                                        tooltip: I18n.tr("下移")
+                                        onClicked: panel.moveInRoomQueue(index, index + 1)
+                                    }
+
+                                    IconButton {
+                                        icon: "delete"
+                                        iconSize: 15
+                                        size: 28
+                                        visible: queueRow.editable
+                                        // 后端拒绝移除队列里的最后一首歌（会退出房间）
+                                        enabled: queueRow.editable && panel.roomQueue.length > 1
+                                        opacity: enabled ? 1 : 0.35
+                                        tooltip: I18n.tr("从房间队列移除")
+                                        onClicked: panel.removeFromRoomQueue(index)
+                                    }
+                                }
+                            }
+                        }
+
+                        PanelButton {
+                            visible: panel.roomQueue.length > 5
+                            text: panel.queueExpanded
+                                  ? I18n.tr("收起")
+                                  : I18n.tr("展开全部 ") + panel.roomQueue.length + I18n.tr(" 首")
+                            chip: true
+                            onClicked: panel.queueExpanded = !panel.queueExpanded
                         }
                     }
                 }
@@ -1034,19 +1333,20 @@ PanelShell {
                         LtwSettingRow {
                             width: parent.width
                             title: I18n.tr("共享音频直链")
-                            description: I18n.tr("桌面版未实现 LINK_READY/直链缓存，无法共享自己的播放地址；听众请使用本机音源解析")
+                            description: I18n.tr("开启后控制者会把解析到的播放地址分享给房间成员，听众可直接用该地址播放，减少各端解析失败/音源不一致")
                             checked: panel.shareAudioLinks
-                            enabledSwitch: false
+                            enabledSwitch: panel.connection === "connected" && !panel.busy
+                            onToggled: function(value) { panel.updateSetting("shareAudioLinks", value) }
                         }
                     }
                 }
 
-                // 离开房间
+                // 离开房间（二次确认：控制者离开会关闭房间）
                 PanelButton {
                     text: I18n.tr("离开房间")
                     outlined: true
                     enabledButton: !panel.busy
-                    onClicked: panel.leaveRoom()
+                    onClicked: panel.confirmLeaveRoom()
                 }
             }
         }

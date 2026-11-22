@@ -21,10 +21,13 @@ val ListenTogetherJson: Json = Json {
 /** Android 端 ListenTogetherBaseUrl.kt 的默认服务端；桌面版未配置时仅作为提示展示。 */
 const val LISTEN_TOGETHER_DEFAULT_SERVER_URL = "https://neriplayer.hancat.work"
 
-/** worker.js 的 QUEUE_MUTATION_SCHEMA_VERSION；桌面版只使用旧版整队列快照路径。 */
+/** worker.js 的 QUEUE_MUTATION_SCHEMA_VERSION；房态 schemaVersion 达到它才走增量队列操作。 */
 const val LISTEN_TOGETHER_SCHEMA_VERSION = 2
 
 const val LISTEN_TOGETHER_MAX_QUEUE_SIZE = 2000
+
+/** 与 Android LISTEN_TOGETHER_MAX_QUEUE_MUTATION_OPERATIONS 一致；worker 用同一上限校验。 */
+const val LISTEN_TOGETHER_MAX_QUEUE_MUTATION_OPERATIONS = 64
 
 const val LISTEN_TOGETHER_CHANNEL_NETEASE = "netease"
 const val LISTEN_TOGETHER_CHANNEL_BILIBILI = "bilibili"
@@ -39,7 +42,7 @@ data class ListenTogetherTrack(
     val subAudioId: String? = null,
     val playlistContextId: String? = null,
     val mediaUri: String? = null,
-    /** streamUrl 是旧客户端的第一个候选地址，桌面版默认不共享直链。 */
+    /** 控制者上传的共享播放直链（第一个候选）；worker 只公开当前曲目的缓存候选。 */
     val streamUrl: String? = null,
     val streamUrls: List<String> = emptyList(),
     val name: String = "",
@@ -184,6 +187,42 @@ data class ListenTogetherLeaveRoomResponse(
     val error: String? = null,
 )
 
+/**
+ * 队列增量操作（worker.js / Android `ListenTogetherQueueMutation`）。
+ *
+ * 与 Android 的序列化形状逐字段一致：
+ *  - bucket 引用由 `stableKey` + 同键出现序号 `occurrence` 组成，队列里的重复曲目也能唯一定位；
+ *  - `baseRoomVersion` 是构造方看到的房态版本，服务端重放到「最新权威队列」并据此判断基线；
+ *  - `targetCurrent` 指明操作结束后希望成为当前曲目的那一项（可为 null）。
+ */
+@Serializable
+data class ListenTogetherQueueReference(
+    val stableKey: String,
+    val occurrence: Int = 0,
+)
+
+/**
+ * 单个队列操作。type 取值与 worker.js `sanitizeQueueMutation` 接受的集合一致：
+ * `remove` / `remove_many` / `move` / `insert` / `reorder`。
+ */
+@Serializable
+data class ListenTogetherQueueOperation(
+    val type: String,
+    val target: ListenTogetherQueueReference? = null,
+    val anchor: ListenTogetherQueueReference? = null,
+    /** before / append / prepend */
+    val placement: String? = null,
+    val track: ListenTogetherTrack? = null,
+    val order: List<ListenTogetherQueueReference>? = null,
+)
+
+@Serializable
+data class ListenTogetherQueueMutation(
+    val baseRoomVersion: Long = 0L,
+    val operations: List<ListenTogetherQueueOperation> = emptyList(),
+    val targetCurrent: ListenTogetherQueueReference? = null,
+)
+
 /** WebSocket 消息：服务端下发的 welcome / room_state_updated / control_result 等共用。 */
 @Serializable
 data class ListenTogetherSocketEnvelope(
@@ -213,6 +252,8 @@ data class ListenTogetherSocketEnvelope(
     val stateName: String? = null,
     val repeatMode: Int? = null,
     val shuffleEnabled: Boolean? = null,
+    /** 听众请求被服务端仲裁后转发给控制者的增量队列操作。 */
+    val queueMutation: ListenTogetherQueueMutation? = null,
 )
 
 /** 客户端上行的控制事件（Android ListenTogetherEvent 的子集）。 */
@@ -236,6 +277,11 @@ data class ListenTogetherControlEvent(
     val requestTrackStableKey: String? = null,
     val forceRefresh: Boolean? = null,
     val finishedTrackStableKey: String? = null,
+    /**
+     * 增量队列操作。控制者上报队列变化用 SET_QUEUE + mutation；
+     * 听众的队列请求（REQUEST_SET_QUEUE）同样带 mutation，服务端按「单曲增删/重排」语义校验。
+     */
+    val queueMutation: ListenTogetherQueueMutation? = null,
 )
 
 /** 持久化配置与会话（AppDirs.dataDir/listen_together.json）。 */
@@ -304,6 +350,10 @@ data class ListenTogetherSnapshot(
     val roomStatus: String? = null,
     val version: Long = 0L,
     val autoPauseOnJoin: Boolean = false,
+    /** 房间当前曲目带可用共享直链（控制者已上传，且房间开启 shareAudioLinks）。 */
+    val sharedStreamAvailable: Boolean = false,
+    /** 听众当前正在用房间共享直链播放（而非自己解析的音源）。 */
+    val usingSharedStream: Boolean = false,
     /** 最近一次错误；面板显示为红色提示，成功后清空。 */
     val error: String? = null,
     /** 非错误类提示（例如控制者离线、请求地址不受支持）。 */

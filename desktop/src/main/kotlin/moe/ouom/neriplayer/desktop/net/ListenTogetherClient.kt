@@ -1,5 +1,6 @@
 package moe.ouom.neriplayer.desktop.net
 
+import moe.ouom.neriplayer.desktop.core.AppLog
 import moe.ouom.neriplayer.desktop.core.ListenTogetherControlEvent
 import moe.ouom.neriplayer.desktop.core.ListenTogetherControlResponse
 import moe.ouom.neriplayer.desktop.core.ListenTogetherCreateRoomRequest
@@ -18,6 +19,31 @@ import java.util.concurrent.CompletionStage
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.cancellation.CancellationException
+
+private const val LT_CLIENT_TAG = "lt"
+
+/**
+ * 控制事件完整 JSON 的脱敏摘要（用于对照 Android 发出的事件字段）。
+ *
+ * 事件本身不含 token/secret；streamUrl/streamUrls 是歌曲直链（可能带签名 query），
+ * 只保留协议相关字段结构，把 URL 值截断，避免把长签名写进日志。
+ */
+fun redactControlEventJson(event: ListenTogetherControlEvent): String {
+    val json = ListenTogetherJson.encodeToString(ListenTogetherControlEvent.serializer(), event)
+        .replace(Regex("https?://[^\"\\\\]+"), "URL…")
+    return json.take(6000)
+}
+
+/**
+ * 日志里只写「方法 + 路径」，丢掉 query（WS 地址把 token 放在 `?token=` 里，
+ * HTTP 虽然把 token 放 Authorization 头，但统一剥 query 更保险）。
+ */
+internal fun redactListenTogetherUrl(url: String): String {
+    val cut = url.indexOf('?')
+    val withoutQuery = if (cut >= 0) url.substring(0, cut) else url
+    return withoutQuery.removePrefix("http://").removePrefix("https://")
+        .removePrefix("ws://").removePrefix("wss://")
+}
 
 /**
  * 一起听服务端 HTTP 客户端。
@@ -82,20 +108,40 @@ class ListenTogetherHttpClient(private val http: HttpService) {
 
     /** GET /healthz：用于「服务端可用性」提示；不要求一定是官方 worker 实现。 */
     suspend fun healthz(baseUrl: String): Boolean {
+        val label = redactListenTogetherUrl("$baseUrl/healthz")
+        val started = System.currentTimeMillis()
         val response = runCatching { http.execute("GET", "$baseUrl/healthz", timeoutSeconds = 6) }
-            .getOrNull() ?: return false
-        if (response.status !in 200..299) return false
+            .getOrNull()
+        if (response == null) {
+            AppLog.warn(LT_CLIENT_TAG, "HTTP GET $label 健康检查无响应（${System.currentTimeMillis() - started}ms）")
+            return false
+        }
+        if (response.status !in 200..299) {
+            AppLog.warn(LT_CLIENT_TAG, "HTTP GET $label 健康检查返回 ${response.status}（${System.currentTimeMillis() - started}ms）")
+            return false
+        }
         val text = response.text()
-        return text.contains("neriplayer-listen-together-worker", ignoreCase = true) ||
+        val healthy = text.contains("neriplayer-listen-together-worker", ignoreCase = true) ||
             (text.contains("\"ok\"") && text.contains("true"))
+        AppLog.debug(LT_CLIENT_TAG, "HTTP GET $label 健康检查 ${if (healthy) "通过" else "未识别"}（${System.currentTimeMillis() - started}ms）")
+        return healthy
     }
 
     private inline fun <reified T> get(url: String, bearerToken: String? = null): Result<T> {
+        val label = redactListenTogetherUrl(url)
+        val started = System.currentTimeMillis()
         val response = runCatching {
             http.execute("GET", url, headers = authHeaders(bearerToken), timeoutSeconds = 15)
-        }.getOrElse { return networkFailure(it) }
-            ?: return Result(null, 0, "无法连接一起听服务端")
-        return decode(url, response.status, response.text())
+        }.getOrElse {
+            AppLog.warn(LT_CLIENT_TAG, "HTTP GET $label 失败：${it.message ?: it::class.simpleName}（${System.currentTimeMillis() - started}ms）")
+            return networkFailure(it)
+        } ?: run {
+            AppLog.warn(LT_CLIENT_TAG, "HTTP GET $label 无响应（${System.currentTimeMillis() - started}ms）")
+            return Result(null, 0, "无法连接一起听服务端")
+        }
+        val result: Result<T> = decode(url, response.status, response.text())
+        AppLog.debug(LT_CLIENT_TAG, "HTTP GET $label → ${response.status} ${resultSummary(result)}（${System.currentTimeMillis() - started}ms）")
+        return result
     }
 
     private inline fun <reified T> post(
@@ -103,6 +149,8 @@ class ListenTogetherHttpClient(private val http: HttpService) {
         body: String,
         bearerToken: String? = null,
     ): Result<T> {
+        val label = redactListenTogetherUrl(url)
+        val started = System.currentTimeMillis()
         val response = runCatching {
             http.execute(
                 method = "POST",
@@ -111,10 +159,21 @@ class ListenTogetherHttpClient(private val http: HttpService) {
                 headers = authHeaders(bearerToken) + mapOf("Content-Type" to "application/json; charset=utf-8"),
                 timeoutSeconds = 20,
             )
-        }.getOrElse { return networkFailure(it) }
-            ?: return Result(null, 0, "无法连接一起听服务端")
-        return decode(url, response.status, response.text())
+        }.getOrElse {
+            AppLog.warn(LT_CLIENT_TAG, "HTTP POST $label 失败：${it.message ?: it::class.simpleName}（${System.currentTimeMillis() - started}ms）")
+            return networkFailure(it)
+        } ?: run {
+            AppLog.warn(LT_CLIENT_TAG, "HTTP POST $label 无响应（${System.currentTimeMillis() - started}ms）")
+            return Result(null, 0, "无法连接一起听服务端")
+        }
+        val result: Result<T> = decode(url, response.status, response.text())
+        AppLog.debug(LT_CLIENT_TAG, "HTTP POST $label → ${response.status} ${resultSummary(result)}（${System.currentTimeMillis() - started}ms）")
+        return result
     }
+
+    /** 只写 ok / error 文案：body 里可能带 Token/Secret，绝不原样入日志。 */
+    private fun resultSummary(result: Result<*>): String =
+        if (result.ok) "ok" else "error=${result.error ?: "未知错误"}"
 
     private inline fun <reified T> decode(url: String, status: Int, body: String): Result<T> {
         val text = body.trim()
@@ -167,6 +226,9 @@ class ListenTogetherWebSocketClient(
     val isOpen: Boolean get() = opened && !manuallyClosed && socket != null
 
     fun connect(wsUrl: String) {
+        val label = redactListenTogetherUrl(wsUrl)
+        val started = System.currentTimeMillis()
+        AppLog.info(LT_CLIENT_TAG, "WS 连接开始：$label（连接超时 12s）")
         closeInternal(notify = false)
         manuallyClosed = false
         opened = false
@@ -178,6 +240,7 @@ class ListenTogetherWebSocketClient(
             override fun onOpen(webSocket: WebSocket) {
                 opened = true
                 webSocket.request(1)
+                AppLog.info(LT_CLIENT_TAG, "WS 已打开：$label（握手 ${System.currentTimeMillis() - started}ms）")
                 onOpen()
             }
 
@@ -201,6 +264,8 @@ class ListenTogetherWebSocketClient(
             override fun onClose(webSocket: WebSocket, statusCode: Int, reason: String): CompletionStage<*>? {
                 opened = false
                 socket = null
+                // reason 由服务端给，可能带诊断文案；截断避免超长
+                AppLog.info(LT_CLIENT_TAG, "WS 关闭：$label（code=$statusCode, reason=${reason.take(80)}）")
                 if (!manuallyClosed) onClosed()
                 return null
             }
@@ -208,6 +273,7 @@ class ListenTogetherWebSocketClient(
             override fun onError(webSocket: WebSocket, error: Throwable) {
                 opened = false
                 socket = null
+                AppLog.warn(LT_CLIENT_TAG, "WS 错误：$label（${error.message ?: error::class.simpleName}）")
                 if (!manuallyClosed) fail(error.message ?: error::class.simpleName.orEmpty())
             }
         }
@@ -217,12 +283,15 @@ class ListenTogetherWebSocketClient(
                 .connectTimeout(Duration.ofSeconds(12))
                 .buildAsync(URI.create(wsUrl), listener)
         }.getOrElse {
+            AppLog.warn(LT_CLIENT_TAG, "WS 连接建立异常：$label（${it.message}，${System.currentTimeMillis() - started}ms）")
             fail("无法建立 WebSocket 连接：${it.message}")
             return
         }
         future.whenComplete { webSocket, error ->
             if (error != null) {
-                if (!manuallyClosed) fail(error.cause?.message ?: error.message ?: "WebSocket 连接失败")
+                val reason = error.cause?.message ?: error.message ?: "WebSocket 连接失败"
+                AppLog.warn(LT_CLIENT_TAG, "WS 连接失败：$label（$reason，${System.currentTimeMillis() - started}ms）")
+                if (!manuallyClosed) fail(reason)
             } else if (webSocket != null) {
                 synchronized(lock) { socket = webSocket }
             }

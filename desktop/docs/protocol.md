@@ -63,9 +63,9 @@ java -jar build/libs/neriplayer-core.jar [--socket <path>] [--no-scan]
 
 | method | params | 说明 |
 | --- | --- | --- |
-| `player.togglePlayPause` / `play` / `pause` | — | |
-| `player.next` / `previous` | — | |
-| `player.seekTo` | `{positionMs}` | |
+| `player.togglePlayPause` / `play` / `pause` | — | 一起听房间里作为听众时转发为房间请求，成功返回 `{ok, roomQueue:true, notice?}`；`togglePlayPause` 按**房间**播放态决定发 play 还是 pause。失败为 `bad_request`，文案带动作名（如「…无法切歌」） |
+| `player.next` / `previous` | — | 同上（听众转发 `REQUEST_SET_TRACK`） |
+| `player.seekTo` | `{positionMs}` | 听众转发 `REQUEST_SEEK`；但目标位置与房间推算进度的偏差在 1.2s 内时按本地执行（供面板「对齐到房间进度」使用，避免在关闭成员控制的房间里对齐失败） |
 | `player.setVolume` | `{value:0..1}` | |
 | `player.setShuffle` / `toggleShuffle` | `{enabled}` | |
 | `player.setRepeatMode` | `{mode:"OFF"|"ALL"|"ONE"}` | |
@@ -75,12 +75,13 @@ java -jar build/libs/neriplayer-core.jar [--socket <path>] [--no-scan]
 | `player.setEqualizerPreset` | `{name, bands:[10×float]}` | |
 | `player.setEqualizerBand` | `{index, gain}` | |
 | `player.resetEffects` | — | |
-| `player.setQueue` | `{songs:[Song], startIndex, autoPlay}` | |
+| `player.switchQuality` | `{quality:"standard"\|"higher"\|"exhigh"\|"lossless"\|"hires", song?:Song}` | 播放页「切换音质」：对当前（或指定）歌曲**临时**切档，按 `Song.key` 记录覆盖、不写全局 `settings.qualityPreference`、不落盘。重新解析播放地址并从当前进度续播（暂停态保持）；切歌回来仍用该档位。解析失败返回明确错误并回滚覆盖。成功返回 `{ok, quality, temporary:true}` |
+| `player.setQueue` | `{songs:[Song], startIndex, autoPlay, confirmAppend?, mode?:"append"\|"replace"}` | 非房间/控制者行为不变。一起听听众：`mode="replace"` 直接带完整新队列发 `REQUEST_SET_TRACK`（worker 允许 SET_TRACK 携带 queue 写入房态），服务端仲裁后所有成员一起切歌，返回 `{ok, roomQueue, replaced, skipped, notice?}`；失败为 bad_request（如 `member control disabled` → 中文提示）。`mode="append"`（默认）保留两段式降级追加：不带 `confirmAppend` 返回 `{ok, roomQueue, needsConfirm, appendable, skipped}` 供前端弹确认框；带 `confirmAppend=true` 才追加，返回 `{ok, roomQueue, degraded, appended, skipped}` |
 | `player.playSongNow` | `{song:Song, queue?:[Song]}` | |
 | `player.playAt` | `{index}` | |
-| `player.enqueue` / `enqueueNext` | `{songs}` | |
-| `player.removeFromQueue` | `{index}` | |
-| `player.moveInQueue` | `{from, to}` | |
+| `player.enqueue` / `enqueueNext` | `{songs}` | 一起听房间里作为听众时自动转发为房间队列请求，成功返回 `{ok, roomQueue:true}`；本地队列按曲目身份（`Song.key`）去重，已在队列中的先移除再插入 |
+| `player.removeFromQueue` | `{index}` | 同上（下标按曲目身份换算成房间队列下标） |
+| `player.moveInQueue` | `{from, to}` | 同上 |
 | `player.clearQueue` | — | |
 | `player.startSleepTimer` | `{minutes}` | |
 | `player.stopAfterCurrentSong` / `cancelSleepTimer` | — | |
@@ -93,7 +94,7 @@ java -jar build/libs/neriplayer-core.jar [--socket <path>] [--no-scan]
 | --- | --- | --- |
 | `player` | 播放状态快照：`{song,state,positionMs,durationMs,volume,shuffle,repeatMode,speed,pitch,loudness,equalizerEnabled,equalizerBands,buffering,sleepTimer,supportsEffects,queueIndex,coverSeed}` | 变化时推送，播放中约 4Hz |
 | `player.queue` | `{songs:[Song], index}` | 队列或当前下标变化 |
-| `player.lyrics` | `{lines:[{timeMs,text,translation,endMs,words:[{startMs,durationMs,text}]}], translated:[…], source, raw}` | 歌词加载/切换 |
+| `player.lyrics` | `{lines:[{timeMs,text,translation,phonetic,endMs,words:[{startMs,durationMs,text}]}], translated:[…], source, raw}`（`phonetic` 为音译行，缺省为 null） | 歌词加载/切换 |
 | `player.lyricsLoading` | `{loading}` | 歌词加载开始/结束 |
 | `player.coverSeed` | `{seed}` | 封面主色变化 |
 | `theme` | 见 3.1 | 主题/系统主题/封面种子变化 |

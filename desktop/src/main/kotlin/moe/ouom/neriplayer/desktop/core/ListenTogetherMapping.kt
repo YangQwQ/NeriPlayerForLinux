@@ -157,29 +157,47 @@ private fun listenTogetherChannelOf(song: Song): String? = when (song.source) {
 }
 
 /**
+ * 房间曲目的稳定键是否匹配给定歌曲；用于确定控制者上传直链时的目标曲目。
+ */
+fun ListenTogetherTrack.matchesSong(song: Song): Boolean =
+    stableKey.isNotBlank() && stableKey == song.toListenTogetherTrackOrNull()?.stableKey
+
+/**
  * 桌面播放器里的歌曲 → 房间曲目。
  * 返回 null 表示这首歌不能进入房间：本地文件、缺少远端 id 或桌面版不支持的来源。
  * 与 worker.js 的 sanitizeTrack 要求一致（stableKey/channelId/audioId/name/artist 非空）。
+ *
+ * [streamUrls] 供控制者在 LINK_READY 事件里附带自己解析出的直链；常规队列快照不带直链，
+ * 以免把候选地址写进房间队列（worker 会对队列字段做 strip）。
  */
-fun Song.toListenTogetherTrackOrNull(): ListenTogetherTrack? {
+fun Song.toListenTogetherTrackOrNull(
+    streamUrls: List<String> = emptyList(),
+): ListenTogetherTrack? {
     val channel = listenTogetherChannelOf(this) ?: return null
     if (channel == LISTEN_TOGETHER_CHANNEL_LOCAL) return null
     val audioId = remoteId?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    // bilibili 带上分 P 的 cid：否则对端只能退回到「第一个分 P」，
+    // 多 P 视频（合集/系列）会播错分 P。
+    val subAudioId = if (channel == LISTEN_TOGETHER_CHANNEL_BILIBILI) {
+        extraId?.trim()?.takeIf { it.isNotEmpty() }
+    } else {
+        null
+    }
     val stableKey = buildListenTogetherStableKey(
         channelId = channel,
         audioId = audioId,
-        subAudioId = null,
+        subAudioId = subAudioId,
         playlistContextId = null,
     )
     return ListenTogetherTrack(
         stableKey = stableKey,
         channelId = channel,
         audioId = audioId,
-        subAudioId = null,
+        subAudioId = subAudioId,
         playlistContextId = null,
         mediaUri = null,
-        streamUrl = null,
-        streamUrls = emptyList(),
+        streamUrl = streamUrls.firstOrNull(),
+        streamUrls = streamUrls,
         name = title.trim().ifEmpty { "未知歌曲" },
         artist = artist.trim().ifEmpty { "未知艺术家" },
         album = album.trim().ifEmpty { null },
@@ -187,6 +205,19 @@ fun Song.toListenTogetherTrackOrNull(): ListenTogetherTrack? {
         coverUrl = artworkUrl?.trim()?.takeIf { it.isNotEmpty() },
     )
 }
+
+/**
+ * 去掉曲目上的共享播放直链，得到与 Android `toShareableQueueSnapshot(includeResolvedStreamUrl=false)`
+ * 等价的可分享曲目。
+ *
+ * 上行控制事件的 `queue`/`track` 必须走这里：房间队列里当前曲目可能带着控制者
+ * 通过 LINK_READY 写入的共享直链，把它原样塞回 SET_TRACK 事件会让服务端把直链
+ * 写进队列，与 Android 的上传口径不一致，也会让其他成员把这条直链当成自己的
+ * 权威音源。直链只应由 LINK_READY 这一类专门事件承载。
+ */
+fun ListenTogetherTrack.withoutStreamUrls(): ListenTogetherTrack =
+    if (streamUrl == null && streamUrls.isEmpty()) this
+    else copy(streamUrl = null, streamUrls = emptyList())
 
 /** 房间曲目 → 桌面播放器歌曲；不认识的渠道返回 null（避免把脏数据塞进队列）。 */
 fun ListenTogetherTrack.toSongOrNull(): Song? {
@@ -209,18 +240,54 @@ fun ListenTogetherTrack.toSongOrNull(): Song? {
             )
         }
 
-        LISTEN_TOGETHER_CHANNEL_BILIBILI -> Song(
-            key = biliSongKey(audio),
-            source = MediaSource.BILIBILI,
-            title = name,
-            artist = artist,
-            album = album.orEmpty(),
-            durationMs = durationMs.coerceAtLeast(0L),
-            remoteId = audio,
-            // Android 端把分 P 的 cid 放在 subAudioId；桌面版用它跳过视频分 P 查询
-            extraId = subAudioId?.trim()?.takeIf { it.isNotEmpty() },
-            artworkUrl = coverUrl,
-        )
+        LISTEN_TOGETHER_CHANNEL_BILIBILI -> {
+            // Android 端的 bilibili 曲目有两种形状，必须按字段内容判别，不能假设 audioId 就是 bvid：
+            //  - 桌面版自己发的：audioId=bvid（BV…）、subAudioId 为空；
+            //  - Android 端发的：audioId 是纯数字（aid 或分 P 的 cid），bvid 不一定在字段里
+            //    （早期 Android 用 `bilibili:<aid>:<cid>`）。把数字当 bvid 去查 playurl 会必然失败，
+            //    表现为「无法解析播放地址」，所以这里做一次归一：
+            //    数字 audioId 视为 cid，BV 开头的 audioId/subAudioId 才当作 bvid。
+            val sub = subAudioId?.trim()?.takeIf { it.isNotEmpty() }
+            val audioIsBvid = audio.startsWith("BV", ignoreCase = true)
+            val subIsBvid = sub?.startsWith("BV", ignoreCase = true) == true
+            val bvid = when {
+                audioIsBvid -> audio
+                subIsBvid -> sub
+                else -> "" // 只有纯数字 id：没有 bvid 无法查 playurl，交给上层给出明确失败
+            }
+            val cid = when {
+                audioIsBvid -> sub
+                else -> audio.takeIf { it.toLongOrNull() != null }
+            }
+            if (bvid.isBlank()) {
+                // 拿不到 bvid 时退化为「以数字 id 当 remoteId」的原行为，让播放失败时仍能报错，
+                // 但不静默产生一个看似可播、实际查不到的曲目。
+                Song(
+                    key = biliSongKey(audio),
+                    source = MediaSource.BILIBILI,
+                    title = name,
+                    artist = artist,
+                    album = album.orEmpty(),
+                    durationMs = durationMs.coerceAtLeast(0L),
+                    remoteId = audio,
+                    extraId = cid,
+                    artworkUrl = coverUrl,
+                )
+            } else {
+                Song(
+                    key = biliSongKey(bvid),
+                    source = MediaSource.BILIBILI,
+                    title = name,
+                    artist = artist,
+                    album = album.orEmpty(),
+                    durationMs = durationMs.coerceAtLeast(0L),
+                    remoteId = bvid,
+                    // 有 cid 时直接用它，省掉一次分 P 列表请求，也能命中正确的分 P。
+                    extraId = cid,
+                    artworkUrl = coverUrl,
+                )
+            }
+        }
 
         // Android 端支持 YouTube Music。桌面版没有对应播放实现，仍保留歌曲信息用于展示，
         // 播放时会由在线解析失败给出错误提示（见报告中的已知限制）。
@@ -283,7 +350,68 @@ fun describeListenTogetherError(raw: String?): String {
         "member control target unavailable" in lower -> "请求的歌曲不在当前房间队列中"
         "link request throttled" in lower -> "请求过于频繁，请稍后再试"
         "initial snapshot requires" in lower -> "创建房间需要当前有可分享的在线歌曲"
+        // 队列增量（queueMutation）相关：服务端校验失败时给出具体原因，
+        // 否则用户只看到笼统的「队列更新被拒绝」，不知道是格式问题还是超出单次限制。
+        "queue mutation is invalid" in lower || "invalid queue mutation" in lower ->
+            "队列增量格式不合法"
+        "changes too many tracks" in lower -> "队列请求一次只能增/删/移一首歌"
         "queue update" in lower -> "房间队列更新被拒绝，请稍后重试"
         else -> text
     }
+}
+
+/**
+ * 把「用户在播放器里点加歌/删歌」失败时的房间错误转成**可操作**的前端提示。
+ *
+ * 与 [describeListenTogetherError] 的区别：那些文案是面板里的说明，这里是用户
+ * 在歌曲菜单点了「下一首播放」却收到的一个 Toast，要直接说清「这次没加成，因为控制者
+ * 关闭了听众控制」，而不是把内部错误原样抛给用户。
+ */
+fun roomQueueErrorMessage(raw: String?): String {
+    val text = describeListenTogetherError(raw)
+    return when (text) {
+        "控制者关闭了听众控制" -> "控制者关闭了听众控制，无法加入房间队列"
+        "控制者不在线" -> "控制者不在线，无法加入房间队列"
+        "房间队列为空" -> "房间队列为空，无法加入房间队列"
+        else -> text
+    }
+}
+
+/** 播放控制在房间里被拒绝时，文案里要补上动作名，否则听众不知道「哪一步」没生效。 */
+enum class ListenTogetherPlaybackAction(val label: String, val needsQueue: Boolean) {
+    NEXT("切歌", true),
+    PREVIOUS("切歌", true),
+    PLAY("播放", false),
+    PAUSE("暂停", false),
+}
+
+/**
+ * 播放控制（`player.next` / `player.previous` / `player.play` / `player.pause` /
+ * `player.togglePlayPause`）在房间里被拒绝时的 Toast 文案。
+ *
+ * 与 [roomQueueErrorMessage] 同理，但队列类的原因（「房间队列为空」「无法加入房间队列」）
+ * 对播放控制是错的说法：听众按的是「下一首」，提示不能说成「无法加入房间队列」。
+ */
+fun roomPlaybackErrorMessage(
+    raw: String?,
+    action: ListenTogetherPlaybackAction?,
+): String {
+    if (action == null) return roomQueueErrorMessage(raw)
+    return when (val text = describeListenTogetherError(raw)) {
+        "控制者关闭了听众控制" -> "控制者关闭了听众控制，无法${action.label}"
+        "控制者不在线" -> "控制者不在线，无法${action.label}"
+        "只有控制者可以执行该操作" -> "只有控制者可以${action.label}"
+        // 只有切歌才和队列有关；播放/暂停碰到空队列时原样给出，不要硬拼动作名
+        "房间队列为空" -> if (action.needsQueue) "房间队列为空，无法${action.label}" else text
+        else -> text
+    }
+}
+
+/** [roomPlaybackErrorMessage] 带上动作名；未指定动作时等同于 [roomQueueErrorMessage]。 */
+fun listenTogetherErrorMessage(raw: String?, action: String?): String = when (action) {
+    "next" -> roomPlaybackErrorMessage(raw, ListenTogetherPlaybackAction.NEXT)
+    "previous" -> roomPlaybackErrorMessage(raw, ListenTogetherPlaybackAction.PREVIOUS)
+    "play" -> roomPlaybackErrorMessage(raw, ListenTogetherPlaybackAction.PLAY)
+    "pause" -> roomPlaybackErrorMessage(raw, ListenTogetherPlaybackAction.PAUSE)
+    else -> roomQueueErrorMessage(raw)
 }
