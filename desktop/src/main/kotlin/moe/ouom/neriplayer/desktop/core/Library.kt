@@ -9,6 +9,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.ListSerializer
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
+import org.jaudiotagger.tag.Tag
 import java.io.File
 import java.security.MessageDigest
 import java.util.Locale
@@ -195,6 +196,59 @@ class LibraryRepository(private val settings: SettingsRepository) {
                 trackNumber = track,
             )
         }.getOrNull()
+    }
+
+    /**
+     * 把可编辑字段写回本地文件的音频标签，并同步内存中的 Song。
+     *
+     * 对齐安卓端实际写入的嵌入式字段：标题（TITLE）与艺术家（ARTIST）；专辑（ALBUM）
+     * 仅在显式提供时写入。远端歌曲或没有 filePath 的歌曲不可写，调用方需先校验。
+     * 只读文件、格式不支持等异常统一抛给 API 层转成明确错误。
+     *
+     * @return 写入后同步过的最新 Song
+     */
+    suspend fun updateSongMetadata(
+        key: String,
+        title: String?,
+        artist: String?,
+        album: String?,
+    ): Song = withContext(Dispatchers.IO) {
+        val existing = byKey(key) ?: throw IllegalArgumentException("找不到歌曲: $key")
+        val path = existing.filePath
+            ?: throw IllegalArgumentException("该歌曲没有本地文件，无法写入元数据")
+        val file = File(path)
+        if (!existing.isLocalFile() || !file.isFile) {
+            throw IllegalArgumentException("该歌曲不是可写的本地文件: $path")
+        }
+        if (!file.canWrite()) {
+            throw IllegalStateException("文件不可写（只读或权限不足）: $path")
+        }
+        if (!isSupportedAudioFile(file)) {
+            throw IllegalArgumentException("不支持写入的音频格式: ${file.extension}")
+        }
+
+        val audioFile = runCatching { AudioFileIO.read(file) }
+            .getOrElse { throw IllegalStateException("读取音频标签失败: ${it.message}") }
+        val tag: Tag = audioFile.tag
+            ?: throw IllegalStateException("文件没有可写入的标签: $path")
+
+        // 用 null 表示该字段不修改；空串表示显式清空该字段（与安卓端「恢复原信息」语义一致）。
+        title?.let { tag.setField(FieldKey.TITLE, it) }
+        artist?.let { tag.setField(FieldKey.ARTIST, it) }
+        album?.let { tag.setField(FieldKey.ALBUM, it) }
+
+        runCatching { audioFile.commit() }
+            .onFailure { throw IllegalStateException("写入音频标签失败: ${it.message}") }
+
+        val updated = existing.copy(
+            title = title?.let { it.trim().ifBlank { file.nameWithoutExtension } } ?: existing.title,
+            artist = artist?.let { it.trim() } ?: existing.artist,
+            album = album?.let { it.trim() } ?: existing.album,
+        )
+        // 替换列表元素会更新 _songs，从而由 StatePublisher 广播 library.changed。
+        _songs.value = _songs.value.map { if (it.key == key) updated else it }
+        persist()
+        updated
     }
 }
 

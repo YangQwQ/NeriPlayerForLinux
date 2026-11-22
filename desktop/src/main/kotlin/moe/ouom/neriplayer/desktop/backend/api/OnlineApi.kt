@@ -2,6 +2,7 @@ package moe.ouom.neriplayer.desktop.backend.api
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
@@ -10,11 +11,13 @@ import kotlinx.serialization.json.put
 import moe.ouom.neriplayer.desktop.backend.CoreServer
 import moe.ouom.neriplayer.desktop.backend.ProtocolException
 import moe.ouom.neriplayer.desktop.backend.WireJson
+import moe.ouom.neriplayer.desktop.backend.arrayOrNull
 import moe.ouom.neriplayer.desktop.backend.badRequest
 import moe.ouom.neriplayer.desktop.backend.encodeAny
 import moe.ouom.neriplayer.desktop.backend.encodeJson
 import moe.ouom.neriplayer.desktop.backend.intOrNull
 import moe.ouom.neriplayer.desktop.backend.log
+import moe.ouom.neriplayer.desktop.backend.longOrNull
 import moe.ouom.neriplayer.desktop.backend.objectOrNull
 import moe.ouom.neriplayer.desktop.backend.stringOrNull
 import moe.ouom.neriplayer.desktop.core.AppContainer
@@ -26,8 +29,9 @@ import moe.ouom.neriplayer.desktop.core.SearchKind
 import moe.ouom.neriplayer.desktop.core.SearchPayload
 import moe.ouom.neriplayer.desktop.core.Song
 import moe.ouom.neriplayer.desktop.net.DESKTOP_USER_AGENT
-import moe.ouom.neriplayer.desktop.net.NeriJsonParser
 import moe.ouom.neriplayer.desktop.net.HomeSections
+import moe.ouom.neriplayer.desktop.net.NeriJsonParser
+import moe.ouom.neriplayer.desktop.net.NeteasePlaylistApi
 import moe.ouom.neriplayer.desktop.net.array
 import moe.ouom.neriplayer.desktop.net.asObject
 import moe.ouom.neriplayer.desktop.net.int
@@ -35,6 +39,8 @@ import moe.ouom.neriplayer.desktop.net.long
 import moe.ouom.neriplayer.desktop.net.obj
 import moe.ouom.neriplayer.desktop.net.objects
 import moe.ouom.neriplayer.desktop.net.str
+import moe.ouom.neriplayer.desktop.net.EncyclopediaResult
+import moe.ouom.neriplayer.desktop.net.SongEncyclopediaApi
 import moe.ouom.neriplayer.desktop.net.urlEncode
 
 /**
@@ -285,6 +291,54 @@ object OnlineApi {
             }
         }
 
+        // 网易云「收藏到歌单」：对齐 Android 的 /weapi/playlist/manipulate/tracks 写入流程。
+        server.on("online.addToNeteasePlaylist") { params ->
+            val account = container.accounts.accountOf(MediaSource.NETEASE)
+            val loggedIn = container.accounts.isLoggedIn(MediaSource.NETEASE) &&
+                online.httpService.cookieSnapshot("netease")["MUSIC_U"].orEmpty().isNotBlank()
+            if (!loggedIn || account?.userId.isNullOrBlank()) {
+                buildJsonObject {
+                    put("ok", false)
+                    put("needLogin", true)
+                    put("error", "请先登录网易云音乐账号，再收藏到歌单")
+                }
+            } else {
+                val playlistId = params.longOrNull("playlistId") ?: badRequest("缺少 playlistId")
+                val songsArray = params.arrayOrNull("songs") ?: badRequest("缺少 songs")
+                val songs = runCatching {
+                    WireJson.decodeFromJsonElement(ListSerializer(Song.serializer()), songsArray)
+                }.getOrElse { badRequest("songs 格式非法: ${it.message}") }
+                val songIds = songs.mapNotNull { song ->
+                    song.remoteId?.toLongOrNull()?.takeIf { it > 0L }
+                        ?: song.key.removePrefix("netease:").toLongOrNull()?.takeIf { it > 0L }
+                }
+                if (songIds.isEmpty()) {
+                    buildJsonObject {
+                        put("ok", false)
+                        put("error", "所选歌曲没有有效的网易云曲目 ID，无法收藏到网易云歌单")
+                    }
+                } else {
+                    val result = withContext(Dispatchers.IO) {
+                        NeteasePlaylistApi(online.httpService).addToPlaylist(
+                            playlistId,
+                            songIds,
+                            userId = account?.userId.orEmpty(),
+                        )
+                    }
+                    buildJsonObject {
+                        put("ok", result.ok)
+                        put("added", result.added)
+                        put("alreadyExists", result.alreadyExists)
+                        put("failed", result.failed)
+                        result.code?.let { put("code", it) }
+                        result.message?.let { put("error", it) }
+                        if (result.needsWebVerification) put("needsWebVerification", true)
+                        if (result.needLogin) put("needLogin", true)
+                    }
+                }
+            }
+        }
+
         // 网易云云盘：明文 /api/v1/cloud/get，带登录 Cookie。code=301 视为登录失效。
         server.on("online.neteaseCloudSongs") { params ->
             val offset = (params.intOrNull("offset") ?: 0).coerceAtLeast(0)
@@ -375,12 +429,50 @@ object OnlineApi {
                 put("song", encodeJson(song))
                 if (input == null) {
                     put("playable", false)
-                    put("error", "无法解析播放地址（音源可能被限制或需要登录）")
+                    // B 站失败原因由解析链路记录（durl 缺失 / cid 不配套 / 试看片段 / 音频区等），
+                    // 比统一的「音源可能被限制」更可诊断；其它音源回退到通用文案。
+                    put(
+                        "error",
+                        online.biliFailureReason(song)
+                            ?: "无法解析播放地址（音源可能被限制或需要登录）",
+                    )
                 } else {
                     put("playable", true)
                     put("path", input.path)
                     put("url", input.url)
                     put("headers", encodeAny(input.headers))
+                }
+            }
+        }
+
+        // ---------------------------------------------------------------- 歌曲百科
+        server.on("online.songEncyclopedia") { params ->
+            val song = params.requireSong()
+            val result = withContext(Dispatchers.IO) {
+                SongEncyclopediaApi.load(container.online.httpService, song)
+            }
+            when (result) {
+                is EncyclopediaResult.Success ->
+                    buildJsonObject {
+                        put("available", true)
+                        put("encyclopedia", encodeJson(result.data))
+                    }
+
+                is EncyclopediaResult.NotSupported ->
+                    buildJsonObject {
+                        put("available", false)
+                        put("reason", "not_supported")
+                    }
+
+                is EncyclopediaResult.NotAvailable ->
+                    buildJsonObject {
+                        put("available", false)
+                        put("reason", "not_available")
+                    }
+
+                is EncyclopediaResult.Failed -> {
+                    log("online.songEncyclopedia failed: ${result.cause.message.orEmpty()}")
+                    throw ProtocolException("internal_error", "歌曲百科加载失败，请稍后重试")
                 }
             }
         }

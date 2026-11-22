@@ -23,6 +23,14 @@ UsageEntry = { song: Song, playedAt: number, playCount: number }
 
 StatsSummary = { plays: number, listenMs: number, trackCount: number }
 HotSong      = { song: Song, playCount: number, listenMs: number, lastPlayed: number }
+SongStats    = {                       // 单曲全周期统计（对齐 Android TrackStat）
+  songKey: string,
+  playCount: number,                  // 累计播放次数（stats 分桶求和）
+  listenMs: number,                   // 累计收听毫秒（stats 分桶求和）
+  firstStatDay: string,               // 最早有统计的日期 yyyy-MM-dd，"" 表示未知
+  lastPlayed: number,                 // 最近播放时间 ms，来自 history（0 表示未知）
+  hasData: boolean,                   // stats 或 history 中存在该曲数据
+}
 
 StatsPeriod = "DAY" | "WEEK" | "MONTH" | "YEAR" | "ALL"     // 天/近 7 天/近 30 天/近 365 天/全部
 StatsSort   = "PLAY_COUNT" | "LISTEN_TIME" | "RECENT"
@@ -70,6 +78,7 @@ StatsSort   = "PLAY_COUNT" | "LISTEN_TIME" | "RECENT"
 | --- | --- | --- | --- |
 | `stats.summary` | `{period}` | `{summary:StatsSummary}` | 指定周期的播放次数/累计时长/去重曲目数 |
 | `stats.top` | `{period,sort,limit?}` | `{songs:[HotSong]}` | 排行；`limit` 默认 50 |
+| `stats.song` | `{songKey}` | `{stat:SongStats}` | 单曲全周期统计（按 `Song.key` 精确查询，不依赖 history 中歌曲对象是否存在） |
 | `stats.clear` | — | `{ok:true}` | 清空全部统计（不会清空 history） |
 | `stats.periods` | — | `{periods:[{value,label}], sorts:[{value,label}]}` | 给前端下拉框用的枚举 + 中文标签 |
 
@@ -89,7 +98,18 @@ StatsSort   = "PLAY_COUNT" | "LISTEN_TIME" | "RECENT"
   `listenMs` 是累计收听毫秒。
 - `stats.top` 只返回**能在 history 中找到歌曲对象**的歌单（历史的歌词/封面等对象快照）；
   如果 history 被清空，排行榜会变空（统计数据仍保留）——这是核心限制，前端应显示空状态。
-- 无数据时：`summary` 返回 `{plays:0,listenMs:0,trackCount:0}`，`top` 返回 `{songs:[]}`。
+- `stats.song` 直接按 `songKey` 聚合 stats 分桶，不受 history 是否被清空影响，是单曲统计的正确入口；
+  它对齐 Android `SongEncyclopediaListeningSection` / 播放统计弹窗的三个维度：累计播放、累计收听、首次/最近时间。
+  数据来源与限制（**不要编造缺失维度**）：
+  - `playCount` / `listenMs`：来自 stats 按「歌曲 × 天」分桶的全周期求和，可靠。
+  - `lastPlayed`：来自 history 该曲的 `playedAt`（播放开始时写入），history 被清空或超过 600 条淘汰后为 0，前端应隐藏该行。
+  - `firstStatDay`：stats 分桶只保留日期，没有 Android `TrackStat.firstPlayedAt` 那种毫秒级首次播放时间；
+    这里只能给出最早有数据的一天（`yyyy-MM-dd`），是真实但只精确到天的值，前端按「首次统计日期」展示，不伪装成精确首听时间。
+  - Android 还有按天/周/月的统计页（`PlaybackStatsScreen`，全局维度），桌面单曲面板没有实现按天分布——
+    后端 stats 分桶里其实存有每天的 `playCount`/`listenMs`，但 `stats.song` 当前不返回逐日数组；如需可在后续扩展。
+  - `hasData=false` 表示该曲在本地 stats 与 history 中都没有记录，前端显示空状态，不显示任何数字。
+- 无数据时：`summary` 返回 `{plays:0,listenMs:0,trackCount:0}`，`top` 返回 `{songs:[]}`，
+  `stats.song` 返回 `{stat:{songKey,playCount:0,listenMs:0,firstStatDay:"",lastPlayed:0,hasData:false}}`。
 
 ## 5. 事件
 
@@ -131,6 +151,13 @@ Api.call("collections.toggleFavorite", { song: Player.song })
 Api.get("stats.summary", { period: "WEEK" }, function(r) { summary = r.summary })
 Api.get("stats.top", { period: "WEEK", sort: "PLAY_COUNT", limit: 50 },
         function(r) { topModel.songs = r.songs })
+
+// 单曲统计（播放统计面板；songKey 就是当前歌曲的 song.key）
+Api.call("stats.song", { songKey: Player.song.key }).then(function(r) {
+    if (r.stat.hasData) {
+        // r.stat.playCount / listenMs / firstStatDay / lastPlayed
+    }
+})
 
 // 周期/排序下拉框直接吃 stats.periods
 Api.get("stats.periods", {}, function(r) {

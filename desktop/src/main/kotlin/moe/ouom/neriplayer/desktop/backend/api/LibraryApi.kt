@@ -9,6 +9,7 @@ import kotlinx.serialization.json.put
 import moe.ouom.neriplayer.desktop.backend.CoreServer
 import moe.ouom.neriplayer.desktop.backend.arrayOrNull
 import moe.ouom.neriplayer.desktop.backend.badRequest
+import moe.ouom.neriplayer.desktop.backend.ProtocolException
 import moe.ouom.neriplayer.desktop.backend.encodeJson
 import moe.ouom.neriplayer.desktop.backend.log
 import moe.ouom.neriplayer.desktop.backend.stringOrNull
@@ -61,6 +62,28 @@ object LibraryApi {
         // ---------------------------------------------------------------- 扫描
         server.on("library.scan") {
             buildJsonObject { put("count", scanOnce(container)) }
+        }
+
+        // ---------------------------------------------------------------- 元数据写入
+        server.on("library.updateSongMetadata") { params ->
+            val key = params.stringOrNull("key")?.trim().orEmpty()
+            if (key.isBlank()) badRequest("缺少 key")
+            val song = library.byKey(key) ?: badRequest("找不到歌曲: $key")
+            if (!song.isLocalFile()) {
+                badRequest("只有本地歌曲才能编辑元数据（该歌曲没有本地文件）")
+            }
+            // 字段可选：不传表示保持不变，传空串表示清空该字段。
+            val title = if ("title" in params) params.stringOrNull("title") ?: badRequest("title 必须是字符串") else null
+            val artist = if ("artist" in params) params.stringOrNull("artist") ?: badRequest("artist 必须是字符串") else null
+            val album = if ("album" in params) params.stringOrNull("album") ?: badRequest("album 必须是字符串") else null
+            val updated = try {
+                library.updateSongMetadata(key, title, artist, album)
+            } catch (error: IllegalArgumentException) {
+                badRequest(error.message ?: "元数据参数非法")
+            } catch (error: IllegalStateException) {
+                throw ProtocolException("write_failed", error.message ?: "元数据写入失败")
+            }
+            buildJsonObject { put("song", encodeJson(updated)) }
         }
 
         // ---------------------------------------------------------------- 音乐文件夹

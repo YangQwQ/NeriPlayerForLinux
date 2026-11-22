@@ -242,6 +242,22 @@ data class HotSong(
     val lastPlayed: Long,
 )
 
+/**
+ * 单曲播放统计（对齐 Android 的 TrackStat 展示维度）。
+ *
+ * 桌面端没有 Android 那样独立持久化的 TrackStat.firstPlayedAt（精确到毫秒的首次播放时间），
+ * 只能从按天分桶的统计里取最早有数据的一天 firstStatDay（yyyy-MM-dd，空串表示无数据）。
+ */
+@Serializable
+data class SongStats(
+    val songKey: String,
+    val playCount: Int,
+    val listenMs: Long,
+    val firstStatDay: String,
+    val lastPlayed: Long,
+    val hasData: Boolean,
+)
+
 /** 播放统计仓库（按天分桶累计）。 */
 class StatsRepository(private val history: HistoryRepository) {
 
@@ -286,6 +302,21 @@ class StatsRepository(private val history: HistoryRepository) {
     fun addListenTime(song: Song, deltaMs: Long) = mutate(song, playIncrement = 0, listenDelta = deltaMs)
 
     fun record(song: Song, listenMs: Long) = mutate(song, playIncrement = 1, listenDelta = listenMs)
+
+    /** 单曲全周期统计：累计播放/时长来自 stats 分桶，最近播放来自 history，首次统计日期取最早的分桶。 */
+    fun songStats(songKey: String): SongStats {
+        val own = _stats.value.filter { it.songKey == songKey }
+        val entry = history.entries.value.firstOrNull { it.song.key == songKey }
+        val firstDay = own.map { it.day }.filter { it.isNotBlank() }.minOrNull().orEmpty()
+        return SongStats(
+            songKey = songKey,
+            playCount = own.sumOf { it.playCount },
+            listenMs = own.sumOf { it.listenMs },
+            firstStatDay = firstDay,
+            lastPlayed = entry?.playedAt ?: 0L,
+            hasData = own.isNotEmpty() || entry != null,
+        )
+    }
 
     fun clear() {
         _stats.value = emptyList()

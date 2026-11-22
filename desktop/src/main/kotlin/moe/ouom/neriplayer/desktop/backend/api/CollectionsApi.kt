@@ -177,6 +177,12 @@ object CollectionsApi {
             buildJsonObject { put("songs", encodeJson(stats.topSongs(period, sort, limit))) }
         }
 
+        server.on("stats.song") { params ->
+            val songKey = params.stringOrNull("songKey")?.trim().orEmpty()
+            if (songKey.isBlank()) badRequest("缺少 songKey")
+            buildJsonObject { put("stat", encodeJson(stats.songStats(songKey))) }
+        }
+
         server.on("stats.clear") {
             withContext(Dispatchers.IO) { stats.clear() }
             ok()

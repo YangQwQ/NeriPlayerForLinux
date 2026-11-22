@@ -34,6 +34,7 @@ AlbumGroup  = { name: string, artist: string, songs: Song[] }
 | `library.albums` | — | `{albums:[AlbumGroup]}` | 按「专辑+艺术家」分组 |
 | `library.byKey` | `{key}` | `{song:Song\|null}` | 按 `Song.key` 精确查找；找不到返回 `{"song":null}` |
 | `library.scan` | — | `{count:number}` | **suspend**：立即扫描一次并等待完成，返回扫到的歌曲数 |
+| `library.updateSongMetadata` | `{key,title?,artist?,album?}` | `{song:Song}` | **suspend**：把元数据写回本地文件标签并同步内存中的 Song；仅本地歌曲可用 |
 | `library.scanState` | — | `{scan:ScanState}` | 当前扫描状态快照 |
 | `library.indexLoaded` | — | `{loaded:boolean}` | 启动时是否已完成索引加载 |
 | `library.addFolder` | `{path}` | `{settings:AppSettings}` | 校验目录存在且是目录，加入音乐文件夹（去重）并**异步**触发一次扫描 |
@@ -49,12 +50,18 @@ AlbumGroup  = { name: string, artist: string, songs: Song[] }
 - `library.addFolder` 返回时扫描可能尚未开始（响应后事件会陆续推送）；不要用返回值判断扫描结果，
   以 `library.scan` 事件 + `library.scanState` / `library.songs` 为准。
 - 修改音乐文件夹后设置会自动落盘，并广播 `settings` 事件。
+- `library.updateSongMetadata` 的 `key` 必填；`title` / `artist` / `album` 均可选：
+  **不传**表示该字段保持不变，**传空串**表示显式清空该字段。对齐安卓端实际写入的嵌入式标签
+  （TITLE / ARTIST，ALBUM 仅在传入时写）；不支持封面/歌词文件的写入。
+  仅 `source = "LOCAL"` 且带 `filePath` 的歌曲可写，其余返回 `bad_request`。
+  只读文件、不支持的格式、标签读写失败返回 `write_failed` 并带原因。
+  写入成功后更新内存 Song 并落盘索引，`StatePublisher` 会据此广播 `library.changed`。
 
 ## 3. 事件
 
 | event | data | 触发时机 |
 | --- | --- | --- |
-| `library.changed` | `{songCount:number}` | 歌曲列表变化（扫描结束、启动加载） |
+| `library.changed` | `{songCount:number}` | 歌曲列表变化（扫描结束、启动加载、元数据写回后同步） |
 | `library.scan` | `{running,total,processed,found,error?}` | 扫描开始、每处理约 64 个文件、扫描结束 |
 | `settings` | `<AppSettings>` | 音乐文件夹等设置变化后自动广播（`AppSettings.musicFolders`） |
 
@@ -66,7 +73,8 @@ AlbumGroup  = { name: string, artist: string, songs: Song[] }
 
 | code | 场景 |
 | --- | --- |
-| `bad_request` | 缺少 `path`/`folders`、`path` 不存在或不是目录、`folders` 元素非法 |
+| `bad_request` | 缺少 `path`/`folders`、`path` 不存在或不是目录、`folders` 元素非法；`library.updateSongMetadata` 的非本地歌曲 / 缺参 / 非法字段 |
+| `write_failed` | `library.updateSongMetadata` 的文件只读、格式不支持或标签读写出错 |
 | `internal_error` | 扫描/IO 意外异常（同时 `library.scan` 事件的 `error` 可能带原因） |
 
 ## 5. QML 示例
