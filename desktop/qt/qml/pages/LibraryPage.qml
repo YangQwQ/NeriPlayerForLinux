@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../components"
+import "../components/explore"
 import "../components/library"
 import "../components/library/Format.js" as Format
 
@@ -118,10 +119,16 @@ Item {
     }
 
     // ---- 播放 ----
+    // 统一走 PageActions：房间听众的整队替换会被降级成「追加到房间队尾」并弹确认框，
+    // 非房间场景直接用 player.setQueue（不会弹框）。
+    PageActions {
+        id: actions
+    }
+
     function playSongs(list, index) {
         if (!list || list.length === 0)
             return
-        Player.setQueue(list, Math.max(0, Math.min(index, list.length - 1)), true)
+        actions.playSongs(list, Math.max(0, Math.min(index, list.length - 1)))
     }
 
     function shuffleSongs(list) {
@@ -134,7 +141,7 @@ Item {
             shuffled[i] = shuffled[j]
             shuffled[j] = temp
         }
-        Player.setQueue(shuffled, 0, true)
+        actions.playSongs(shuffled, 0)
     }
 
     function openPlaylist(playlistId) {

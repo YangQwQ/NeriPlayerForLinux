@@ -1,4 +1,5 @@
 import QtQuick
+import "../motion"
 
 // 播放页贴底细进度条：常态 3px，hover / 拖动时加粗到 6px，拖动时在指针上方显示目标时间。
 // 不占满宽度、不套圆角，直接压在窗口最底部（参考 Refined Now Playing 的底边进度线）。
@@ -22,6 +23,7 @@ Item {
     implicitHeight: 20
 
     NowPlayingTheme { id: np }
+    MotionPrefs { id: motion }
 
     function formatTime(ms) {
         const total = Math.max(0, Math.round((ms || 0) / 1000))
@@ -58,6 +60,14 @@ Item {
             anchors.bottom: parent.bottom
             width: track.width * root.shownRatio
             color: np.accent
+
+            Behavior on color {
+                ColorAnimation {
+                    duration: motion.themeTransition ? motion.themeDuration : 0
+                    easing.type: Easing.Bezier
+                    easing.bezierCurve: [0.4, 0.0, 0.2, 1.0]
+                }
+            }
         }
     }
 
@@ -71,6 +81,14 @@ Item {
         height: 12
         radius: 6
         color: np.accent
+
+        Behavior on color {
+            ColorAnimation {
+                duration: motion.themeTransition ? motion.themeDuration : 0
+                easing.type: Easing.Bezier
+                easing.bezierCurve: [0.4, 0.0, 0.2, 1.0]
+            }
+        }
 
         Behavior on x {
             enabled: !root.dragging

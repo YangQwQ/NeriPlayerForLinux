@@ -1,6 +1,7 @@
 import QtQuick
 import "."
 import ".."
+import "../explore"
 import "../library"
 
 // 首页 YouTube Music 推荐区块。
@@ -17,6 +18,10 @@ import "../library"
 // 点击歌曲直接播放，专辑 / 歌手 / 歌单按路由跳转（source = "YOUTUBE"）。
 Item {
     id: root
+
+    PageActions {
+        id: actions
+    }
 
     /** true：未登录时整块隐藏（首页默认行为）；探索页会设为 false 以展示匿名推荐。 */
     property bool requireLogin: true
@@ -151,18 +156,9 @@ Item {
     function playSong(song, songs, index) {
         if (!song)
             return
-        const list = songs && songs.length > 0 ? songs : [song]
-        try {
-            Player.setQueue(list, index < 0 ? 0 : index, true)
-        } catch (error) {
-            Api.call("player.setQueue", {
-                         "songs": list,
-                         "startIndex": index < 0 ? 0 : index,
-                         "autoPlay": true
-                     }).catch(function(e) {
-                Toast.show(e && e.message ? e.message : I18n.tr("播放失败"), "error")
-            })
-        }
+        // 推荐区块里的歌曲是零散推荐：点一首只播这一首（插到下一首并切过去），
+        // 不用整块推荐列表替换播放队列。一起听房间里由后端转成房间队列请求。
+        actions.playSingle(song)
     }
 
     // ---------------------------------------------------------------- 界面

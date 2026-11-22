@@ -193,6 +193,8 @@ Item {
 
             NowPlayingCover {
                 anchors.fill: parent
+                // 紧凑布局下封面紧贴顶部，外扩的光晕会被顶栏裁掉一截，直接关闭。
+                showGlow: false
                 onActivity: core.activity()
             }
         }

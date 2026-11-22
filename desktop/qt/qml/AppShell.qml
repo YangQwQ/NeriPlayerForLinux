@@ -94,10 +94,16 @@ Item {
         visible: opacity > 0.01
 
         Behavior on opacity {
-            NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
+            NumberAnimation {
+                duration: Settings.motionEnabled && Settings.motionPageTransition ? 220 : 0
+                easing.type: Easing.OutCubic
+            }
         }
         Behavior on x {
-            NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
+            NumberAnimation {
+                duration: Settings.motionEnabled && Settings.motionPageTransition ? 220 : 0
+                easing.type: Easing.OutCubic
+            }
         }
     }
 
@@ -126,7 +132,14 @@ Item {
                 currentHost.visible = false
             host.visible = true
             currentHost = host
-            pageEnter.restart()
+            // 动效设置可关：低性能设备/无障碍偏好下直接呈现，不做淡入上浮。
+            if (Settings.motionEnabled && Settings.motionPageTransition) {
+                pageEnter.restart()
+            } else {
+                pageEnter.stop()
+                pageHostContainer.opacity = 1
+                pageHostContainer.y = 0
+            }
         }
 
         Connections {

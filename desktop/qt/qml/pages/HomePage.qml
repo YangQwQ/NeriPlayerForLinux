@@ -1,6 +1,7 @@
 import QtQuick
 import ".."
 import "../components"
+import "../components/explore"
 import "../components/home"
 import "../components/library"
 
@@ -346,11 +347,32 @@ Item {
 
     // ------------------------------------------------------------------ 交互
 
-    /** 用该栏目自己的歌曲列表作为播放队列。 */
+    // 播放/加歌统一走 PageActions：一起听房间里作为听众时，后端会把它降级成
+    // 「追加到房间队列末尾」并由 PageActions 弹确认框；非房间场景行为不变、不弹框。
+    PageActions {
+        id: actions
+    }
+
+    /** 用该栏目自己的歌曲列表作为播放队列（「播放全部」按钮的唯一入口）。 */
     function playSongs(songs, index) {
         if (!songs || songs.length === 0)
             return
-        Player.setQueue(songs, Math.max(0, Math.min(index, songs.length - 1)), true)
+        actions.playSongs(songs, Math.max(0, Math.min(index, songs.length - 1)))
+    }
+
+    /**
+     * 点栏目里的某一首单曲：插到正在播放的下一首并切过去，**不替换播放队列**。
+     *
+     * 首页栏目（猜你喜欢 / 每日推荐 / 排行榜 / 继续播放 …）里的歌曲是「零散推荐」，
+     * 用户点某一首就是想听那一首；若仍按栏目整表 setQueue，点第 5 首和点「播放全部」
+     * 的结果完全一样（只是起点不同），行为上区分不开。整表播放只保留给「播放全部」。
+     */
+    function playSingleSong(songs, index) {
+        const list = songs || []
+        if (list.length === 0)
+            return
+        const at = Math.max(0, Math.min(index, list.length - 1))
+        actions.playSingle(list[at])
     }
 
     function handleSectionAction(kind, items) {
@@ -742,7 +764,7 @@ Item {
                         target: sectionLoader.item
                         enabled: sectionLoader.item !== null
                         function onActionClicked(kind, items) { page.handleSectionAction(kind, items) }
-                        function onSongActivated(songs, index) { page.playSongs(songs, index) }
+                        function onSongActivated(songs, index) { page.playSingleSong(songs, index) }
                         function onSongRightClicked(song) { songMenu.openFor(song) }
                         function onCollectionActivated(collection) { page.openCollection(collection) }
                     }

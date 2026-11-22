@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 
 // 带 M3 配色的滑杆。父级把 value 绑定到数据源，并在 moved 里写回数据源即可。
+// 默认用主界面 Theme 配色；播放页恒暗背景可覆盖 accentColor / foregroundColor。
 Item {
     id: root
 
@@ -10,6 +11,10 @@ Item {
     property real to: 1
     property real stepSize: 0
     property bool enabledSlider: true
+
+    // 上色场景可覆盖：播放页暗背景传 NowPlayingTheme 的 accent / foreground 系颜色。
+    property color accentColor: Theme.primary
+    property color foregroundColor: Theme.onSurfaceColor
 
     readonly property bool pressed: slider.pressed
 
@@ -40,13 +45,13 @@ Item {
             width: slider.width
             height: 4
             radius: 2
-            color: Theme.withAlpha(Theme.onSurfaceColor, 0.16)
+            color: Theme.withAlpha(root.foregroundColor, 0.16)
 
             Rectangle {
                 width: parent.width * slider.visualPosition
                 height: parent.height
                 radius: 2
-                color: slider.enabled ? Theme.primary : Theme.withAlpha(Theme.onSurfaceColor, 0.28)
+                color: slider.enabled ? root.accentColor : Theme.withAlpha(root.foregroundColor, 0.28)
             }
         }
 
@@ -56,7 +61,7 @@ Item {
             width: 16
             height: 16
             radius: 8
-            color: slider.enabled ? Theme.primary : Theme.withAlpha(Theme.onSurfaceColor, 0.38)
+            color: slider.enabled ? root.accentColor : Theme.withAlpha(root.foregroundColor, 0.38)
             scale: slider.pressed ? 1.15 : 1.0
 
             Behavior on scale {

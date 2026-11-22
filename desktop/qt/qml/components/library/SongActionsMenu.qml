@@ -83,6 +83,30 @@ Menu {
                  })
     }
 
+    /**
+     * 加歌到播放队列；房间听众的加歌由后端自动转发成房间队列请求。
+     *
+     * 提示策略：
+     *  - `roomQueue=true`：这次进的是**房间队列**，必须这么说——说成「已添加到下一首」
+     *    是撒谎（本地队列随即被房间同步覆盖）；
+     *  - 本地成功：后端 Player 已经自己弹了「已添加到下一首播放 / 已添加到播放队列」，
+     *    这里不再重复弹，避免两条几乎相同的提示同时冒出来；
+     *  - 失败：房间拒绝（如控制者关闭听众控制）时后端会把可操作的中文原因放在 error 里。
+     */
+    function enqueueSongs(songs, playNext) {
+        const list = songs || []
+        if (list.length === 0)
+            return
+        Api.call(playNext ? "player.enqueueNext" : "player.enqueue", { songs: list })
+            .then(function(result) {
+                if (result && result.roomQueue)
+                    Toast.show(I18n.tr("已添加到房间队列"), "info")
+            })
+            .catch(function(error) {
+                Toast.show(error && error.message ? error.message : I18n.tr("添加失败"), "error")
+            })
+    }
+
     /** 把当前歌曲加入下载队列（后端 download.enqueue，进度见下载面板）。 */
     function enqueueDownload() {
         const target = root.song
@@ -186,7 +210,7 @@ Menu {
         text: I18n.tr("下一首播放")
         onTriggered: {
             if (root.song)
-                Player.enqueueNext([root.song])
+                root.enqueueSongs([root.song], true)
         }
     }
 
@@ -202,7 +226,7 @@ Menu {
         text: I18n.tr("添加到播放队列")
         onTriggered: {
             if (root.song)
-                Player.enqueue([root.song])
+                root.enqueueSongs([root.song], false)
         }
     }
 

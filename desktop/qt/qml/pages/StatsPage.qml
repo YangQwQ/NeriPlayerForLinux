@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../components"
+import "../components/explore"
 import "../components/library"
 import "../components/library/Format.js" as Format
 
@@ -90,11 +91,16 @@ DetailScaffold {
         page.reloadTop()
     }
 
+    // 播放统一走 PageActions：房间听众会被降级为「追加到房间队尾」并弹确认框。
+    PageActions {
+        id: actions
+    }
+
     function playAt(index) {
         const songs = page.topSongs.map(function(item) { return item.song })
         if (songs.length === 0)
             return
-        Player.setQueue(songs, Math.max(0, Math.min(index, songs.length - 1)), true)
+        actions.playSongs(songs, Math.max(0, Math.min(index, songs.length - 1)))
     }
 
     function clearStats() {

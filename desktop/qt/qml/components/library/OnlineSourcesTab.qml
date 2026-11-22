@@ -4,6 +4,7 @@ import QtQuick.Layouts
 // 根目录 components 与本目录存在同名组件（CollectionCard/EmptyState/ErrorCard/LoadingState），
 // 用限定导入避免覆盖同目录组件。
 import ".." as Root
+import "../explore"
 import "../youtube"
 
 // 媒体库「在线音源」Tab：网易云「我的歌单」/ 哔哩哔哩「收藏夹」/ YouTube「我的歌单」。
@@ -16,6 +17,11 @@ import "../youtube"
 // 登录状态变化通过 accounts.changed 事件刷新（事件数据在 Qt 桥里可能拿不到数组内容，拿不到时重新查询）。
 Item {
     id: root
+
+    // 播放统一走 PageActions：一起听房间里作为听众时，后端会降级成「追加到房间队尾」并弹确认框。
+    PageActions {
+        id: actions
+    }
 
     // ---- 音源 ----
     readonly property var sources: {
@@ -638,7 +644,7 @@ Item {
                         Controls.Button {
                             text: I18n.tr("播放全部")
                             enabled: root.cloudSongs.length > 0
-                            onClicked: Player.setQueue(root.cloudSongs, 0, true)
+                            onClicked: actions.playSongs(root.cloudSongs, 0)
                         }
 
                         Root.IconButton {
@@ -671,7 +677,7 @@ Item {
                                 song: parent.song
                                 index: modelData === undefined ? -1 : index
                                 showMore: false
-                                onActivated: function(idx) { Player.setQueue(root.cloudSongs, idx, true) }
+                                onActivated: function(idx) { actions.playSongs(root.cloudSongs, idx) }
                             }
                         }
 

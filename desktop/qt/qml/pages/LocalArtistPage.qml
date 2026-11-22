@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../components"
+import "../components/explore"
 import "../components/library"
 import "../components/library/Format.js" as Format
 
@@ -54,15 +55,20 @@ DetailScaffold {
         })
     }
 
+    // 播放统一走 PageActions：房间听众会被降级为「追加到房间队尾」并弹确认框。
+    PageActions {
+        id: actions
+    }
+
     function playAt(index) {
         if (page.songs.length === 0)
             return
-        Player.setQueue(page.songs, Math.max(0, Math.min(index, page.songs.length - 1)), true)
+        actions.playSongs(page.songs, Math.max(0, Math.min(index, page.songs.length - 1)))
     }
 
     function playAll() {
         if (page.songs.length > 0)
-            Player.setQueue(page.songs, 0, true)
+            actions.playSongs(page.songs, 0)
     }
 
     function shuffleAll() {
@@ -75,7 +81,7 @@ DetailScaffold {
             shuffled[i] = shuffled[j]
             shuffled[j] = temp
         }
-        Player.setQueue(shuffled, 0, true)
+        actions.playSongs(shuffled, 0)
     }
 
     function onLibraryChanged() {

@@ -445,6 +445,10 @@ Item {
                   })
     }
 
+    /**
+     * 搜索页的播放：搜索结果表格是「列表页」，点某行以搜索结果作为播放队列更符合预期
+     * （与专辑/歌单详情页一致），因此仍走整表 playSongs。
+     */
     function playAt(index) {
         const list = page.resultSongs
         if (index < 0 || index >= list.length)
@@ -452,11 +456,11 @@ Item {
         actions.playSongs(list, index)
     }
 
+    /** YouTube 推荐 shelf 里的歌曲是零散推荐：只播这一首，不替换播放队列。 */
     function playYouTubeShelfItem(song, songs, index) {
         if (!song)
             return
-        const list = songs && songs.length > 0 ? songs : [song]
-        actions.playSongs(list, index < 0 ? 0 : index)
+        actions.playSingle(song)
     }
 
     function enqueueSong(song) {
